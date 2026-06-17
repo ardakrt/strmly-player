@@ -56,8 +56,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "ardak",
-        "repo": "strmly"
+        "owner": "ardakrt",
+        "repo": "strmly-player"
       }
     ],
     "directories": {
