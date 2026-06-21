@@ -1,4 +1,4 @@
-import { Activity, Check, LoaderCircle } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { SavedPlaylist } from '../types';
 import { useSettings } from '../context/SettingsContext';
@@ -122,4 +122,3 @@ export function DiagnosticsView({
     </div>
   );
 }
-

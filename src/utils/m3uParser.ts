@@ -12,6 +12,7 @@ export interface PlaylistItem {
   nameLower?: string;
   groupLower?: string;
   clNameLower?: string;
+  qualityRank?: number;
 }
 
 export interface ParsedPlaylist {
@@ -155,7 +156,7 @@ export function parseM3U(content: string): ParsedPlaylist {
   };
 }
 
-export function parseM3UAsync(content: string): Promise<ParsedPlaylist> {
+export function parseM3UAsync(content: string | ArrayBuffer): Promise<ParsedPlaylist> {
   return new Promise((resolve, reject) => {
     // Spawns Web Worker from the same directory, compiled by Vite
     const worker = new Worker(new URL('./m3uParser.worker.ts', import.meta.url), { type: 'module' });
@@ -174,6 +175,10 @@ export function parseM3UAsync(content: string): Promise<ParsedPlaylist> {
       worker.terminate();
     };
 
-    worker.postMessage(content);
+    if (content instanceof ArrayBuffer) {
+      worker.postMessage(content, [content]);
+    } else {
+      worker.postMessage(content);
+    }
   });
 }

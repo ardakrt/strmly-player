@@ -3,6 +3,11 @@ import type { SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
 import { preprocessPlaylistItems } from '../utils/searchHelpers';
 import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS } from '../constants';
+import {
+  deletePlaylistFromBrowserStorage,
+  loadPlaylistFromBrowserStorage,
+  savePlaylistToBrowserStorage
+} from '../utils/playlistStorage';
 
 const AUTO_UPDATE_INTERVALS = [6, 12, 24, 168] as const;
 
@@ -53,7 +58,7 @@ export function usePlaylists({
     if (window.electronAPI && window.electronAPI.savePlaylistItems) {
       await window.electronAPI.savePlaylistItems(id, playlistItems);
     } else {
-      localStorage.setItem(`cinema_playlist_items_${id}`, JSON.stringify(playlistItems));
+      await savePlaylistToBrowserStorage(id, playlistItems);
     }
   };
 
@@ -61,8 +66,7 @@ export function usePlaylists({
     if (window.electronAPI && window.electronAPI.loadPlaylistItems) {
       return await window.electronAPI.loadPlaylistItems(id);
     } else {
-      const stored = localStorage.getItem(`cinema_playlist_items_${id}`);
-      return stored ? JSON.parse(stored) : [];
+      return loadPlaylistFromBrowserStorage(id);
     }
   };
 
@@ -70,7 +74,7 @@ export function usePlaylists({
     if (window.electronAPI && window.electronAPI.deletePlaylistItems) {
       await window.electronAPI.deletePlaylistItems(id);
     } else {
-      localStorage.removeItem(`cinema_playlist_items_${id}`);
+      await deletePlaylistFromBrowserStorage(id);
     }
   };
 
@@ -129,8 +133,8 @@ export function usePlaylists({
         }
       });
       if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
-      const text = await res.text();
-      const parsedPlaylist = await parseM3UAsync(text);
+      const data = await res.arrayBuffer();
+      const parsedPlaylist = await parseM3UAsync(data);
       const parsedItems = parsedPlaylist.items;
       const updatedAt = Date.now();
       if (parsedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
@@ -160,7 +164,7 @@ export function usePlaylists({
 
       // If this is currently the active playlist, update items in state
       if (currentActiveId === playlist.id) {
-        setItems(preprocessPlaylistItems(parsedItems));
+        setItems(parsedItems);
         scheduleAutoUpdate({
           ...playlist,
           autoUpdateIntervalHours: normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours),
@@ -255,8 +259,8 @@ export function usePlaylists({
         }
       });
       if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
-      const text = await res.text();
-      const parsedPlaylist = await parseM3UAsync(text);
+      const data = await res.arrayBuffer();
+      const parsedPlaylist = await parseM3UAsync(data);
       const parsedItems = parsedPlaylist.items;
 
       if (parsedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
@@ -283,7 +287,7 @@ export function usePlaylists({
 
       setActivePlaylistId(newList.id);
       await saveAppSetting('cinema_active_playlist', newList.id);
-      setItems(preprocessPlaylistItems(parsedItems));
+      setItems(parsedItems);
 
       setM3uUrl('');
       setPlaylistFormName('');
@@ -314,8 +318,8 @@ export function usePlaylists({
         }
       });
       if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
-      const text = await res.text();
-      const parsedPlaylist = await parseM3UAsync(text);
+      const data = await res.arrayBuffer();
+      const parsedPlaylist = await parseM3UAsync(data);
       const parsedItems = parsedPlaylist.items;
       if (parsedItems.length === 0) throw new Error("Çözümlenebilir kanal veya VOD bulunamadı! Bilgilerinizi kontrol edin.");
 
@@ -342,7 +346,7 @@ export function usePlaylists({
 
       setActivePlaylistId(newList.id);
       await saveAppSetting('cinema_active_playlist', newList.id);
-      setItems(preprocessPlaylistItems(parsedItems));
+      setItems(parsedItems);
 
       setXtreamUrl('');
       setXtreamUser('');
@@ -357,17 +361,15 @@ export function usePlaylists({
     }
   };
 
-  const handlePlaylistLoadLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePlaylistLoadLocal = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
     setIsParsing(true);
     showToast("Yerel M3U dosyası yükleniyor...");
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        const parsedPlaylist = await parseM3UAsync(text);
+    try {
+        const data = await file.arrayBuffer();
+        const parsedPlaylist = await parseM3UAsync(data);
         const parsedItems = parsedPlaylist.items;
         if (parsedItems.length === 0) throw new Error("M3U dosyası geçersiz veya boş!");
 
@@ -391,7 +393,7 @@ export function usePlaylists({
 
         setActivePlaylistId(newList.id);
         await saveAppSetting('cinema_active_playlist', newList.id);
-        setItems(preprocessPlaylistItems(parsedItems));
+        setItems(parsedItems);
 
         setShowAddPlaylistForm(false);
         showToast(`${parsedItems.length} kanal yerel dosyadan yüklendi!`);
@@ -400,8 +402,6 @@ export function usePlaylists({
       } finally {
         setIsParsing(false);
       }
-    };
-    reader.readAsText(file);
   };
 
   const handleDeletePlaylist = async (id: string) => {

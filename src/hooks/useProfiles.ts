@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import type { Profile, AvatarSearchResult, ContentPreference, SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
+import { deletePlaylistFromBrowserStorage, savePlaylistToBrowserStorage } from '../utils/playlistStorage';
 import { resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
 import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS } from '../constants';
 
@@ -118,7 +119,7 @@ export function useProfiles({
           if (window.electronAPI && window.electronAPI.deletePlaylistItems) {
             await window.electronAPI.deletePlaylistItems(p.id);
           } else {
-            localStorage.removeItem(`cinema_playlist_items_${p.id}`);
+            await deletePlaylistFromBrowserStorage(p.id);
           }
         }
       } catch (e) {
@@ -256,7 +257,7 @@ export function useProfiles({
             title: 'Kanal listesi indiriliyor',
             detail: 'İçerikler güvenli şekilde alınıyor...'
           });
-          const text = await res.text();
+          const data = await res.arrayBuffer();
           setProfileSetupStatus({
             active: true,
             step: 2,
@@ -264,7 +265,7 @@ export function useProfiles({
             detail: 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...'
           });
           await yieldToInterface();
-          const parsedPlaylist = await parseM3UAsync(text);
+          const parsedPlaylist = await parseM3UAsync(data);
           loadedItems = parsedPlaylist.items;
           if (loadedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
 
@@ -307,7 +308,7 @@ export function useProfiles({
             title: 'Kanal listesi indiriliyor',
             detail: 'Xtream içerikleri alınıyor...'
           });
-          const text = await res.text();
+          const data = await res.arrayBuffer();
           setProfileSetupStatus({
             active: true,
             step: 2,
@@ -315,7 +316,7 @@ export function useProfiles({
             detail: 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...'
           });
           await yieldToInterface();
-          const parsedPlaylist = await parseM3UAsync(text);
+          const parsedPlaylist = await parseM3UAsync(data);
           loadedItems = parsedPlaylist.items;
           if (loadedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
 
@@ -373,7 +374,7 @@ export function useProfiles({
         if (window.electronAPI && window.electronAPI.savePlaylistItems) {
           await window.electronAPI.savePlaylistItems(newPlaylist.id, loadedItems);
         } else {
-          localStorage.setItem(`cinema_playlist_items_${newPlaylist.id}`, JSON.stringify(loadedItems));
+          await savePlaylistToBrowserStorage(newPlaylist.id, loadedItems);
         }
 
         const playlistKey = `profile_${profId}_cinema_playlists`;

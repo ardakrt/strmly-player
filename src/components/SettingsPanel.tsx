@@ -356,7 +356,7 @@ export const SettingsPanel = () => {
       counts[group] = (counts[group] || 0) + 1;
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  }, [items]);
+  }, [items, language]);
 
   const saveLocalSetting = (key: string, value: string) => {
     try {

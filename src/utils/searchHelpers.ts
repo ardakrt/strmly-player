@@ -90,6 +90,9 @@ export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[
     if (!item.clNameLower) {
       item.clNameLower = cleanMediaTitle(item.name).toLocaleLowerCase('tr-TR');
     }
+    if (!item.qualityRank) {
+      item.qualityRank = getQualityRank(item.name, item.nameLower);
+    }
 
     // Auto-heal classification for cached items parsed under the old parser rules
     if (item.type === 'live' || !item.type) {

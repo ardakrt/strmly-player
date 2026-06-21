@@ -40,7 +40,7 @@ export function SpotlightSearch({
   handleOpenDetails,
   handleOpenSeriesModalDirect
 }: SpotlightSearchProps) {
-  const { t, language } = useSettings();
+  const { language } = useSettings();
   if (!showSpotlight) return null;
 
   return (

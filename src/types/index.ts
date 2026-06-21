@@ -8,6 +8,7 @@ declare global {
       playExternal: (url: string, playerType: string) => Promise<{ success: boolean; message: string }>;
       saveConfig: (key: string, value: any) => Promise<{ success: boolean; error?: string }>;
       saveConfigSync?: (key: string, value: any) => { success: boolean; error?: string };
+      saveConfigBatchSync?: (entries: Record<string, unknown>) => { success: boolean; error?: string };
       loadConfig: (key: string) => Promise<any>;
       savePlaylistItems: (id: string, items: PlaylistItem[]) => Promise<{ success: boolean; error?: string }>;
       loadPlaylistItems: (id: string) => Promise<PlaylistItem[]>;

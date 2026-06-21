@@ -79,7 +79,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     profiles, profileSelectMode, profileFormName, profileFormAvatar, profileContentPreferences,
     editingProfileId, profilePlaylistType, profileM3uUrl, profileXtreamUrl,
     profileXtreamUser, profileXtreamPass, profileAutoUpdateIntervalHours, avatarSearchQuery, avatarSearchResults,
-    avatarSearchLoading, trendingAvatars, localSeries, selectedSeriesForCast,
+    avatarSearchLoading, localSeries, selectedSeriesForCast,
     seriesCast, castLoading, isParsing, profileSetupStatus, profileEntryReady, toast, activeTheme, accentStyles,
     setProfileSelectMode, setProfileFormName, setProfileFormAvatar, setProfileContentPreferences,
     setEditingProfileId, setProfilePlaylistType, setProfileM3uUrl,

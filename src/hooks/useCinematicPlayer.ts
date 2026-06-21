@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import Hls from 'hls.js';
+import type Hls from 'hls.js';
 import type { PlaylistItem } from '../utils/m3uParser';
 
 
 interface UseCinematicPlayerProps {
   selectedChannel: PlaylistItem | null;
-  onClose: () => void;
   saveWatchProgress: (item: PlaylistItem, time: number, total: number) => void;
   showToast: (message: string) => void;
 }
@@ -24,7 +23,6 @@ function getSavedPlayerMuted(): boolean {
 
 export function useCinematicPlayer({
   selectedChannel,
-  onClose,
   saveWatchProgress,
   showToast
 }: UseCinematicPlayerProps) {
@@ -42,7 +40,6 @@ export function useCinematicPlayer({
   // States/refs to reload the stream if paused for a long time (TCP/Token timeout recovery)
   const pausedTimeRef = useRef<number | null>(null);
   const resumeTimeRef = useRef<number | null>(null);
-  const [reloadCounter, setReloadCounter] = useState(0);
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -108,8 +105,6 @@ export function useCinematicPlayer({
     return () => {
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
-    // scheduleControlsHide intentionally uses the current timeout ref only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChannel]);
 
   useEffect(() => {
@@ -135,15 +130,6 @@ export function useCinematicPlayer({
         videoRef.current.muted = false;
       }
     }
-  };
-
-  const reloadStreamAtCurrentTime = () => {
-    if (videoRef.current) {
-      resumeTimeRef.current = seekOffsetRef.current + videoRef.current.currentTime;
-    } else {
-      resumeTimeRef.current = currentTime;
-    }
-    setReloadCounter(prev => prev + 1);
   };
 
   const handleTogglePlay = () => {
@@ -538,9 +524,13 @@ export function useCinematicPlayer({
     }
 
     let lastSavedTime = selectedChannel.currentTime || 0;
+    let lastSavedStateTime = -1;
     const timeUpdate = () => {
       const now = seekOffsetRef.current + video.currentTime;
-      setCurrentTime(now);
+      if (Math.floor(now) !== Math.floor(lastSavedStateTime)) {
+        lastSavedStateTime = now;
+        setCurrentTime(now);
+      }
       if (video.currentTime > 0.1) {
         setVideoReady(prev => prev ? prev : true);
       }
@@ -585,13 +575,23 @@ export function useCinematicPlayer({
     video.addEventListener('durationchange', durationChange);
     video.addEventListener('pause', onPauseEvent);
 
-    const loadPlayerSource = (urlToPlay: string, transcodeActive: boolean) => {
+    const loadPlayerSource = async (urlToPlay: string, transcodeActive: boolean) => {
       if (!active) return;
-      if (Hls.isSupported() && urlToPlay.includes('.m3u8')) {
+      if (urlToPlay.includes('.m3u8')) {
+        const { default: HlsPlayer } = await import('hls.js');
+        if (!active) return;
+
+        if (!HlsPlayer.isSupported()) {
+          video.src = urlToPlay;
+          forceUnmute();
+          await video.play().then(forceUnmute).catch(() => { });
+          return;
+        }
+
         if (hlsInstanceRef.current) {
           hlsInstanceRef.current.destroy();
         }
-        const hls = new Hls({
+        const hls = new HlsPlayer({
           enableWorker: true,
           lowLatencyMode: false,
           maxBufferLength: 30,
@@ -607,7 +607,7 @@ export function useCinematicPlayer({
         hls.loadSource(urlToPlay);
         hls.attachMedia(video);
 
-        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_event, data) => {
+        hls.on(HlsPlayer.Events.AUDIO_TRACKS_UPDATED, (_event, data) => {
           if (data.audioTracks && data.audioTracks.length > 0) {
             const tracks = data.audioTracks.map((t: any, i: number) => ({
               id: i,
@@ -625,7 +625,7 @@ export function useCinematicPlayer({
           forceUnmute();
         });
 
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
           forceUnmute();
           if (hls.levels && hls.levels.length > 0) {
             hls.loadLevel = hls.levels.length - 1;
@@ -634,11 +634,11 @@ export function useCinematicPlayer({
           video.play().then(forceUnmute).catch(() => { });
         });
 
-        hls.on(Hls.Events.FRAG_LOADED, () => {
+        hls.on(HlsPlayer.Events.FRAG_LOADED, () => {
           forceUnmute();
         });
 
-        hls.on(Hls.Events.ERROR, (_event, data) => {
+        hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
           console.warn('HLS error:', data.type, data.details);
           if (data.fatal) {
             if (data.type === 'networkError') {
@@ -662,7 +662,7 @@ export function useCinematicPlayer({
     };
 
     const init = async () => {
-      let playUrl = selectedChannel.url;
+      const playUrl = selectedChannel.url;
 
       const isMkv = playUrl.toLowerCase().includes('.mkv') || playUrl.toLowerCase().split('?')[0].endsWith('.mkv');
       if (isMkv && window.electronAPI?.startFfmpegProxy) {
@@ -671,7 +671,7 @@ export function useCinematicPlayer({
         startFfmpegFallback(startTime);
       } else {
         // Start playing naturally and instantly first!
-        loadPlayerSource(playUrl, false);
+        await loadPlayerSource(playUrl, false);
 
         // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams in the background
         if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
@@ -801,7 +801,7 @@ export function useCinematicPlayer({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChannel, reloadCounter]);
+  }, [selectedChannel]);
 
 
 

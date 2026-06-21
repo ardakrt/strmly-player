@@ -4,10 +4,10 @@ import { groupPlaylistItemsToSeries, parseSeriesEpisodeInfo, cleanMediaTitle } f
 import type { GroupedSeries, SeriesEpisode } from './utils/seriesGroupers';
 import './types';
 import type { ContentPreference, SavedPlaylist, Profile } from './types';
-import { HERO_BACKDROPS, GLOBAL_KEYS, DEFAULT_AVATARS, TMDB_CACHE_VERSION } from './constants';
+import { HERO_BACKDROPS, GLOBAL_KEYS, DEFAULT_AVATARS } from './constants';
 import { getMockDetails, hexToRgbStr } from './utils/helpers';
 import {
-  tmdbCache, globalSyncPosterMap,
+  tmdbCache,
   selectBestTmdbResult, cleanMovieName,
   buildTmdbSearchPath,
   getResolvedTmdbResult,
@@ -17,7 +17,6 @@ import {
 } from './utils/tmdb';
 
 import { useCategoryManager } from './hooks/useCategoryManager';
-import { CinematicPlayer } from './components/CinematicPlayer';
 import { SettingsProvider } from './context/SettingsContext';
 import { getTranslation } from './utils/translations';
 import type { Language } from './utils/translations';
@@ -29,13 +28,12 @@ import {
   getStableMatchPercentage
 } from './utils/searchHelpers';
 
-import { useCinematicPlayer } from './hooks/useCinematicPlayer';
-
 import { useProfilePreferences } from './hooks/useProfilePreferences';
 import { useProfiles } from './hooks/useProfiles';
 import { usePlaylists } from './hooks/usePlaylists';
 import { usePlayerState } from './hooks/usePlayerState';
 import { useTmdbCrawler } from './hooks/useTmdbCrawler';
+import { usePlaylistIndex } from './hooks/usePlaylistIndex';
 
 import { Navbar } from './components/Navbar';
 import { SpotlightSearch } from './components/SpotlightSearch';
@@ -52,6 +50,7 @@ const DiagnosticsView = lazy(() => import('./components/DiagnosticsView').then(m
 const ChannelModal = lazy(() => import('./components/ChannelModal').then(m => ({ default: m.ChannelModal })));
 const SeriesModal = lazy(() => import('./components/SeriesModal').then(m => ({ default: m.SeriesModal })));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
+const PlayerScreen = lazy(() => import('./components/PlayerScreen').then(m => ({ default: m.PlayerScreen })));
 const turkishCollator = new Intl.Collator('tr', { sensitivity: 'base', numeric: true });
 
 export default function App() {
@@ -93,8 +92,23 @@ export default function App() {
   useEffect(() => {
     const handleBeforeUnload = () => {
       const api = window.electronAPI;
+      const saveBatchSync = api?.saveConfigBatchSync;
       const saveSync = api?.saveConfigSync;
-      if (saveSync) {
+      if (saveBatchSync) {
+        const entries: Record<string, unknown> = {};
+        Object.keys(pendingDiskWrites.current).forEach((key) => {
+          clearTimeout(pendingDiskWrites.current[key]);
+          const stored = localStorage.getItem(key);
+          if (stored !== null) {
+            try {
+              entries[key] = JSON.parse(stored);
+            } catch {
+              entries[key] = stored;
+            }
+          }
+        });
+        if (Object.keys(entries).length > 0) saveBatchSync(entries);
+      } else if (saveSync) {
         Object.keys(pendingDiskWrites.current).forEach((key) => {
           clearTimeout(pendingDiskWrites.current[key]);
           const stored = localStorage.getItem(key);
@@ -127,7 +141,9 @@ export default function App() {
         const parsed = stored.startsWith('"') ? JSON.parse(stored) : stored;
         if (parsed === 'en' || parsed === 'tr') return parsed;
       }
-    } catch (e) {}
+    } catch {
+      // Ignore malformed legacy language values and use the default below.
+    }
     return 'tr';
   });
 
@@ -368,73 +384,7 @@ export default function App() {
   const isLiveTvView = selectedGroup === 'Canlı TV' || selectedGroup === 'Canlı TV';
   const isDiagnosticsView = selectedGroup === 'İstatistikler' || selectedGroup === 'İstatistikler';
 
-  const playlistIndex = useMemo(() => {
-    const liveSet = new Set<string>();
-    const seriesSet = new Set<string>();
-    const movieSet = new Set<string>();
-    const live: PlaylistItem[] = [];
-    const movie: PlaylistItem[] = [];
-    const series: PlaylistItem[] = [];
-    const liveGroupCounts: Record<string, number> = {};
-    const liveGroupMap = new Map<string, PlaylistItem[]>();
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const group = item.group || 'Genel';
-      const nameLower = item.nameLower || item.name.toLocaleLowerCase('tr-TR');
-      const groupLower = item.groupLower || group.toLocaleLowerCase('tr-TR');
-
-      if (item.type === 'live') {
-        if (groupLower.includes('ulusal') && !isHdChannel(item.name)) continue;
-        liveSet.add(group);
-        live.push(item);
-        liveGroupCounts[group] = (liveGroupCounts[group] || 0) + 1;
-        let groupItems = liveGroupMap.get(group);
-        if (!groupItems) {
-          groupItems = [];
-          liveGroupMap.set(group, groupItems);
-        }
-        groupItems.push(item);
-      } else if (item.type === 'series') {
-        const isSecIzle = nameLower.includes('seçizle') || nameLower.includes('seç izle') ||
-                           nameLower.includes('secizle') || nameLower.includes('sec izle') ||
-                           nameLower.includes('seç-izle') || nameLower.includes('sec-izle') ||
-                           groupLower.includes('seçizle') || groupLower.includes('seç izle') ||
-                           groupLower.includes('secizle') || groupLower.includes('sec izle') ||
-                           groupLower.includes('seç-izle') || groupLower.includes('sec-izle');
-        if (isSecIzle) continue;
-
-        seriesSet.add(group);
-        series.push(item);
-      } else if (item.type === 'movie') {
-        const isSecIzle = nameLower.includes('seçizle') || nameLower.includes('seç izle') ||
-                           nameLower.includes('secizle') || nameLower.includes('sec izle') ||
-                           nameLower.includes('seç-izle') || nameLower.includes('sec-izle') ||
-                           groupLower.includes('seçizle') || groupLower.includes('seç izle') ||
-                           groupLower.includes('secizle') || groupLower.includes('sec izle') ||
-                           groupLower.includes('seç-izle') || groupLower.includes('sec-izle');
-        if (isSecIzle) continue;
-
-        movieSet.add(group);
-        movie.push(item);
-      }
-    }
-
-    return {
-      uniqueLiveCategories: Array.from(liveSet),
-      uniqueSeriesCategories: Array.from(seriesSet),
-      uniqueMovieCategories: Array.from(movieSet),
-      itemBuckets: {
-        live,
-        movie,
-        series,
-        livePreview: live.slice(0, 15)
-      },
-      liveGroupCounts,
-      liveGroupMap
-    };
-  }, [items]);
-
+  const playlistIndex = usePlaylistIndex(items);
   const { uniqueLiveCategories, uniqueSeriesCategories, uniqueMovieCategories } = playlistIndex;
   const itemBuckets = playlistIndex.itemBuckets;
 
@@ -1659,15 +1609,15 @@ export default function App() {
       const hiddenSet = new Set(hiddenCategories || []);
       const liveItems = itemBuckets.live;
       if (activeLiveCategory !== 'Tümü') {
-        base = liveItems.filter(ch => (ch.group || 'Genel') === activeLiveCategory);
+        base = playlistIndex.liveGroupMap.get(activeLiveCategory) || [];
       } else {
         base = liveItems.filter(ch => !hiddenSet.has(ch.group || 'Genel'));
       }
     } else if (selectedGroup === 'Sinema') {
       const hiddenSet = new Set(hiddenMovieCategories || []);
-      const movieItems = itemBuckets.movie;
+      const movieItems = playlistIndex.displayMovie;
       if (activeMovieCategory !== 'Tümü') {
-        base = movieItems.filter(ch => (ch.group || 'Genel') === activeMovieCategory);
+        base = playlistIndex.movieGroupMap.get(activeMovieCategory) || [];
       } else {
         base = movieItems.filter(ch => !hiddenSet.has(ch.group || 'Genel'));
       }
@@ -1675,7 +1625,7 @@ export default function App() {
       // Avoid filtering individual episodes for Diziler, we filter allGroupedSeries directly instead!
       return [];
     } else if (selectedGroup !== 'Ana Sayfa' && selectedGroup !== 'İstatistikler' && selectedGroup !== 'Ayarlar') {
-      base = items.filter(ch => ch.group === selectedGroup);
+      base = playlistIndex.displayGroupMap.get(selectedGroup) || [];
     }
 
     if (deferredSearchQuery.trim()) {
@@ -1698,16 +1648,11 @@ export default function App() {
     // Filter by quality / resolution
     if (qualityFilter !== 'all') {
       base = base.filter(ch => {
-        const nameLower = ch.nameLower || ch.name.toLocaleLowerCase('tr-TR');
-        const is4k = nameLower.includes('4k') || nameLower.includes('uhd') || nameLower.includes('2160p');
-        const isFhd = nameLower.includes('fhd') || nameLower.includes('1080p') || nameLower.includes('1080i');
-        const isHd = (nameLower.includes('hd') && !nameLower.includes('fhd')) || nameLower.includes('720p') || nameLower.includes('720i');
-        const isSd = nameLower.includes('sd') || nameLower.includes('576p') || nameLower.includes('480p') || (!is4k && !isFhd && !isHd);
-
-        if (qualityFilter === '4k') return is4k;
-        if (qualityFilter === 'fhd') return isFhd;
-        if (qualityFilter === 'hd') return isHd;
-        if (qualityFilter === 'sd') return isSd;
+        const rank = ch.qualityRank || getQualityRank(ch.name, ch.nameLower);
+        if (qualityFilter === '4k') return rank === 4;
+        if (qualityFilter === 'fhd') return rank === 3;
+        if (qualityFilter === 'hd') return rank === 2;
+        if (qualityFilter === 'sd') return rank === 1;
         return true;
       });
     }
@@ -1720,7 +1665,7 @@ export default function App() {
     }
 
     return base;
-  }, [items, itemBuckets, selectedGroup, globalFavorites, activeLiveCategory, hiddenCategories, activeMovieCategory, hiddenMovieCategories, deferredSearchQuery, sortOption, qualityFilter]);
+  }, [items, itemBuckets, playlistIndex, selectedGroup, globalFavorites, activeLiveCategory, hiddenCategories, activeMovieCategory, hiddenMovieCategories, deferredSearchQuery, sortOption, qualityFilter]);
 
   // Memoized grouped series list for when selectedGroup === 'Diziler'
   const groupedSeriesList = useMemo(() => {
@@ -2144,23 +2089,6 @@ export default function App() {
     return visibleChannels;
   }, [itemBuckets.live, activeContentPreferences]);
 
-  const player = useCinematicPlayer({
-    selectedChannel,
-    onClose: () => {
-      if (player.videoRef.current && player.duration > 0) {
-        if (selectedChannel) saveWatchProgress(selectedChannel, player.videoRef.current.currentTime, player.duration);
-      }
-      const returnState = playerReturnStateRef.current;
-      pendingScrollRestoreRef.current = returnState?.scrollTop ?? 0;
-      setSelectedChannel(null);
-      setSelectedSeriesForModal(returnState?.seriesModal ?? null);
-      setSelectedChannelForModal(returnState?.channelModal ?? null);
-      playerReturnStateRef.current = null;
-    },
-    saveWatchProgress,
-    showToast
-  });
-
   useEffect(() => {
     if (selectedChannel || pendingScrollRestoreRef.current === null) return;
 
@@ -2325,57 +2253,24 @@ export default function App() {
   if (selectedChannel) {
     return (
       <SettingsProvider value={settingsContextValue}>
-        <CinematicPlayer
-        channel={selectedChannel}
-        channels={items}
-        onChannelChange={handlePlayStream}
-        videoRef={player.videoRef}
-        playerContainerRef={player.playerContainerRef}
-        isPlaying={player.isPlaying}
-        currentTime={player.currentTime}
-        duration={player.duration}
-        playerVolume={player.playerVolume}
-        playerMuted={player.playerMuted}
-        showControls={player.showControls}
-        videoReady={player.videoReady}
-        playbackSpeed={player.playbackSpeed}
-        showSpeedMenu={player.showSpeedMenu}
-        audioTracks={player.audioTracks}
-        activeAudioTrack={player.activeAudioTrack}
-        subtitleTracks={player.subtitleTracks}
-        activeSubtitle={player.activeSubtitle}
-        showSubtitleMenu={player.showSubtitleMenu}
-        isFullscreen={player.isFullscreen}
-        accentStyles={getAccentStyles()}
-        onClose={() => {
-          if (player.videoRef.current && player.duration > 0) {
-            saveWatchProgress(selectedChannel, player.videoRef.current.currentTime, player.duration);
-          }
-          const returnState = playerReturnStateRef.current;
-          pendingScrollRestoreRef.current = returnState?.scrollTop ?? 0;
-          setSelectedChannel(null);
-          setSelectedSeriesForModal(returnState?.seriesModal ?? null);
-          setSelectedChannelForModal(returnState?.channelModal ?? null);
-          playerReturnStateRef.current = null;
-        }}
-        onTogglePlay={player.handleTogglePlay}
-        onToggleMute={player.handleTogglePlayerMute}
-        onVolumeChange={player.handlePlayerVolumeChange}
-        onSpeedChange={player.handleSpeedChange}
-        onAudioTrackChange={player.handleAudioTrackChange}
-        onSubtitleChange={player.setActiveSubtitle}
-        onSubtitleUpload={player.handleSubtitleUpload}
-        onPiP={player.handlePlayerPiP}
-        onToggleFullscreen={player.handleToggleFullscreen}
-        onTimelineSeek={player.handleTimelineSeek}
-        onSeek={player.handlePlayerSeek}
-        onHideControls={() => player.setShowControls(false)}
-        onShowSpeedMenu={player.setShowSpeedMenu}
-        onShowSubtitleMenu={player.setShowSubtitleMenu}
-        formatTime={player.formatPlayerTime}
-        onMouseMove={player.handlePlayerMouseMove}
-          onMouseLeave={player.handlePlayerMouseLeave}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+          <PlayerScreen
+            channel={selectedChannel}
+            channels={items}
+            onChannelChange={handlePlayStream}
+            accentStyles={getAccentStyles()}
+            saveWatchProgress={saveWatchProgress}
+            showToast={showToast}
+            onClose={() => {
+              const returnState = playerReturnStateRef.current;
+              pendingScrollRestoreRef.current = returnState?.scrollTop ?? 0;
+              setSelectedChannel(null);
+              setSelectedSeriesForModal(returnState?.seriesModal ?? null);
+              setSelectedChannelForModal(returnState?.channelModal ?? null);
+              playerReturnStateRef.current = null;
+            }}
+          />
+        </Suspense>
       </SettingsProvider>
     );
   }

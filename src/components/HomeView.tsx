@@ -61,36 +61,6 @@ const TMDB_GENRES: Record<number, string> = {
   10768: 'SAVAŞ & POLİTİKA'
 };
 
-const TMDB_GENRES_EN: Record<number, string> = {
-  28: 'ACTION',
-  12: 'ADVENTURE',
-  16: 'ANIMATION',
-  35: 'COMEDY',
-  80: 'CRIME',
-  99: 'DOCUMENTARY',
-  18: 'DRAMA',
-  10751: 'FAMILY',
-  14: 'FANTASY',
-  36: 'HISTORY',
-  27: 'HORROR',
-  10402: 'MUSIC',
-  9648: 'MYSTERY',
-  10749: 'ROMANCE',
-  878: 'SCI-FI',
-  10770: 'TV MOVIE',
-  53: 'THRILLER',
-  10752: 'WAR',
-  37: 'WESTERN',
-  10759: 'ACTION & ADVENTURE',
-  10762: 'KIDS',
-  10763: 'NEWS',
-  10764: 'REALITY',
-  10765: 'SCI-FI & FANTASY',
-  10766: 'SOAP',
-  10767: 'TALK SHOW',
-  10768: 'WAR & POLITICS'
-};
-
 const getFlatItem = (item: any): PlaylistItem => {
   if (item && item.seasons) {
     const seasonsKeys = Object.keys(item.seasons).map(Number).sort((a, b) => a - b);

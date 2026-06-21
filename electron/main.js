@@ -17,6 +17,23 @@ try {
   fs.writeFileSync(logFile, '', 'utf8');
 } catch (e) {}
 
+let logBuffer = [];
+let logFlushTimer = null;
+let logWriteQueue = Promise.resolve();
+
+function flushLogBuffer() {
+  if (logFlushTimer) {
+    clearTimeout(logFlushTimer);
+    logFlushTimer = null;
+  }
+  if (logBuffer.length === 0) return;
+  const batch = logBuffer.join('');
+  logBuffer = [];
+  logWriteQueue = logWriteQueue
+    .catch(() => undefined)
+    .then(() => fs.promises.appendFile(logFile, batch, 'utf8'));
+}
+
 function logToFile(...args) {
   try {
     const msg = args.map(arg => {
@@ -26,7 +43,10 @@ function logToFile(...args) {
       return typeof arg === 'object' ? JSON.stringify(arg) : arg;
     }).join(' ');
     const logLine = `[${new Date().toISOString()}] ${msg}\n`;
-    fs.appendFileSync(logFile, logLine, 'utf8');
+    logBuffer.push(logLine);
+    if (!logFlushTimer) {
+      logFlushTimer = setTimeout(flushLogBuffer, 250);
+    }
   } catch (e) {}
 }
 
@@ -155,7 +175,7 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Register custom protocol handle for app-file:// scheme
   const { pathToFileURL } = require('url');
   protocol.handle('app-file', async (request) => {
@@ -203,6 +223,7 @@ app.whenReady().then(() => {
   });
 
   migrateData(); // Migrate existing config and playlists to the profiles folder
+  await ensureConfigLoaded();
   createWindow();
 
   app.on('activate', () => {
@@ -217,6 +238,12 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  if (logBuffer.length > 0) {
+    try {
+      fs.appendFileSync(logFile, logBuffer.join(''), 'utf8');
+      logBuffer = [];
+    } catch { /* Best-effort shutdown logging. */ }
+  }
   stopFfmpegProxy();
 });
 
@@ -288,6 +315,46 @@ const getConfigPath = () => {
   return path.join(getProfilesDir(), 'iptv-player-config.json');
 };
 
+let configCache = null;
+let configLoadPromise = null;
+let configWriteQueue = Promise.resolve();
+
+const ensureConfigLoaded = async () => {
+  if (configCache) return configCache;
+  if (configLoadPromise) return configLoadPromise;
+
+  configLoadPromise = (async () => {
+    const configPath = getConfigPath();
+    try {
+      const raw = await fs.promises.readFile(configPath, 'utf8');
+      configCache = JSON.parse(raw);
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error('Config load error, starting with an empty config:', err);
+        try {
+          await fs.promises.copyFile(configPath, `${configPath}.corrupted-${Date.now()}`);
+        } catch { /* The original file may not exist or may be unreadable. */ }
+      }
+      configCache = {};
+    }
+    return configCache;
+  })();
+
+  return configLoadPromise;
+};
+
+const queueConfigWrite = () => {
+  const configPath = getConfigPath();
+  configWriteQueue = configWriteQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const tempPath = `${configPath}.tmp`;
+      await fs.promises.writeFile(tempPath, JSON.stringify(configCache || {}, null, 2), 'utf8');
+      await fs.promises.rename(tempPath, configPath);
+    });
+  return configWriteQueue;
+};
+
 const getPlaylistsDir = () => {
   const playlistDir = path.join(getProfilesDir(), 'playlists');
   if (!fs.existsSync(playlistDir)) {
@@ -339,24 +406,9 @@ function migrateData() {
 
 ipcMain.handle('save-config', async (event, { key, value }) => {
   try {
-    const configPath = getConfigPath();
-    let config = {};
-    if (fs.existsSync(configPath)) {
-      try {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      } catch (parseErr) {
-        console.error("Config parse error on save, resetting to empty config:", parseErr);
-        try {
-          const backupPath = configPath + '.corrupted-' + Date.now();
-          fs.copyFileSync(configPath, backupPath);
-          console.log("Created backup of corrupted config at:", backupPath);
-        } catch (backupErr) {
-          console.error("Failed to create backup of corrupted config:", backupErr);
-        }
-      }
-    }
+    const config = await ensureConfigLoaded();
     config[key] = value;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    await queueConfigWrite();
     return { success: true };
   } catch (err) {
     console.error("Config save error:", err);
@@ -367,15 +419,9 @@ ipcMain.handle('save-config', async (event, { key, value }) => {
 ipcMain.on('save-config-sync', (event, { key, value }) => {
   try {
     const configPath = getConfigPath();
-    let config = {};
-    if (fs.existsSync(configPath)) {
-      try {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      } catch (parseErr) {
-        console.error("Config parse error on save-sync, resetting:", parseErr);
-      }
-    }
+    const config = configCache || {};
     config[key] = value;
+    configCache = config;
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
     event.returnValue = { success: true };
   } catch (err) {
@@ -384,17 +430,22 @@ ipcMain.on('save-config-sync', (event, { key, value }) => {
   }
 });
 
+ipcMain.on('save-config-batch-sync', (event, entries) => {
+  try {
+    const config = configCache || {};
+    Object.assign(config, entries);
+    configCache = config;
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf8');
+    event.returnValue = { success: true };
+  } catch (err) {
+    console.error('Config batch save sync error:', err);
+    event.returnValue = { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('load-config', async (event, { key }) => {
   try {
-    const configPath = getConfigPath();
-    if (!fs.existsSync(configPath)) return null;
-    let config = {};
-    try {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (parseErr) {
-      console.error("Config parse error on load:", parseErr);
-      return null;
-    }
+    const config = await ensureConfigLoaded();
     return config[key] !== undefined ? config[key] : null;
   } catch (err) {
     console.error("Config load error:", err);
@@ -541,10 +592,40 @@ async function fetchFromTmdb(apiPath) {
   return fetchHttpsFromHost('api.themoviedb.org', apiPath);
 }
 
+const tmdbMainRequests = new Map();
+const tmdbMainQueue = [];
+const MAX_TMDB_MAIN_REQUESTS = 8;
+let activeTmdbMainRequests = 0;
+
+function queueTmdbMainRequest(task) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      activeTmdbMainRequests += 1;
+      task().then(resolve, reject).finally(() => {
+        activeTmdbMainRequests -= 1;
+        const next = tmdbMainQueue.shift();
+        if (next) next();
+      });
+    };
+    if (activeTmdbMainRequests < MAX_TMDB_MAIN_REQUESTS) run();
+    else tmdbMainQueue.push(run);
+  });
+}
+
 ipcMain.handle('fetch-tmdb', async (event, { path: apiPath }) => {
+  const existing = tmdbMainRequests.get(apiPath);
+  if (existing) return existing;
+
+  const request = queueTmdbMainRequest(() => fetchFromTmdb(apiPath))
+    .catch((err) => {
+      console.error("TMDB fetch error:", err);
+      return { error: err.message };
+    })
+    .finally(() => tmdbMainRequests.delete(apiPath));
+  tmdbMainRequests.set(apiPath, request);
+
   try {
-    const data = await fetchFromTmdb(apiPath);
-    return data;
+    return await request;
   } catch (err) {
     console.error("TMDB fetch error:", err);
     return { error: err.message };

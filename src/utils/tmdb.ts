@@ -122,6 +122,45 @@ class IndexedDBCache {
 
 export const tmdbCache = new IndexedDBCache();
 
+const API_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_CONCURRENT_TMDB_REQUESTS = 6;
+const tmdbRequestsInFlight = new Map<string, Promise<unknown>>();
+const tmdbRequestQueue: Array<() => void> = [];
+let activeTmdbRequests = 0;
+
+const runWithTmdbConcurrencyLimit = <T>(task: () => Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+  const run = () => {
+    activeTmdbRequests += 1;
+    task().then(resolve, reject).finally(() => {
+      activeTmdbRequests -= 1;
+      tmdbRequestQueue.shift()?.();
+    });
+  };
+
+  if (activeTmdbRequests < MAX_CONCURRENT_TMDB_REQUESTS) run();
+  else tmdbRequestQueue.push(run);
+});
+
+const waitForRequest = <T>(request: Promise<T>, signal?: AbortSignal): Promise<T> => {
+  if (!signal) return request;
+  if (signal.aborted) return Promise.reject(new DOMException('The user aborted a request.', 'AbortError'));
+
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException('The user aborted a request.', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    request.then(
+      value => {
+        signal.removeEventListener('abort', abort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      }
+    );
+  });
+};
+
 export function cleanMovieName(title: string): string {
   return cleanMediaTitle(title);
 }
@@ -237,35 +276,45 @@ export const fetchTmdbPath = async <T extends { error?: string }>(path: string, 
   }
   const cleanCachePath = path.replace(/[?&]api_key=[^&]+/, '');
   const cacheKey = `api-${cleanCachePath}`;
-  try {
-    const cached = await tmdbCache.get(cacheKey);
-    if (cached) return cached as T;
-  } catch (e) {
-    console.error("Cache read error:", e);
+  let sharedRequest = tmdbRequestsInFlight.get(cacheKey) as Promise<T> | undefined;
+  if (!sharedRequest) {
+    sharedRequest = (async () => {
+      try {
+        const cached = await tmdbCache.get(cacheKey);
+        if (cached?.cachedAt && Date.now() - cached.cachedAt < API_CACHE_TTL_MS) {
+          return cached.value as T;
+        }
+        if (cached && !cached.cachedAt) {
+          void tmdbCache.set(cacheKey, { value: cached, cachedAt: Date.now() });
+          return cached as T;
+        }
+      } catch (e) {
+        console.error("Cache read error:", e);
+      }
+
+      const responseData = await runWithTmdbConcurrencyLimit(async () => {
+        if (window.electronAPI?.fetchTmdb) {
+          return await window.electronAPI.fetchTmdb(path) as T;
+        }
+        const response = await fetch(`https://api.themoviedb.org${path}`);
+        return await response.json() as T;
+      });
+
+      if (responseData && !responseData.error) {
+        try {
+          await tmdbCache.set(cacheKey, { value: responseData, cachedAt: Date.now() });
+        } catch (e) {
+          console.error("Cache write error:", e);
+        }
+      }
+      return responseData;
+    })().finally(() => tmdbRequestsInFlight.delete(cacheKey));
+    tmdbRequestsInFlight.set(cacheKey, sharedRequest);
   }
 
+  const responseData = await waitForRequest(sharedRequest, signal);
   if (signal?.aborted) {
     throw new DOMException('The user aborted a request.', 'AbortError');
-  }
-
-  let responseData: T;
-  if (window.electronAPI?.fetchTmdb) {
-    responseData = await window.electronAPI.fetchTmdb(path) as T;
-  } else {
-    const response = await fetch(`https://api.themoviedb.org${path}`, { signal });
-    responseData = await response.json() as T;
-  }
-
-  if (signal?.aborted) {
-    throw new DOMException('The user aborted a request.', 'AbortError');
-  }
-
-  if (responseData && !responseData.error) {
-    try {
-      await tmdbCache.set(cacheKey, responseData);
-    } catch (e) {
-      console.error("Cache write error:", e);
-    }
   }
 
   return responseData;
