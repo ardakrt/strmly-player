@@ -245,23 +245,14 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   }, [channel.type, cleanTitle, isVisible]);
 
   if (!isVisible) {
-    return <div ref={cardRef} className="flex-shrink-0 w-[200px] md:w-[240px] aspect-[2/3] snap-start" />;
+    return <div ref={cardRef} className="flex-shrink-0 w-[176px] md:w-[208px] aspect-[2/3] snap-start" />;
   }
 
   if (!metadata) {
     return (
-      <div ref={cardRef} className="flex-shrink-0 w-[200px] md:w-[240px] snap-start bg-[#0a0a0c]/80 border border-white/[0.03] rounded-[28px] p-3.5 flex flex-col gap-3.5">
-        <div className="relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-neutral-900 border border-white/5">
+      <div ref={cardRef} className="flex-shrink-0 w-[176px] md:w-[208px] snap-start">
+        <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-neutral-900 border border-white/5">
           <div className="absolute inset-0 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 bg-[length:200%_100%] animate-shimmer" />
-        </div>
-        <div className="flex flex-col gap-2">
-          <div className="h-4 bg-neutral-800 rounded w-3/4 animate-pulse" />
-          <div className="flex gap-1.5 mt-1">
-            <div className="h-3 bg-neutral-800 rounded w-12 animate-pulse" />
-            <div className="h-3 bg-neutral-800 rounded w-16 animate-pulse" />
-          </div>
-          <div className="h-3 bg-neutral-800 rounded w-full mt-2 animate-pulse" />
-          <div className="h-3 bg-neutral-800 rounded w-5/6 animate-pulse" />
         </div>
       </div>
     );
@@ -321,11 +312,11 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   return (
     <div
       ref={cardRef}
-      className="flex-shrink-0 w-[200px] md:w-[240px] group flex flex-col gap-3.5 cursor-pointer snap-start bg-[#0a0a0c]/80 border border-white/[0.03] backdrop-blur-md rounded-[28px] p-3.5 hover:border-white/10 hover:bg-[#121216]/90 transition-all duration-300 hover:scale-[1.02] shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
+      className="home-poster-card flex-shrink-0 w-[176px] md:w-[208px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.035] hover:z-20"
       onClick={handleCardClick}
       onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
-      <div className="relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-neutral-950/60 border border-white/5 shadow-md flex items-center justify-center">
+      <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-neutral-950/60 border border-white/[0.07] shadow-[0_14px_38px_rgba(0,0,0,0.4)] flex items-center justify-center transition-all duration-300 group-hover:border-white/20 group-hover:shadow-[0_22px_55px_rgba(0,0,0,0.58)]">
         {posterSrc ? (
           <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover animate-fade-in" />
         ) : (
@@ -338,11 +329,9 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
             aspect="portrait"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/15 to-black/20 pointer-events-none" />
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 pointer-events-none">
-          <span className={`h-[22px] px-2.5 text-[9px] md:text-[10px] font-extrabold tracking-wider rounded-full text-white shadow-md flex items-center justify-center border border-transparent ${
-            channel.type === 'series' ? 'bg-indigo-600' : 'bg-violet-600'
-          }`}>
+          <span className="home-media-type-badge h-[22px] px-2.5 text-[9px] font-extrabold tracking-wider rounded-full text-white shadow-md flex items-center justify-center border border-white/10">
             {channel.type === 'series' ? 'DİZİ' : 'FİLM'}
           </span>
           {metadata.rating && (
@@ -359,8 +348,8 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
             </span>
           </div>
         )}
-        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-15">
-          <div className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-15">
+          <div className="w-11 h-11 rounded-full bg-[var(--accent-color)] text-black flex items-center justify-center shadow-2xl transform scale-75 group-hover:scale-100 transition-transform duration-300">
             <Play size={18} fill="#000" className="ml-1" />
           </div>
         </div>
@@ -370,37 +359,22 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
             e.stopPropagation();
             toggleFavorite(channel.id, e);
           }}
-          className="absolute bottom-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-lg"
+          className="absolute bottom-3 right-3 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-lg"
           title="Favorilere Ekle"
         >
           <Heart size={14} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
-      </div>
-
-      <div className="flex flex-col gap-2 px-1">
-        <h4 className="text-sm md:text-base font-extrabold text-neutral-100 group-hover:text-white line-clamp-1 transition-colors leading-tight">
-          {displayTitle}
-        </h4>
-        <div className="flex flex-wrap gap-1.5 mt-0.5">
-          {displayGenres.map((genre, idx) => (
-            <span
-              key={idx}
-              className="px-2.5 py-0.5 bg-neutral-800/40 text-neutral-400 font-extrabold uppercase tracking-wide text-[8px] md:text-[9px] rounded-full border border-white/[0.03]"
-            >
-              {genre}
-            </span>
-          ))}
-        </div>
-        <p className="text-[11px] md:text-xs text-neutral-400/70 leading-relaxed line-clamp-2 mt-1 min-h-[2.2rem]">
-          {displayOverview}
-        </p>
-        <div className="border-t border-white/[0.04] my-1" />
-        <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-neutral-500 font-bold">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span className="uppercase tracking-wider">{displayDuration}</span>
+        <div className="absolute inset-x-0 bottom-0 z-20 p-3.5 pr-12 pt-12 bg-gradient-to-t from-black via-black/90 to-transparent pointer-events-none">
+          <h4 className="text-sm md:text-[15px] font-extrabold text-white line-clamp-1 leading-tight drop-shadow">
+            {displayTitle}
+          </h4>
+          <div className="mt-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wide text-white/55 transition-all duration-300 group-hover:text-white/75">
+            <span>{displayDuration}</span>
+            {displayGenres[0] && <><span className="text-white/25">•</span><span className="truncate">{displayGenres[0]}</span></>}
+          </div>
+          <p className="mt-0 max-h-0 translate-y-2 overflow-hidden text-[10px] leading-relaxed text-white/65 opacity-0 transition-all duration-300 line-clamp-2 group-hover:mt-2 group-hover:max-h-10 group-hover:translate-y-0 group-hover:opacity-100">
+            {displayOverview}
+          </p>
         </div>
       </div>
     </div>
@@ -614,7 +588,7 @@ export const HomeView = memo(function HomeView({
   const renderRailCard = (channel: PlaylistItem, keyPrefix: string) => (
     <div
       key={`${keyPrefix}-${channel.id}`}
-      className="flex-shrink-0 w-[170px] md:w-[210px] group flex flex-col gap-2.5 cursor-pointer snap-start"
+      className="flex-shrink-0 w-[170px] md:w-[210px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035] hover:z-20"
       onClick={() => {
         if (channel.type === 'live') {
           handlePlayStream(channel);
@@ -624,7 +598,7 @@ export const HomeView = memo(function HomeView({
       }}
       onContextMenu={(event) => openContextMenu(event, channel)}
     >
-      <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transform group-hover:scale-[1.04] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
+      <div className="relative w-full aspect-video rounded-[18px] overflow-hidden bg-neutral-900 border border-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.35)] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
         <ImageWithFallback
           src={channel.logo}
           name={channel.name}
@@ -633,48 +607,61 @@ export const HomeView = memo(function HomeView({
           isGenericLogo={channel.logo ? genericLogosSet.has(channel.logo) : false}
           aspect="landscape"
         />
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent z-10" />
+        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
           <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
             <Play size={16} fill="#000" className="ml-0.5" />
           </div>
         </div>
         <button
           onClick={(e) => toggleFavorite(channel.id, e)}
-          className="absolute top-2.5 right-2.5 z-20 w-7 h-7 rounded-full bg-black/80 border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110"
+          className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110"
           title="Favorilere Ekle"
         >
           <Heart size={12} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
-      </div>
-      <div className="flex flex-col px-1.5">
-        <span className="text-xs font-bold text-neutral-200 group-hover:text-white truncate transition-colors">{channel.name}</span>
-        <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mt-0.5">{channel.group || 'Genel'}</span>
+        <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
+          <span className="block text-xs font-extrabold text-white truncate drop-shadow">{channel.name}</span>
+          <span className="block text-[9px] text-white/50 uppercase tracking-wider font-semibold mt-0.5 truncate">{channel.group || 'Genel'}</span>
+        </div>
       </div>
     </div>
   );
 
-  const playlistHeroImage = featuredTmdbData?.backdrop || featuredTmdbData?.poster || currentHeroItem?.logo;
+  const playlistHeroBackdrop = featuredTmdbData?.backdrop;
+  const playlistHeroPoster = featuredTmdbData?.poster || currentHeroItem?.logo;
   const fallbackHeroImage = fallbackHeroItem?.img;
+  const heroBackdropImage = isPlaylistHero ? playlistHeroBackdrop : fallbackHeroImage;
+  const heroAmbientImage = heroBackdropImage || (isPlaylistHero ? playlistHeroPoster : fallbackHeroImage);
+  const heroPosterFallback = isPlaylistHero && !playlistHeroBackdrop ? playlistHeroPoster : null;
+  const heroTitle = isPlaylistHero
+    ? (currentHeroItem?.type === 'series'
+      ? parseSeriesEpisodeInfo(currentHeroItem.name).cleanTitle
+      : currentHeroItem?.name || '')
+    : fallbackHeroItem?.title || '';
+  const heroTitleSize = heroTitle.length > 30
+    ? 'lg:text-[46px]'
+    : heroTitle.length > 20
+      ? 'lg:text-[52px]'
+      : 'lg:text-[58px]';
+
+  const changeShowcase = (offset: number) => {
+    if (activeShowcaseList.length === 0) return;
+    const nextIndex = (activeFeaturedIndex + offset + activeShowcaseList.length) % activeShowcaseList.length;
+    setActiveFeaturedIndex(nextIndex);
+  };
 
   return (
     <div
-      className="flex flex-col gap-8 animate-fade-in pb-12"
+      className="flex flex-col gap-6 animate-fade-in pb-12"
       onContextMenu={() => setContextMenu(null)}
     >
-      <div className="relative group/hero-outer">
-        <div className="absolute -inset-8 z-0 opacity-45 blur-[90px] transition-all duration-1000 pointer-events-none rounded-[45px] overflow-hidden select-none">
-          {isPlaylistHero && playlistHeroImage ? (
+      <div className="relative group/hero-outer mb-1">
+        <div className="absolute -inset-6 z-0 opacity-35 blur-[80px] transition-all duration-1000 pointer-events-none rounded-[42px] overflow-hidden select-none">
+          {heroAmbientImage ? (
             <img
-              key={playlistHeroImage}
-              src={playlistHeroImage}
-              alt=""
-              className="w-full h-full object-cover scale-125 animate-fade-in"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : !isPlaylistHero && fallbackHeroImage ? (
-            <img
-              key={fallbackHeroImage}
-              src={fallbackHeroImage}
+              key={heroAmbientImage}
+              src={heroAmbientImage}
               alt=""
               className="w-full h-full object-cover scale-125 animate-fade-in"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -687,65 +674,72 @@ export const HomeView = memo(function HomeView({
           )}
         </div>
         <div
-          className="relative z-10 w-full min-h-[360px] md:min-h-[440px] rounded-[32px] overflow-hidden flex items-end select-none border border-white/5 shadow-2xl bg-neutral-950/20 backdrop-blur-[1px]"
+          className="relative z-10 w-full min-h-[470px] md:h-[clamp(520px,58vh,680px)] rounded-[26px] overflow-hidden flex items-end select-none border border-white/[0.055] shadow-[0_28px_80px_rgba(0,0,0,0.42)] bg-neutral-950/20 backdrop-blur-[1px]"
         >
-          {isPlaylistHero && playlistHeroImage ? (
+          {heroBackdropImage ? (
             <img
-              key={playlistHeroImage}
-              src={playlistHeroImage}
-              className="absolute inset-0 w-full h-full object-cover animate-fade-in"
-              style={{ objectPosition: 'center top' }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : !isPlaylistHero && fallbackHeroImage ? (
-            <img
-              key={fallbackHeroImage}
-              src={fallbackHeroImage}
-              className="absolute inset-0 w-full h-full object-cover animate-fade-in"
-              style={{ objectPosition: 'center top' }}
+              key={heroBackdropImage}
+              src={heroBackdropImage}
+              className="absolute inset-0 w-full h-full object-cover animate-fade-in home-hero-image"
+              style={{ objectPosition: 'center 25%' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-black/30 z-10 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-r from-neutral-950 via-neutral-950/60 to-transparent z-10 pointer-events-none" />
+          {heroPosterFallback && (
+            <>
+              <img
+                key={`blur-${heroPosterFallback}`}
+                src={heroPosterFallback}
+                alt=""
+                className="absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-2xl home-hero-image"
+              />
+              <img
+                key={`poster-${heroPosterFallback}`}
+                src={heroPosterFallback}
+                alt=""
+                className="absolute right-[10%] top-1/2 h-[82%] max-h-[560px] -translate-y-1/2 rounded-[24px] border border-white/10 object-cover shadow-[0_30px_80px_rgba(0,0,0,0.65)] animate-fade-in"
+              />
+            </>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050507] via-neutral-950/25 to-black/25 z-10 pointer-events-none" />
+          <div className="home-hero-left-scrim absolute inset-0 z-10 pointer-events-none" />
+          <div className="home-hero-color-grade absolute inset-0 z-[11] pointer-events-none" />
+          <div className="home-hero-grain absolute inset-0 z-[12] pointer-events-none" />
 
-          <div className="absolute bottom-10 left-10 max-w-xl flex flex-col gap-4 z-20">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="px-2.5 py-0.5 bg-[var(--accent-color)] text-black text-[9px] font-extrabold tracking-widest uppercase rounded shadow-sm shadow-[var(--accent-glow)]">
+          <div key={`hero-copy-${activeFeaturedIndex}`} className="home-hero-copy absolute bottom-12 left-10 md:bottom-14 md:left-16 max-w-2xl flex flex-col gap-4 z-20">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-color)] shadow-[0_0_12px_var(--accent-color)]" />
+              <span className="text-[9px] text-white/85 font-extrabold tracking-[0.18em] uppercase">
                 {isPlaylistHero ? (language === 'tr' ? 'ÖNE ÇIKAN YAPIM' : 'FEATURED PRODUCTION') : (language === 'tr' ? 'STRMLY SEÇKİ' : 'STRMLY SELECTION')}
               </span>
-              <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-wider">
+              <span className="h-3 w-px bg-white/20" />
+              <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-[0.12em]">
                 {isPlaylistHero
                   ? (currentHeroItem?.group || (currentHeroItem?.type === 'movie' ? (language === 'tr' ? 'Sinema (VOD)' : 'Movies (VOD)') : (language === 'tr' ? 'Dizi (VOD)' : 'Series (VOD)')))
                   : fallbackHeroItem?.category}
               </span>
             </div>
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white leading-none drop-shadow-md">
-              {isPlaylistHero
-                ? (currentHeroItem?.type === 'series'
-                  ? parseSeriesEpisodeInfo(currentHeroItem.name).cleanTitle
-                  : currentHeroItem?.name)
-                : fallbackHeroItem?.title}
+            <h1 className={`home-hero-title text-4xl md:text-5xl ${heroTitleSize} font-black tracking-[-0.045em] text-white leading-[0.92]`}>
+              {heroTitle}
             </h1>
 
             {isPlaylistHero && (
-              <div className="flex items-center gap-3 text-xs font-semibold text-neutral-300 mt-0.5">
+              <div className="flex w-fit items-center gap-2.5 rounded-full border border-white/[0.09] bg-black/20 px-3 py-1.5 text-[10px] font-semibold text-neutral-300 backdrop-blur-md">
                 <span className="text-emerald-400 font-extrabold">{featuredTmdbData?.match || (language === 'tr' ? '95% Eşleşme' : '95% Match')}</span>
-                <span className="text-neutral-400">{featuredTmdbData?.year || '2025'}</span>
+                <span className="h-1 w-1 rounded-full bg-white/25" />
+                <span className="text-neutral-300">{featuredTmdbData?.year || '2025'}</span>
                 {featuredTmdbData?.rating && parseFloat(featuredTmdbData.rating) > 0 && (
-                  <span className="px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-[10px] font-bold">
-                    ⭐ {featuredTmdbData.rating}
-                  </span>
+                  <><span className="h-1 w-1 rounded-full bg-white/25" /><span className="text-amber-400 font-bold">★ {featuredTmdbData.rating}</span></>
                 )}
               </div>
             )}
 
-            <p className="text-xs text-neutral-300 leading-relaxed font-normal max-w-md drop-shadow line-clamp-3">
+            <p className="text-[13px] md:text-sm text-neutral-300/90 leading-[1.65] font-normal max-w-xl drop-shadow line-clamp-2">
               {isPlaylistHero ? (featuredTmdbData?.desc || (language === 'tr' ? 'Strmly kütüphanesinden benzersiz bir yapım.' : 'A unique production from the Strmly library.')) : fallbackHeroItem?.desc}
             </p>
 
-            <div className="flex items-center gap-3 mt-2">
+            <div className="flex items-center gap-2.5 mt-1.5">
               <button
                 onClick={() => {
                   if (isPlaylistHero && currentHeroItem) {
@@ -758,7 +752,7 @@ export const HomeView = memo(function HomeView({
                     showToast(language === 'tr' ? `${fallbackHeroItem.title} çalma listenizden aranıyor...` : `Searching for ${fallbackHeroItem.title} in your playlist...`);
                   }
                 }}
-                className="px-6 py-3 bg-white text-black font-bold rounded-full flex items-center gap-2 hover:bg-neutral-200 transition-all duration-300 shadow-lg transform active:scale-95 text-xs"
+                className="h-11 px-6 bg-white text-black font-extrabold rounded-full flex items-center gap-2 hover:bg-neutral-200 transition-all duration-200 shadow-[0_8px_20px_rgba(0,0,0,0.28)] transform active:scale-95 text-xs"
               >
                 <Play size={13} fill="#000" className="ml-0.5" /> {language === 'tr' ? 'Şimdi İzle' : 'Watch Now'}
               </button>
@@ -770,26 +764,50 @@ export const HomeView = memo(function HomeView({
                     showToast(language === 'tr' ? "Kendi çalma listenizi yükleyerek tüm içerik detaylarına erişebilirsiniz." : "Upload your own playlist to access all content details.");
                   }
                 }}
-                className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full transition-all duration-300 transform active:scale-95 text-xs"
+                className="h-11 px-5 bg-white/[0.09] hover:bg-white/[0.15] backdrop-blur-xl border border-white/[0.12] text-white font-bold rounded-full transition-all duration-300 transform active:scale-95 text-xs flex items-center gap-2"
               >
-                {language === 'tr' ? 'Detaylar' : 'Details'}
+                <Info size={14} /> {language === 'tr' ? 'Detaylar' : 'Details'}
               </button>
             </div>
           </div>
-          <div className="absolute bottom-10 right-10 flex gap-2 z-20">
+          {activeShowcaseList.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label={language === 'tr' ? 'Önceki tanıtım' : 'Previous showcase'}
+                onClick={() => changeShowcase(-1)}
+                className="absolute left-4 top-1/2 z-30 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/20 text-white/60 opacity-0 backdrop-blur-xl transition-all hover:bg-white/10 hover:text-white group-hover/hero-outer:opacity-100 focus-visible:opacity-100"
+              >
+                <ChevronLeft size={19} />
+              </button>
+              <button
+                type="button"
+                aria-label={language === 'tr' ? 'Sonraki tanıtım' : 'Next showcase'}
+                onClick={() => changeShowcase(1)}
+                className="absolute right-4 top-1/2 z-30 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/20 text-white/60 opacity-0 backdrop-blur-xl transition-all hover:bg-white/10 hover:text-white group-hover/hero-outer:opacity-100 focus-visible:opacity-100"
+              >
+                <ChevronRight size={19} />
+              </button>
+            </>
+          )}
+
+          <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/[0.08] bg-black/20 px-2.5 py-2 backdrop-blur-xl">
             {activeShowcaseList.map((_, idx) => (
-              <div
+              <button
                 key={idx}
+                type="button"
+                aria-label={`${language === 'tr' ? 'Vitrin' : 'Showcase'} ${idx + 1}`}
                 onClick={() => setActiveFeaturedIndex(idx)}
-                className={`h-1.5 rounded-full cursor-pointer transition-all duration-300 ${activeFeaturedIndex === idx ? 'w-6 bg-[var(--accent-color)]' : 'w-1.5 bg-white/40 hover:bg-white'}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${activeFeaturedIndex === idx ? 'w-6 bg-white/90' : 'w-1.5 bg-white/30 hover:bg-white/60'}`}
               />
             ))}
           </div>
 
         </div>
+        <div className="absolute -bottom-10 inset-x-3 h-20 bg-gradient-to-b from-neutral-950/70 to-transparent blur-xl pointer-events-none" />
       </div>
       {visibleHomeBlocks >= 1 && playlists.length > 0 && uniqueRecentlyWatched.length > 0 && (
-        <div className="order-1 flex flex-col gap-4 select-none animate-fade-in">
+        <div className="order-1 relative z-20 -mt-2 flex flex-col gap-3 select-none animate-fade-in">
           <div className="flex items-center justify-between px-0 mb-1">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[var(--accent-color)] animate-pulse" />
@@ -820,7 +838,7 @@ export const HomeView = memo(function HomeView({
               {uniqueRecentlyWatched.map(channel => (
                 <div
                   key={`recent-${channel.id}`}
-                  className="flex-shrink-0 w-[180px] md:w-[220px] group flex flex-col gap-2.5 cursor-pointer snap-start"
+                  className="flex-shrink-0 w-[180px] md:w-[220px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035]"
                   onClick={() => {
                     handlePlayStream(channel);
                   }}
@@ -836,7 +854,8 @@ export const HomeView = memo(function HomeView({
                       aspect="landscape"
                     />
 
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
+                    <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
                       <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
                         <Play size={16} fill="#000" className="ml-0.5" />
                       </div>
@@ -850,10 +869,10 @@ export const HomeView = memo(function HomeView({
                         />
                       </div>
                     )}
-                  </div>
-                  <div className="flex flex-col px-1.5">
-                    <span className="text-xs font-bold text-neutral-200 group-hover:text-white truncate transition-colors">{channel.name}</span>
-                    <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mt-0.5">{channel.group || (language === 'tr' ? 'Genel' : 'General')}</span>
+                    <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
+                      <span className="block text-xs font-extrabold text-white truncate drop-shadow">{channel.name}</span>
+                      <span className="block text-[9px] text-white/50 uppercase tracking-wider font-semibold mt-0.5 truncate">{channel.group || (language === 'tr' ? 'Genel' : 'General')}</span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -965,9 +984,10 @@ export const HomeView = memo(function HomeView({
             </div>
             <button
               onClick={() => setSelectedGroup('Sinema')}
-              className="text-[10px] text-neutral-500 hover:text-white font-bold uppercase tracking-wider transition-colors"
+              className="group/see-all inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[9px] text-neutral-400 hover:bg-white/[0.08] hover:text-white font-bold uppercase tracking-wider transition-all"
             >
               {language === 'tr' ? 'Tümünü Gör' : 'See All'}
+              <ChevronRight size={12} className="transition-transform group-hover/see-all:translate-x-0.5" />
             </button>
           </div>
 
@@ -1012,9 +1032,10 @@ export const HomeView = memo(function HomeView({
             </div>
             <button
               onClick={() => setSelectedGroup('Diziler')}
-              className="text-[10px] text-neutral-500 hover:text-white font-bold uppercase tracking-wider transition-colors"
+              className="group/see-all inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[9px] text-neutral-400 hover:bg-white/[0.08] hover:text-white font-bold uppercase tracking-wider transition-all"
             >
               {language === 'tr' ? 'Tümünü Gör' : 'See All'}
+              <ChevronRight size={12} className="transition-transform group-hover/see-all:translate-x-0.5" />
             </button>
           </div>
 

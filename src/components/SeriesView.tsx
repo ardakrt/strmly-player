@@ -54,7 +54,8 @@ export const SeriesCard = React.memo(({
   const { language } = useSettings();
   return (
     <div
-      className="group flex flex-col gap-2.5 cursor-pointer relative"
+      className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
+      tabIndex={0}
       onClick={() => onClick(series)}
       onContextMenu={(event) => onContextMenu?.(event, series)}
     >
@@ -146,7 +147,7 @@ export const SeriesView = React.memo(function SeriesView({
           <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
           <button
             onClick={() => seriesCat.setEditMode(!seriesCat.editMode)}
-            className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors ${seriesCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
+            className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors focusable-item ${seriesCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
           >
             {seriesCat.editMode ? (language === 'tr' ? 'Bitti' : 'Done') : t('common.edit')}
           </button>
@@ -158,13 +159,13 @@ export const SeriesView = React.memo(function SeriesView({
             placeholder={language === 'tr' ? 'Kategori ara...' : 'Search category...'}
             value={categorySearchQuery}
             onChange={(e) => setCategorySearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/5 focus:border-[var(--accent-color)] rounded-lg text-[11px] text-white outline-none placeholder-neutral-500 transition-all"
+            className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/5 focus:border-[var(--accent-color)] rounded-lg text-[11px] text-white outline-none placeholder-neutral-500 transition-all focusable-item"
           />
         </div>
 
         <button
           onClick={() => { setActiveSeriesCategory('Tümü'); setVisibleCount(100); }}
-          className={`text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all ${activeSeriesCategory === 'Tümü' ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+          className={`text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${activeSeriesCategory === 'Tümü' ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
         >
           {language === 'tr' ? 'Tüm Diziler' : 'All Series'}
         </button>
@@ -182,7 +183,7 @@ export const SeriesView = React.memo(function SeriesView({
               >
                 <button
                   onClick={() => { setActiveSeriesCategory(group); setVisibleCount(100); }}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${activeSeriesCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-300 hover:bg-white/10 hover:text-white'}`}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${activeSeriesCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-300 hover:bg-white/10 hover:text-white'}`}
                 >
                   {group}
                 </button>
@@ -222,7 +223,7 @@ export const SeriesView = React.memo(function SeriesView({
             >
               <button
                 onClick={() => { setActiveSeriesCategory(group); setVisibleCount(100); }}
-                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${activeSeriesCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${activeSeriesCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
               >
                 {group}
               </button>
@@ -249,7 +250,7 @@ export const SeriesView = React.memo(function SeriesView({
           {otherCategories.length > visibleSeriesCategoryLimit && (
             <button
               onClick={() => setVisibleSeriesCategoryLimit(prev => prev + 50)}
-              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5"
+              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item"
             >
               {language === 'tr' ? 'Daha Fazla Göster' : 'Show More'} (+{otherCategories.length - visibleSeriesCategoryLimit})
             </button>

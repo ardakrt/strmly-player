@@ -18,6 +18,7 @@ import {
 
 import { useCategoryManager } from './hooks/useCategoryManager';
 import { SettingsProvider } from './context/SettingsContext';
+import { initSpatialNavigation } from './utils/spatialNavigation';
 import { getTranslation } from './utils/translations';
 import type { Language } from './utils/translations';
 
@@ -385,8 +386,16 @@ export default function App() {
   const isDiagnosticsView = selectedGroup === 'İstatistikler' || selectedGroup === 'İstatistikler';
 
   const playlistIndex = usePlaylistIndex(items);
-  const { uniqueLiveCategories, uniqueSeriesCategories, uniqueMovieCategories } = playlistIndex;
+  const { uniqueLiveCategories: rawUniqueLiveCategories, uniqueSeriesCategories: rawUniqueSeriesCategories, uniqueMovieCategories: rawUniqueMovieCategories } = playlistIndex;
+
+  const uniqueLiveCategories = rawUniqueLiveCategories;
+  const uniqueMovieCategories = rawUniqueMovieCategories;
+  const uniqueSeriesCategories = rawUniqueSeriesCategories;
+
   const itemBuckets = playlistIndex.itemBuckets;
+
+
+
 
   const { reset: resetPreferences } = preferences;
 
@@ -1082,6 +1091,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const cleanup = initSpatialNavigation();
+    return cleanup;
+  }, []);
+
   // Fetch popular Turkish series on boot
   useEffect(() => {
     let cancelled = false;
@@ -1349,6 +1363,7 @@ export default function App() {
   // Open series modal with a pre-grouped series object
   const handleOpenSeriesModalDirect = (series: GroupedSeries, targetEpisodeItem?: PlaylistItem) => {
     console.log("[DEBUG] handleOpenSeriesModalDirect called for series:", series.name, "seasons count:", Object.keys(series.seasons).length);
+
     setSelectedSeriesForModal(series);
     const seasons = Object.keys(series.seasons).map(Number).sort((a, b) => a - b);
 

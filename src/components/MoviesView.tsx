@@ -55,7 +55,8 @@ export const MovieCard = React.memo(({
 }) => {
   return (
     <div
-      className="group flex flex-col gap-2.5 cursor-pointer"
+      className="group flex flex-col gap-2.5 cursor-pointer focusable-item"
+      tabIndex={0}
       onClick={() => onClick(channel)}
       onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
@@ -143,7 +144,7 @@ export const MoviesView = React.memo(function MoviesView({
           <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
           <button
             onClick={() => movieCat.setEditMode(!movieCat.editMode)}
-            className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors ${movieCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
+            className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors focusable-item ${movieCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
           >
             {movieCat.editMode ? (language === 'tr' ? 'Bitti' : 'Done') : t('common.edit')}
           </button>
@@ -155,13 +156,13 @@ export const MoviesView = React.memo(function MoviesView({
             placeholder={language === 'tr' ? 'Kategori ara...' : 'Search category...'}
             value={categorySearchQuery}
             onChange={(e) => setCategorySearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/5 focus:border-[var(--accent-color)] rounded-lg text-[11px] text-white outline-none placeholder-neutral-500 transition-all"
+            className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/5 focus:border-[var(--accent-color)] rounded-lg text-[11px] text-white outline-none placeholder-neutral-500 transition-all focusable-item"
           />
         </div>
 
         <button
           onClick={() => { setActiveMovieCategory('Tümü'); setVisibleCount(100); }}
-          className={`text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all ${activeMovieCategory === 'Tümü' ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+          className={`text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${activeMovieCategory === 'Tümü' ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
         >
           {language === 'tr' ? 'Tüm Filmler' : 'All Movies'}
         </button>
@@ -179,7 +180,7 @@ export const MoviesView = React.memo(function MoviesView({
               >
                 <button
                   onClick={() => { setActiveMovieCategory(group); setVisibleCount(100); }}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${activeMovieCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-300 hover:bg-white/10 hover:text-white'}`}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${activeMovieCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-300 hover:bg-white/10 hover:text-white'}`}
                 >
                   {group}
                 </button>
@@ -219,7 +220,7 @@ export const MoviesView = React.memo(function MoviesView({
             >
               <button
                 onClick={() => { setActiveMovieCategory(group); setVisibleCount(100); }}
-                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${activeMovieCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${activeMovieCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
               >
                 {group}
               </button>
@@ -246,7 +247,7 @@ export const MoviesView = React.memo(function MoviesView({
           {otherCategories.length > visibleMovieCategoryLimit && (
             <button
               onClick={() => setVisibleMovieCategoryLimit(prev => prev + 50)}
-              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5"
+              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item"
             >
               {language === 'tr' ? 'Daha Fazla Göster' : 'Show More'} (+{otherCategories.length - visibleMovieCategoryLimit})
             </button>

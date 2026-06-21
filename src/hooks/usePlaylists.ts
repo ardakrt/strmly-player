@@ -215,10 +215,11 @@ export function usePlaylists({
           : nextPlaylists[0].id;
 
         nextActivePlaylistId = activeId;
+        const activePlaylist = nextPlaylists.find(p => p.id === activeId);
+
         const loadedItems = await loadPlaylistData(activeId);
         nextItems = preprocessPlaylistItems(loadedItems);
 
-        const activePlaylist = nextPlaylists.find(p => p.id === activeId);
         if (activePlaylist) {
           const intervalHours = normalizeAutoUpdateInterval(activePlaylist.autoUpdateIntervalHours);
           const lastUpdatedAt = Number(activePlaylist.lastAutoUpdatedAt || 0);
@@ -510,6 +511,7 @@ export function usePlaylists({
     handleSelectPlaylist,
     updatePlaylistAutoUpdateInterval,
     loadPlaylistData,
+    savePlaylistData,
     autoUpdatePlaylist
   };
 }

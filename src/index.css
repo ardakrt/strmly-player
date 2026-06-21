@@ -583,3 +583,167 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .animate-float-particle {
   animation: float-up linear infinite;
 }
+
+/* GPU Acceleration and Rendering Optimizations */
+.liquid-glass,
+.liquid-glass-card,
+.liquid-glass-row,
+.premium-card,
+.bg-glow-one,
+.bg-glow-two,
+.app-wrapper,
+.splash-enter,
+.splash-logo,
+.splash-progress,
+.animate-fade-in,
+.animate-scale-in {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Spatial Navigation Focus Styles */
+.focusable-item {
+  outline: none !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.focusable-item:focus,
+.focusable-item:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--accent-color, #ffffff), 0 8px 30px rgba(0, 0, 0, 0.6) !important;
+  border-color: var(--accent-color, #ffffff) !important;
+  transform: translateY(-2px) scale(1.02) !important;
+  z-index: 40 !important;
+}
+
+/* Special scaling override for small buttons to avoid layout distortion */
+button.focusable-item:focus,
+button.focusable-item:focus-visible {
+  transform: scale(1.05) !important;
+}
+
+/* Navbar tabs keep a restrained focus state instead of the card-style glow. */
+.navbar-nav-item.focusable-item:focus,
+.navbar-nav-item.focusable-item:focus-visible {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+  transform: none !important;
+}
+
+/* Transparent navbar glass keeps the hero artwork and its colors visible. */
+.navbar-liquid-glass {
+  background:
+    linear-gradient(110deg,
+      color-mix(in srgb, var(--accent-color, #ffffff) 8%, transparent),
+      rgba(255, 255, 255, 0.055) 36%,
+      rgba(255, 255, 255, 0.025) 68%,
+      color-mix(in srgb, var(--accent-color, #ffffff) 5%, transparent));
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8) contrast(1.04);
+  backdrop-filter: blur(22px) saturate(1.8) contrast(1.04);
+  box-shadow:
+    0 14px 42px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.navbar-liquid-glass--scrolled {
+  background:
+    linear-gradient(110deg,
+      color-mix(in srgb, var(--accent-color, #ffffff) 8%, rgba(5, 5, 7, 0.36)),
+      rgba(8, 8, 10, 0.42) 52%,
+      color-mix(in srgb, var(--accent-color, #ffffff) 5%, rgba(5, 5, 7, 0.38)));
+  border-color: rgba(255, 255, 255, 0.13);
+  -webkit-backdrop-filter: blur(24px) saturate(1.9) contrast(1.03);
+  backdrop-filter: blur(24px) saturate(1.9) contrast(1.03);
+  box-shadow:
+    0 18px 55px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.home-media-type-badge {
+  background: rgba(8, 8, 10, 0.76);
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  backdrop-filter: blur(10px) saturate(1.25);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.home-hero-left-scrim {
+  background:
+    linear-gradient(90deg,
+      rgba(5, 5, 7, 0.97) 0%,
+      rgba(5, 5, 7, 0.86) 24%,
+      rgba(5, 5, 7, 0.5) 45%,
+      rgba(5, 5, 7, 0.08) 67%,
+      transparent 78%);
+}
+
+.home-hero-title {
+  text-shadow:
+    0 2px 18px rgba(0, 0, 0, 0.62),
+    0 0 34px rgba(255, 255, 255, 0.035);
+}
+
+.home-hero-color-grade {
+  background:
+    radial-gradient(circle at 72% 26%, color-mix(in srgb, var(--accent-color, #ffffff) 8%, transparent), transparent 38%),
+    linear-gradient(180deg, rgba(4, 4, 6, 0.04), rgba(4, 4, 6, 0.14));
+  box-shadow: inset 0 0 130px rgba(0, 0, 0, 0.32);
+  mix-blend-mode: soft-light;
+}
+
+.home-hero-grain {
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+}
+
+@keyframes homeHeroCopyIn {
+  from { opacity: 0; transform: translateY(12px); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.home-hero-copy > * {
+  opacity: 0;
+  animation: homeHeroCopyIn 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.home-hero-copy > :nth-child(1) { animation-delay: 80ms; }
+.home-hero-copy > :nth-child(2) { animation-delay: 140ms; }
+.home-hero-copy > :nth-child(3) { animation-delay: 200ms; }
+.home-hero-copy > :nth-child(4) { animation-delay: 250ms; }
+.home-hero-copy > :nth-child(5) { animation-delay: 300ms; }
+
+@keyframes homeHeroDrift {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1.055); }
+}
+
+.home-hero-image {
+  animation: homeHeroDrift 12s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-image {
+    animation: none;
+  }
+
+  .home-hero-copy > * {
+    opacity: 1;
+    animation: none;
+  }
+
+}
+
+
+/* Special scaling for media grid cards on focus */
+div.focusable-item:focus,
+div.focusable-item:focus-visible {
+  transform: scale(1.03) !important;
+}
