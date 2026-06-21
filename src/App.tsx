@@ -2311,7 +2311,8 @@ export default function App() {
 
   if (selectedChannel) {
     return (
-      <CinematicPlayer
+      <SettingsProvider value={settingsContextValue}>
+        <CinematicPlayer
         channel={selectedChannel}
         channels={items}
         onChannelChange={handlePlayStream}
@@ -2360,8 +2361,9 @@ export default function App() {
         onShowSubtitleMenu={player.setShowSubtitleMenu}
         formatTime={player.formatPlayerTime}
         onMouseMove={player.handlePlayerMouseMove}
-        onMouseLeave={player.handlePlayerMouseLeave}
-      />
+          onMouseLeave={player.handlePlayerMouseLeave}
+        />
+      </SettingsProvider>
     );
   }
 
@@ -2419,8 +2421,9 @@ export default function App() {
 
   if (loaded && activeProfileId === null) {
     return (
-      <Suspense fallback={null}>
-        <ProfileScreen
+      <SettingsProvider value={settingsContextValue}>
+        <Suspense fallback={null}>
+          <ProfileScreen
           profiles={profiles}
           profileSelectMode={profileSelectMode}
           profileFormName={profileFormName}
@@ -2466,9 +2469,10 @@ export default function App() {
           onSaveProfile={handleSaveProfile}
           onDeleteProfile={handleDeleteProfile}
           onAvatarSearch={handleAvatarSearch}
-          onFetchSeriesCast={handleFetchSeriesCast}
-        />
-      </Suspense>
+            onFetchSeriesCast={handleFetchSeriesCast}
+          />
+        </Suspense>
+      </SettingsProvider>
     );
   }
 
