@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
-import type { Profile, AvatarSearchResult, SavedPlaylist, PlaylistItem } from '../types';
+import { useState, useMemo, useRef } from 'react';
+import type { Profile, AvatarSearchResult, ContentPreference, SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
-import { resolveTmdbImageSrc } from '../utils/tmdb';
+import { resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
 import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS } from '../constants';
 
 interface UseProfilesProps {
@@ -18,6 +18,16 @@ const getCacheBustedUrl = (url: string): string => {
   const cb = Date.now();
   return url.includes('?') ? `${url}&_cb=${cb}` : `${url}?_cb=${cb}`;
 };
+
+export interface ProfileSetupStatus {
+  active: boolean;
+  step: number;
+  title: string;
+  detail: string;
+  itemCount?: number;
+}
+
+const yieldToInterface = () => new Promise<void>(resolve => window.setTimeout(resolve, 0));
 
 export function useProfiles({
   tmdbApiKey,
@@ -37,6 +47,7 @@ export function useProfiles({
   const [profileSelectMode, setProfileSelectMode] = useState<'select' | 'manage' | 'create' | 'edit'>('select');
   const [profileFormName, setProfileFormName] = useState('');
   const [profileFormAvatar, setProfileFormAvatar] = useState('');
+  const [profileContentPreferences, setProfileContentPreferences] = useState<ContentPreference[]>([]);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
 
   // IPTV Setup within profile wizard
@@ -58,19 +69,37 @@ export function useProfiles({
   const [castLoading, setCastLoading] = useState(false);
 
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [profileEntryReady, setProfileEntryReady] = useState(false);
+  const profileSaveInProgressRef = useRef(false);
+  const [profileSetupStatus, setProfileSetupStatus] = useState<ProfileSetupStatus>({
+    active: false,
+    step: 0,
+    title: '',
+    detail: ''
+  });
 
   // Profile selection
   const handleSelectProfile = async (profileId: string) => {
+    const transitionStartedAt = Date.now();
     setProfileSelectMode('select');
+    setProfileEntryReady(false);
     setIsParsing(true);
     try {
       await saveAppSetting('cinema_active_profile_id', profileId);
       await loadProfileData(profileId);
+      const remainingAnimationTime = Math.max(0, 1400 - (Date.now() - transitionStartedAt));
+      if (remainingAnimationTime > 0) {
+        await new Promise<void>(resolve => window.setTimeout(resolve, remainingAnimationTime));
+      }
+      setProfileEntryReady(true);
+      await new Promise<void>(resolve => window.setTimeout(resolve, 420));
+      setActiveProfileId(profileId);
     } catch (error) {
       console.error("Error loading selected profile:", error);
       showToast("Profil verileri yüklenirken bir hata oluştu.");
     } finally {
       setIsParsing(false);
+      setProfileEntryReady(false);
     }
   };
 
@@ -122,11 +151,12 @@ export function useProfiles({
     setAvatarSearchLoading(true);
     try {
       const encodedQuery = encodeURIComponent(query);
-      const url = `https://api.themoviedb.org/3/search/multi?api_key=${tmdbApiKey}&query=${encodedQuery}&language=tr-TR`;
+      const tmdbLang = getTmdbLanguage();
+      const url = `https://api.themoviedb.org/3/search/multi?api_key=${tmdbApiKey}&query=${encodedQuery}&language=${tmdbLang}`;
 
       let results: any[] = [];
       if (window.electronAPI && window.electronAPI.fetchTmdb) {
-        const res = await window.electronAPI.fetchTmdb(`/3/search/multi?api_key=${tmdbApiKey}&query=${encodedQuery}&language=tr-TR`);
+        const res = await window.electronAPI.fetchTmdb(`/3/search/multi?api_key=${tmdbApiKey}&query=${encodedQuery}&language=${tmdbLang}`);
         if (res && Array.isArray(res.results)) {
           results = res.results;
         }
@@ -140,7 +170,7 @@ export function useProfiles({
         }
       }
 
-      const mediaResults = results.filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv');
+      const mediaResults = results.filter((item: any) => item.media_type === 'tv');
 
       const mappedResultsPromises = mediaResults.map(async (item: any) => {
         const imgPath = item.poster_path || item.backdrop_path;
@@ -170,6 +200,7 @@ export function useProfiles({
   };
 
   const handleSaveProfile = async () => {
+    if (profileSaveInProgressRef.current) return;
     if (!profileFormName.trim()) {
       showToast("Lütfen bir profil ismi girin.");
       return;
@@ -179,7 +210,15 @@ export function useProfiles({
       return;
     }
 
+    profileSaveInProgressRef.current = true;
+    setProfileSetupStatus({
+      active: true,
+      step: 1,
+      title: 'Profil hazırlanıyor',
+      detail: 'Bilgiler kontrol ediliyor...'
+    });
     setIsParsing(true);
+    await yieldToInterface();
     try {
       const isEditing = profileSelectMode === 'edit';
       const profId = isEditing && editingProfileId ? editingProfileId : Date.now().toString();
@@ -188,13 +227,20 @@ export function useProfiles({
         id: profId,
         name: profileFormName.trim(),
         avatarUrl: profileFormAvatar,
-        autoUpdateIntervalHours: profileAutoUpdateIntervalHours
+        autoUpdateIntervalHours: profileAutoUpdateIntervalHours,
+        contentPreferences: profileContentPreferences
       };
 
       let loadedItems: PlaylistItem[] = [];
       let newPlaylist: SavedPlaylist | null = null;
 
       if (profilePlaylistType === 'm3u' && profileM3uUrl.trim()) {
+        setProfileSetupStatus({
+          active: true,
+          step: 1,
+          title: 'Kanal listesine bağlanılıyor',
+          detail: 'M3U sunucusundan yanıt bekleniyor...'
+        });
         showToast("M3U Listesi indiriliyor...");
         try {
           const res = await fetch(getCacheBustedUrl(profileM3uUrl), {
@@ -204,7 +250,20 @@ export function useProfiles({
             }
           });
           if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
+          setProfileSetupStatus({
+            active: true,
+            step: 2,
+            title: 'Kanal listesi indiriliyor',
+            detail: 'İçerikler güvenli şekilde alınıyor...'
+          });
           const text = await res.text();
+          setProfileSetupStatus({
+            active: true,
+            step: 2,
+            title: 'Kanallar düzenleniyor',
+            detail: 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...'
+          });
+          await yieldToInterface();
           const parsedPlaylist = await parseM3UAsync(text);
           loadedItems = parsedPlaylist.items;
           if (loadedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
@@ -225,6 +284,12 @@ export function useProfiles({
           showToast(`Kanal listesi yüklenemedi: ${e.message || e}. Profil playlist olmadan oluşturulacak.`);
         }
       } else if (profilePlaylistType === 'xtream' && profileXtreamUrl.trim() && profileXtreamUser.trim() && profileXtreamPass.trim()) {
+        setProfileSetupStatus({
+          active: true,
+          step: 1,
+          title: 'Xtream sunucusuna bağlanılıyor',
+          detail: 'Hesap ve sunucu bilgileri doğrulanıyor...'
+        });
         showToast("Xtream Codes API'ye bağlanılıyor...");
         try {
           const cleanUrl = profileXtreamUrl.trim().replace(/\/$/, "");
@@ -236,7 +301,20 @@ export function useProfiles({
             }
           });
           if (!res.ok) throw new Error("Bağlantı Hatası: " + res.status);
+          setProfileSetupStatus({
+            active: true,
+            step: 2,
+            title: 'Kanal listesi indiriliyor',
+            detail: 'Xtream içerikleri alınıyor...'
+          });
           const text = await res.text();
+          setProfileSetupStatus({
+            active: true,
+            step: 2,
+            title: 'Kanallar düzenleniyor',
+            detail: 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...'
+          });
+          await yieldToInterface();
           const parsedPlaylist = await parseM3UAsync(text);
           loadedItems = parsedPlaylist.items;
           if (loadedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
@@ -267,6 +345,16 @@ export function useProfiles({
         updatedProfiles = [...profiles, newProfile];
       }
 
+      setProfileSetupStatus({
+        active: true,
+        step: 3,
+        title: 'Profil kaydediliyor',
+        detail: loadedItems.length > 0
+          ? `${loadedItems.length.toLocaleString('tr-TR')} içerik profilinize ekleniyor...`
+          : 'Profil tercihleri güvenli şekilde kaydediliyor...',
+        itemCount: loadedItems.length || undefined
+      });
+      await yieldToInterface();
       setProfiles(updatedProfiles);
       await saveAppSetting('cinema_profiles', updatedProfiles);
 
@@ -299,8 +387,18 @@ export function useProfiles({
         localStorage.setItem(activePlaylistKey, newPlaylist.id);
       }
 
+      setProfileSetupStatus({
+        active: true,
+        step: 4,
+        title: 'Ana sayfa hazırlanıyor',
+        detail: 'Kategoriler ve kişisel öneriler oluşturuluyor...',
+        itemCount: loadedItems.length || undefined
+      });
+      await yieldToInterface();
+      await handleSelectProfile(profId);
       setProfileFormName('');
       setProfileFormAvatar('');
+      setProfileContentPreferences([]);
       setEditingProfileId(null);
       setProfilePlaylistType('none');
       setProfileM3uUrl('');
@@ -310,13 +408,13 @@ export function useProfiles({
       setProfileAutoUpdateIntervalHours(DEFAULT_AUTO_UPDATE_INTERVAL_HOURS);
       setAvatarSearchQuery('');
       setAvatarSearchResults([]);
-
-      await handleSelectProfile(profId);
       showToast(isEditing ? "Profil güncellendi." : `Hoş geldiniz, ${newProfile.name}!`);
     } catch (e) {
       console.error(e);
       showToast("Profil kaydedilirken bir hata oluştu.");
     } finally {
+      profileSaveInProgressRef.current = false;
+      setProfileSetupStatus(previous => ({ ...previous, active: false }));
       setIsParsing(false);
     }
   };
@@ -329,6 +427,7 @@ export function useProfiles({
     profileSelectMode, setProfileSelectMode,
     profileFormName, setProfileFormName,
     profileFormAvatar, setProfileFormAvatar,
+    profileContentPreferences, setProfileContentPreferences,
     editingProfileId, setEditingProfileId,
     profilePlaylistType, setProfilePlaylistType,
     profileM3uUrl, setProfileM3uUrl,
@@ -345,6 +444,8 @@ export function useProfiles({
     seriesCast, setSeriesCast,
     castLoading, setCastLoading,
     profileDropdownOpen, setProfileDropdownOpen,
+    profileEntryReady,
+    profileSetupStatus,
     handleSelectProfile,
     handleLogoutProfile,
     handleDeleteProfile,

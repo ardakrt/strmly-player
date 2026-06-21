@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Play, Heart } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import type { PlaylistItem } from '../utils/m3uParser';
-import { getTmdbApiKey, resolveTmdbImageSrc, tmdbCache } from '../utils/tmdb';
+import { getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, getTmdbLanguage } from '../utils/tmdb';
+import { useSettings } from '../context/SettingsContext';
 
 interface TmdbData {
   id?: number;
@@ -37,6 +38,7 @@ export const ChannelModal = ({
   isFavorite,
   onToggleFavorite
 }: ChannelModalProps) => {
+  const { language } = useSettings();
   const [cast, setCast] = useState<CastMember[]>([]);
   const [showCastModal, setShowCastModal] = useState(false);
 
@@ -58,7 +60,7 @@ export const ChannelModal = ({
         }
 
         const apiKey = getTmdbApiKey();
-        const creditsPath = `/3/movie/${tmdbData.id}/credits?api_key=${apiKey}&language=tr-TR`;
+        const creditsPath = `/3/movie/${tmdbData.id}/credits?api_key=${apiKey}&language=${getTmdbLanguage()}`;
         
         let rawCast: any[] = [];
         if (window.electronAPI && window.electronAPI.fetchTmdb) {
@@ -109,14 +111,14 @@ export const ChannelModal = ({
         <button
           onClick={onClose}
           className="absolute top-5 right-5 z-30 w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-300 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
-          title="Kapat"
+          title={language === 'tr' ? 'Kapat' : 'Close'}
         >
           ✕
         </button>
         <button
           onClick={onToggleFavorite}
           className="absolute top-5 right-17 z-30 w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 backdrop-blur-md transition-all duration-300 active:scale-95 shadow-lg cursor-pointer hover:scale-105"
-          title={isFavorite ? "Favorilerden Çıkar" : "Favorilere Ekle"}
+          title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
         >
           <Heart size={18} fill={isFavorite ? "currentColor" : "none"} className={isFavorite ? "text-red-500" : ""} />
         </button>
@@ -145,7 +147,7 @@ export const ChannelModal = ({
         <div className="p-6 md:p-8 flex flex-col justify-between flex-1 gap-5 bg-transparent overflow-hidden">
           <div className="flex flex-col gap-4 flex-1 overflow-y-auto pr-1.5 custom-modal-scrollbar">
             <div className="flex flex-col md:pr-24">
-              <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{channel.group || 'GENEL KATALOG'}</span>
+              <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{channel.group || (language === 'tr' ? 'GENEL KATALOG' : 'GENERAL CATALOG')}</span>
               <h2 className="text-2xl font-bold tracking-tight text-white mt-1 leading-snug">{channel.name}</h2>
             </div>
             {tmdbData && (
@@ -158,9 +160,9 @@ export const ChannelModal = ({
               </div>
             )}
             <div className="flex flex-col gap-2">
-              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">Özet</span>
+              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">{language === 'tr' ? 'Özet' : 'Overview'}</span>
               <p className="text-xs text-neutral-300 font-light leading-relaxed pr-2 max-h-[100px] overflow-y-auto hide-scrollbar">
-                {tmdbData?.desc}
+                {tmdbData?.desc || (language === 'tr' ? 'Bu içerik için özet bulunmuyor.' : 'No overview available for this content.')}
               </p>
             </div>
             {cast.length > 0 && (
@@ -169,9 +171,9 @@ export const ChannelModal = ({
                   onClick={() => setShowCastModal(true)}
                   className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0"
                 >
-                  <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500 group-hover/cast-header:text-neutral-300 transition-colors">Oyuncular</span>
+                  <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500 group-hover/cast-header:text-neutral-300 transition-colors">{language === 'tr' ? 'Oyuncular' : 'Cast'}</span>
                   <span className="text-[9px] text-neutral-500 group-hover/cast-header:text-[var(--accent-color)] font-bold uppercase tracking-wider transition-colors flex items-center gap-1">
-                    TÜMÜNÜ GÖR
+                    {language === 'tr' ? 'TÜMÜNÜ GÖR' : 'SEE ALL'}
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5">
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
@@ -206,7 +208,9 @@ export const ChannelModal = ({
               className="w-full py-3.5 bg-white hover:bg-neutral-200 font-bold text-xs uppercase text-black rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 transform cursor-pointer"
             >
               <Play size={14} fill="#000" className="text-black" />{' '}
-              {channel.progress && channel.progress > 0 ? 'İzlemeye Devam Et' : 'Hemen İzle'}
+              {channel.progress && channel.progress > 0 
+                ? (language === 'tr' ? 'İzlemeye Devam Et' : 'Resume Watching')
+                : (language === 'tr' ? 'Hemen İzle' : 'Watch Now')}
             </button>
           </div>
         </div>
@@ -229,7 +233,7 @@ export const ChannelModal = ({
             </button>
 
             <div className="flex flex-col text-left">
-              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">Oyuncu Kadrosu</span>
+              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">{language === 'tr' ? 'Oyuncu Kadrosu' : 'Cast & Crew'}</span>
               <h3 className="text-lg font-black text-white mt-0.5 truncate max-w-[85%]">{channel.name}</h3>
             </div>
 

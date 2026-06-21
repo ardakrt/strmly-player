@@ -1,8 +1,9 @@
-﻿import React from 'react';
+import React from 'react';
 import { Play, Film, Tv, Search, ArrowLeft, ChevronRight, X } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
+import { useSettings } from '../context/SettingsContext';
 
 interface SpotlightSearchProps {
   showSpotlight: boolean;
@@ -39,6 +40,7 @@ export function SpotlightSearch({
   handleOpenDetails,
   handleOpenSeriesModalDirect
 }: SpotlightSearchProps) {
+  const { t, language } = useSettings();
   if (!showSpotlight) return null;
 
   return (
@@ -54,16 +56,16 @@ export function SpotlightSearch({
           <div className="flex flex-col gap-2.5 py-1">
             <div className="flex items-center justify-between px-1 mb-2 shrink-0">
               <span className="text-[9px] tracking-widest font-black text-neutral-500 uppercase">
-                Kategori Seçin
+                {language === 'tr' ? 'Kategori Seçin' : 'Select Category'}
               </span>
               <div className="flex items-center gap-1.5 select-none">
-                <span className="text-[8px] font-bold text-neutral-500 bg-white/5 border border-white/5 px-2 py-0.5 rounded">Yön Tuşları & Enter</span>
+                <span className="text-[8px] font-bold text-neutral-500 bg-white/5 border border-white/5 px-2 py-0.5 rounded">{language === 'tr' ? 'Yön Tuşları & Enter' : 'Arrow Keys & Enter'}</span>
               </div>
             </div>
             {[
-              { id: 'series', label: 'Dizi Ara', desc: 'Diziler ve bölümler arasında arama yapın.', icon: Play },
-              { id: 'movie', label: 'Film Ara', desc: 'Sinema filmleri ve VOD içerikleri arayın.', icon: Film },
-              { id: 'live', label: 'Canlı Kanal Ara', desc: 'Canlı TV kanalları ve yayınları arayın.', icon: Tv }
+              { id: 'series', label: language === 'tr' ? 'Dizi Ara' : 'Search Series', desc: language === 'tr' ? 'Diziler ve bölümler arasında arama yapın.' : 'Search among TV series and episodes.', icon: Play },
+              { id: 'movie', label: language === 'tr' ? 'Film Ara' : 'Search Movies', desc: language === 'tr' ? 'Sinema filmleri ve VOD içerikleri arayın.' : 'Search cinema movies and VOD content.', icon: Film },
+              { id: 'live', label: language === 'tr' ? 'Canlı Kanal Ara' : 'Search Live Channels', desc: language === 'tr' ? 'Canlı TV kanalları ve yayınları arayın.' : 'Search live TV channels and broadcasts.', icon: Tv }
             ].map((btn, idx) => {
               const Icon = btn.icon;
               const isFocused = focusedButtonIndex === idx;
@@ -99,7 +101,7 @@ export function SpotlightSearch({
                   <div className="shrink-0 flex items-center pl-2">
                     {isFocused ? (
                       <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[8px] font-bold text-neutral-400 select-none uppercase tracking-wider">
-                        <span>SEÇ</span>
+                        <span>{language === 'tr' ? 'SEÇ' : 'SELECT'}</span>
                         <span className="text-[9px] opacity-60">↵</span>
                       </div>
                     ) : (
@@ -116,7 +118,7 @@ export function SpotlightSearch({
               <button
                 onClick={() => setSpotlightActiveStep('select_scope')}
                 className="w-9 h-9 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 flex items-center justify-center text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm shrink-0"
-                title="Geri Dön"
+                title={language === 'tr' ? 'Geri Dön' : 'Go Back'}
               >
                 <ArrowLeft size={13} />
               </button>
@@ -128,10 +130,10 @@ export function SpotlightSearch({
                   type="text"
                   placeholder={
                     spotlightScope === 'live'
-                      ? 'Canlı TV kanalı ara...'
+                      ? (language === 'tr' ? 'Canlı TV kanalı ara...' : 'Search live TV channels...')
                       : spotlightScope === 'movie'
-                        ? 'Sinema filmi ara...'
-                        : 'Televizyon dizisi ara...'
+                        ? (language === 'tr' ? 'Sinema filmi ara...' : 'Search movies...')
+                        : (language === 'tr' ? 'Televizyon dizisi ara...' : 'Search TV series...')
                   }
                   value={spotlightSearchInput}
                   onChange={(e) => setSpotlightSearchInput(e.target.value)}
@@ -139,7 +141,7 @@ export function SpotlightSearch({
                 />
                 <div className="absolute right-3.5 flex items-center gap-1.5 select-none">
                   <span className="text-[8px] font-extrabold text-neutral-400 bg-white/5 border border-white/15 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                    {spotlightScope === 'live' ? 'CANLI' : spotlightScope === 'movie' ? 'FİLM' : 'DİZİ'}
+                    {spotlightScope === 'live' ? (language === 'tr' ? 'CANLI' : 'LIVE') : spotlightScope === 'movie' ? (language === 'tr' ? 'FİLM' : 'MOVIE') : (language === 'tr' ? 'DİZİ' : 'SERIES')}
                   </span>
                 </div>
               </div>
@@ -150,9 +152,11 @@ export function SpotlightSearch({
                   <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
                     <Search size={20} className="text-neutral-400" />
                   </div>
-                  <h4 className="text-xs font-bold text-neutral-300 uppercase tracking-wider">Aramaya Başlayın</h4>
+                  <h4 className="text-xs font-bold text-neutral-300 uppercase tracking-wider">{language === 'tr' ? 'Aramaya Başlayın' : 'Start Searching'}</h4>
                   <p className="text-[11px] text-neutral-500 max-w-xs mt-1.5 leading-relaxed">
-                    Aradığınız {spotlightScope === 'live' ? 'kanalı' : spotlightScope === 'movie' ? 'filmi' : 'diziyi'} bulmak için klavyeden yazmaya başlayın.
+                    {language === 'tr'
+                      ? `Aradığınız ${spotlightScope === 'live' ? 'kanalı' : spotlightScope === 'movie' ? 'filmi' : 'diziyi'} bulmak için klavyeden yazmaya başlayın.`
+                      : `Start typing to find the ${spotlightScope === 'live' ? 'channel' : spotlightScope === 'movie' ? 'movie' : 'series'} you're looking for.`}
                   </p>
                 </div>
               ) : spotlightSearchResults.length === 0 ? (
@@ -160,9 +164,11 @@ export function SpotlightSearch({
                   <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
                     <X size={20} className="text-neutral-400" />
                   </div>
-                  <h4 className="text-xs font-bold text-neutral-300 uppercase tracking-wider">Sonuç Bulunamadı</h4>
+                  <h4 className="text-xs font-bold text-neutral-300 uppercase tracking-wider">{language === 'tr' ? 'Sonuç Bulunamadı' : 'No Results Found'}</h4>
                   <p className="text-[11px] text-neutral-500 max-w-xs mt-1.5 leading-relaxed">
-                    Aradığınız kelimeye uygun içerik bulunamadı. Lütfen kelimelerin doğruluğunu kontrol edin.
+                    {language === 'tr'
+                      ? 'Aradığınız kelimeye uygun içerik bulunamadı. Lütfen kelimelerin doğruluğunu kontrol edin.'
+                      : 'No content found matching your query. Please double-check spelling.'}
                   </p>
                 </div>
               ) : (
@@ -183,12 +189,14 @@ export function SpotlightSearch({
                     logoSrc = series.logo || '';
                     titleName = series.name;
                     const seasonsCount = Object.keys(series.seasons).length;
-                    subtext = `${seasonsCount} Sezon • ${series.episodesCount} Bölüm`;
+                    subtext = language === 'tr'
+                      ? `${seasonsCount} Sezon • ${series.episodesCount} Bölüm`
+                      : `${seasonsCount} Season${seasonsCount > 1 ? 's' : ''} • ${series.episodesCount} Episode${series.episodesCount > 1 ? 's' : ''}`;
                   } else {
                     const plItem = item as PlaylistItem;
                     logoSrc = plItem.logo || '';
                     titleName = plItem.name;
-                    subtext = plItem.group || 'GENEL';
+                    subtext = plItem.group || (language === 'tr' ? 'GENEL' : 'GENERAL');
                   }
 
                   const handleSelectResult = () => {
@@ -231,17 +239,17 @@ export function SpotlightSearch({
                       <div className="shrink-0 pl-2">
                         {isLive && (
                           <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[8px] font-black uppercase tracking-widest">
-                            CANLI
+                            {language === 'tr' ? 'CANLI' : 'LIVE'}
                           </span>
                         )}
                         {isMovie && (
                           <span className="px-2 py-0.5 rounded-full bg-neutral-100/10 text-neutral-300 border border-white/10 text-[8px] font-black uppercase tracking-widest">
-                            SİNEMA
+                            {language === 'tr' ? 'SİNEMA' : 'MOVIE'}
                           </span>
                         )}
                         {isSeries && (
                           <span className="px-2 py-0.5 rounded-full bg-[var(--accent-color)]/10 text-[var(--accent-color)] border border-[var(--accent-color)]/20 text-[8px] font-black uppercase tracking-widest">
-                            DİZİLER
+                            {language === 'tr' ? 'DİZİLER' : 'SERIES'}
                           </span>
                         )}
                       </div>

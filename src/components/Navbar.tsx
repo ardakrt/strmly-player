@@ -1,4 +1,4 @@
-﻿import { Tv, Search, ArrowLeft, Settings } from 'lucide-react';
+import { Tv, Search, ArrowLeft, Settings } from 'lucide-react';
 import type { Profile, SavedPlaylist } from '../types';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { useSettings } from '../context/SettingsContext';
@@ -46,7 +46,7 @@ export function Navbar({
   handleLogoutProfile,
   updateAvailable
 }: NavbarProps) {
-  const { setActiveSettingsTab } = useSettings();
+  const { setActiveSettingsTab, t, language } = useSettings();
   if (!loaded) return null;
 
   return (
@@ -74,11 +74,11 @@ export function Navbar({
           </div>
           <div className="flex items-center h-full px-6 gap-2">
             {[
-              { id: 'Ana Sayfa', label: 'Ana Sayfa' },
-              { id: 'Canlı TV', label: 'Canlı TV' },
-              { id: 'Sinema', label: 'Filmler' },
-              { id: 'Diziler', label: 'Diziler' },
-              { id: 'Favorilerim', label: 'Favoriler' }
+              { id: 'Ana Sayfa', label: t('navbar.home') },
+              { id: 'Canlı TV', label: t('navbar.liveTv') },
+              { id: 'Sinema', label: t('navbar.movies') },
+              { id: 'Diziler', label: t('navbar.series') },
+              { id: 'Favorilerim', label: t('navbar.favorites') }
             ].map(link => {
               const isActive = selectedGroup === link.id;
               return (
@@ -107,11 +107,11 @@ export function Navbar({
               className={`bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 rounded-full flex items-center px-3.5 w-40 lg:w-52 transition-all duration-300 group text-left cursor-pointer ${
                 scrolled ? 'h-8' : 'h-9'
               }`}
-              title="Arama (Ctrl+K)"
+              title={t('navbar.searchTitle')}
             >
               <Search size={13} className="text-neutral-500 group-hover:text-white transition-colors duration-300" />
               <span className="text-[11px] text-neutral-400 group-hover:text-white transition-colors ml-2 select-none truncate flex-1">
-                Dizi, film veya kanal ara...
+                {t('navbar.searchPlaceholder')}
               </span>
               <div className="hidden md:flex items-center px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-[8px] font-bold text-neutral-500 group-hover:text-neutral-400 group-hover:border-white/20 transition-all select-none">
                 Ctrl K
@@ -151,7 +151,7 @@ export function Navbar({
                 )}
               </div>
               <span className="text-[11px] font-semibold text-neutral-300">
-                {currentProfile ? currentProfile.name : 'Kullanıcı'}
+                {currentProfile ? currentProfile.name : t('navbar.user')}
               </span>
             </button>
 
@@ -175,32 +175,32 @@ export function Navbar({
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className="text-xs font-bold text-white truncate">
-                        {currentProfile ? currentProfile.name : 'Strmly Kullanıcı'}
+                        {currentProfile ? currentProfile.name : `Strmly ${t('navbar.user')}`}
                       </span>
                     </div>
                   </div>
 
                   <div className="p-3 border-b border-white/5 flex flex-col gap-1.5 bg-black/20 text-left">
                     <div className="flex items-center justify-between text-[10px] text-neutral-400">
-                      <span>Yüklü Kanallar:</span>
-                      <span className="font-bold text-white">{items.length} Öğe</span>
+                      <span>{t('navbar.installedChannels')}</span>
+                      <span className="font-bold text-white">{t('navbar.itemsCount').replace('{{count}}', String(items.length))}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-neutral-400">
-                      <span>Kayıtlı Listeler:</span>
-                      <span className="font-bold text-white">{playlists.length} Liste</span>
+                      <span>{t('navbar.savedPlaylists')}</span>
+                      <span className="font-bold text-white">{t('navbar.playlistsCount').replace('{{count}}', String(playlists.length))}</span>
                     </div>
                     {playlists.length > 0 && (
                       <div className="flex items-center justify-between text-[10px] text-neutral-400">
-                        <span>Aktif Liste:</span>
-                        <span className="font-bold text-white/70 truncate max-w-[110px]" title={playlists.find(p => p.id === activePlaylistId)?.name || 'Yok'}>
-                          {playlists.find(p => p.id === activePlaylistId)?.name || 'Yok'}
+                        <span>{t('navbar.activePlaylist')}</span>
+                        <span className="font-bold text-white/70 truncate max-w-[110px]" title={playlists.find(p => p.id === activePlaylistId)?.name || (language === 'tr' ? 'Yok' : 'None')}>
+                          {playlists.find(p => p.id === activePlaylistId)?.name || (language === 'tr' ? 'Yok' : 'None')}
                         </span>
                       </div>
                     )}
                   </div>
                   {profiles.filter(p => p.id !== currentProfile?.id).length > 0 && (
                     <div className="p-2 border-b border-white/5 flex flex-col gap-1 max-h-[160px] overflow-y-auto hide-scrollbar text-left">
-                      <span className="text-[8px] font-extrabold text-neutral-500 uppercase tracking-wider px-2 py-1 select-none">Diğer Profiller</span>
+                      <span className="text-[8px] font-extrabold text-neutral-500 uppercase tracking-wider px-2 py-1 select-none">{t('navbar.otherProfiles')}</span>
                       {profiles.filter(p => p.id !== currentProfile?.id).map(prof => {
                         const isProfGradient = prof.avatarUrl.startsWith('linear-gradient');
                         return (
@@ -240,20 +240,20 @@ export function Navbar({
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                         </span>
-                        Güncelleme Mevcut!
+                        {t('navbar.updateAvailable')}
                       </button>
                     )}
                     <button
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer"
                       onClick={() => { setProfileDropdownOpen(false); handleLogoutProfile(); }}
                     >
-                      <ArrowLeft size={13} className="text-neutral-400 rotate-180" /> Profili Değiştir
+                      <ArrowLeft size={13} className="text-neutral-400 rotate-180" /> {t('navbar.changeProfile')}
                     </button>
                     <button
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer"
                       onClick={() => { setProfileDropdownOpen(false); setSelectedGroup('Ayarlar'); }}
                     >
-                      <Settings size={13} className="text-neutral-400" /> Gelişmiş Ayarlar
+                      <Settings size={13} className="text-neutral-400" /> {t('navbar.advancedSettings')}
                     </button>
                   </div>
                 </div>

@@ -18,8 +18,8 @@ export function usePlayerState({
   const [globalFavorites, setGlobalFavorites] = useState<string[]>([]);
   const [recentlyWatched, setRecentlyWatched] = useState<any[]>([]);
 
-  const toggleFavorite = (itemId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const toggleFavorite = (itemId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const currentFavs = globalFavorites;
     let newFavs: string[];
     if (currentFavs.includes(itemId)) {

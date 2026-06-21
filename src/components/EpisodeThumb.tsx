@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, memo } from 'react';
-import { tmdbCache, getTmdbApiKey, fetchTmdbPath, resolveTmdbImageSrc } from '../utils/tmdb';
+import { tmdbCache, getTmdbApiKey, fetchTmdbPath, resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
 import type { EpisodeThumbProps } from '../types';
 
 // Global memory cache - asla sıfırlanmaz
@@ -80,7 +80,7 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, fal
 
       // TMDB API'den çek
       const apiKey = getTmdbApiKey();
-      const path = `/3/tv/${tmdbShowId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${apiKey}&language=tr-TR`;
+      const path = `/3/tv/${tmdbShowId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${apiKey}&language=${getTmdbLanguage()}`;
 
       try {
         const data = await fetchTmdbPath<{ still_path?: string; error?: string }>(path);

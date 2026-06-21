@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useRef, useState, memo } from 'react';
-import { Play, ChevronLeft, ChevronRight, UploadCloud, Heart, Sparkles } from 'lucide-react';
-import type { SavedPlaylist } from '../types';
+import { Play, ChevronLeft, ChevronRight, UploadCloud, Heart, Sparkles, Info, Trash2 } from 'lucide-react';
+import type { ContentPreference, SavedPlaylist } from '../types';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { ImageWithFallback } from './ImageWithFallback';
 import { getFallbackGradient } from '../utils/helpers';
 import { cleanMediaTitle, parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 import { getResolvedTmdbResult, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, fetchTmdbDetails } from '../utils/tmdb';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { useSettings } from '../context/SettingsContext';
 
 interface VodPosterCardProps {
   channel: any; // Can be PlaylistItem or GroupedSeries
   globalFavorites: string[];
-  toggleFavorite: (itemId: string, e: React.MouseEvent) => void;
+  toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
   handleOpenDetails: (item: PlaylistItem) => void;
   requireTmdbPoster?: boolean;
+  onContextMenu?: (event: React.MouseEvent, item: any) => void;
 }
 
 
@@ -58,6 +61,36 @@ const TMDB_GENRES: Record<number, string> = {
   10768: 'SAVAŞ & POLİTİKA'
 };
 
+const TMDB_GENRES_EN: Record<number, string> = {
+  28: 'ACTION',
+  12: 'ADVENTURE',
+  16: 'ANIMATION',
+  35: 'COMEDY',
+  80: 'CRIME',
+  99: 'DOCUMENTARY',
+  18: 'DRAMA',
+  10751: 'FAMILY',
+  14: 'FANTASY',
+  36: 'HISTORY',
+  27: 'HORROR',
+  10402: 'MUSIC',
+  9648: 'MYSTERY',
+  10749: 'ROMANCE',
+  878: 'SCI-FI',
+  10770: 'TV MOVIE',
+  53: 'THRILLER',
+  10752: 'WAR',
+  37: 'WESTERN',
+  10759: 'ACTION & ADVENTURE',
+  10762: 'KIDS',
+  10763: 'NEWS',
+  10764: 'REALITY',
+  10765: 'SCI-FI & FANTASY',
+  10766: 'SOAP',
+  10767: 'TALK SHOW',
+  10768: 'WAR & POLITICS'
+};
+
 const getFlatItem = (item: any): PlaylistItem => {
   if (item && item.seasons) {
     const seasonsKeys = Object.keys(item.seasons).map(Number).sort((a, b) => a - b);
@@ -71,7 +104,19 @@ const getFlatItem = (item: any): PlaylistItem => {
   return item as PlaylistItem;
 };
 
-function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, requireTmdbPoster = false }: VodPosterCardProps) {
+const translateDuration = (durationStr: string, language: 'tr' | 'en'): string => {
+  if (!durationStr) return '';
+  if (language === 'tr') return durationStr;
+  return durationStr
+    .replace(/DİZİ/g, 'SERIES')
+    .replace(/FİLM/g, 'MOVIE')
+    .replace(/SEZON/g, 'SEASON')
+    .replace(/SA/g, 'H')
+    .replace(/DK/g, 'M');
+};
+
+function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, requireTmdbPoster = false, onContextMenu }: VodPosterCardProps) {
+  const { language } = useSettings();
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -266,8 +311,12 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
 
   const displayOverview = metadata.overview || (
     channel.type === 'series'
-      ? `${displayTitle} dizisinin tüm sezon ve bölümlerini Türkçe izleyin.`
-      : `${displayTitle} filmini kesintisiz Full HD kalitede şimdi izleyin.`
+      ? (language === 'tr'
+        ? `${displayTitle} dizisinin tüm sezon ve bölümlerini Türkçe izleyin.`
+        : `Watch all seasons and episodes of the series ${displayTitle} online.`)
+      : (language === 'tr'
+        ? `${displayTitle} filmini kesintisiz Full HD kalitede şimdi izleyin.`
+        : `Watch the movie ${displayTitle} in high quality now.`)
   );
 
   let displayDuration = metadata.duration;
@@ -290,6 +339,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
       displayDuration = 'FİLM';
     }
   }
+  displayDuration = translateDuration(displayDuration, language);
 
   const posterSrc = metadata.posterUrl || (requireTmdbPoster ? null : channel.logo);
 
@@ -303,6 +353,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
       ref={cardRef}
       className="flex-shrink-0 w-[200px] md:w-[240px] group flex flex-col gap-3.5 cursor-pointer snap-start bg-[#0a0a0c]/80 border border-white/[0.03] backdrop-blur-md rounded-[28px] p-3.5 hover:border-white/10 hover:bg-[#121216]/90 transition-all duration-300 hover:scale-[1.02] shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
       onClick={handleCardClick}
+      onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
       <div className="relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-neutral-950/60 border border-white/5 shadow-md flex items-center justify-center">
         {posterSrc ? (
@@ -398,17 +449,20 @@ interface HomeViewProps {
   activeShowcaseList: any[];
   playlists: SavedPlaylist[];
   uniqueRecentlyWatched: PlaylistItem[];
-  setRecentlyWatched: (items: PlaylistItem[]) => void;
+  clearRecentlyWatched: () => void;
+  removeFromRecentlyWatched: (item: PlaylistItem) => void;
   handleScrollSlider: (sliderId: string, direction: 'left' | 'right') => void;
   handlePlayStream: (item: PlaylistItem) => void;
   handleOpenDetails: (item: PlaylistItem) => void;
   genericLogosSet: Set<string>;
-  toggleFavorite: (itemId: string, e: React.MouseEvent) => void;
+  toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
   globalFavorites: string[];
+  getFavoriteIdForItem: (item: any) => string;
   homeDiscoveryItems: any[];
   homeLiveTvQuickChannels: PlaylistItem[];
   populerFilmler: PlaylistItem[];
   populerDiziler: any[];
+  contentPreferences: ContentPreference[];
   setSelectedGroup: (group: string) => void;
   setActiveLiveCategory: (cat: string) => void;
   setActiveSeriesCategory: (cat: string) => void;
@@ -429,22 +483,109 @@ export const HomeView = memo(function HomeView({
   activeShowcaseList,
   playlists,
   uniqueRecentlyWatched,
-  setRecentlyWatched,
+  clearRecentlyWatched,
+  removeFromRecentlyWatched,
   handleScrollSlider,
   handlePlayStream,
   handleOpenDetails,
   genericLogosSet,
   toggleFavorite,
   globalFavorites,
+  getFavoriteIdForItem,
   homeDiscoveryItems,
   homeLiveTvQuickChannels,
   populerFilmler,
   populerDiziler,
+  contentPreferences,
   setSelectedGroup,
   onOpenPlaylistSetup,
   showToast
 }: HomeViewProps) {
+  const { t, language } = useSettings();
   const [visibleHomeBlocks, setVisibleHomeBlocks] = useState(2);
+  const homeSectionOrder = useMemo(() => {
+    const preferredSections = contentPreferences.map(preference => {
+      if (preference === 'series') return 'series';
+      if (preference === 'movies') return 'movies';
+      if (preference === 'sports' || preference === 'live') return 'live';
+      return 'discovery';
+    });
+    return [...new Set([...preferredSections, 'discovery', 'live', 'movies', 'series'])];
+  }, [contentPreferences]);
+  const getSectionPosition = (section: 'discovery' | 'live' | 'movies' | 'series') => homeSectionOrder.indexOf(section) + 2;
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    item: any;
+    fromHistory: boolean;
+  } | null>(null);
+
+  const openContextMenu = (event: React.MouseEvent, item: any, fromHistory = false) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ x: event.clientX, y: event.clientY, item, fromHistory });
+  };
+
+  const contextMenuItems: ContextMenuItem[] = contextMenu ? (() => {
+    const item = contextMenu.item;
+    const flatItem = getFlatItem(item);
+    const favoriteId = getFavoriteIdForItem(item);
+    const isFavorite = globalFavorites.includes(favoriteId);
+    const isSeries = item.type === 'series';
+    const actions: ContextMenuItem[] = [];
+
+    if (contextMenu.fromHistory) {
+      actions.push({
+        id: 'continue',
+        label: 'İzlemeye devam et',
+        icon: <Play size={14} fill="currentColor" />,
+        onSelect: () => handlePlayStream(flatItem)
+      });
+    } else if (isSeries) {
+      actions.push({
+        id: 'open-series',
+        label: 'Dizi detayına git',
+        icon: <Info size={15} />,
+        onSelect: () => handleOpenDetails(flatItem)
+      });
+    } else {
+      actions.push({
+        id: 'play',
+        label: item.type === 'live' ? 'Kanalı oynat' : 'Şimdi oynat',
+        icon: <Play size={14} fill="currentColor" />,
+        onSelect: () => handlePlayStream(flatItem)
+      });
+    }
+
+    if (contextMenu.fromHistory || (!isSeries && item.type !== 'live')) {
+      actions.push({
+        id: 'details',
+        label: isSeries ? 'Dizi detayına git' : 'Detayları aç',
+        icon: <Info size={15} />,
+        onSelect: () => handleOpenDetails(flatItem)
+      });
+    }
+
+    actions.push({
+      id: 'favorite',
+      label: isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle',
+      icon: <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} />,
+      onSelect: () => toggleFavorite(favoriteId)
+    });
+
+    if (contextMenu.fromHistory) {
+      actions.push({
+        id: 'remove-history',
+        label: 'İzleme geçmişinden kaldır',
+        icon: <Trash2 size={14} />,
+        danger: true,
+        separatorBefore: true,
+        onSelect: () => removeFromRecentlyWatched(flatItem)
+      });
+    }
+
+    return actions;
+  })() : [];
 
   useEffect(() => {
     if (selectedGroup !== 'Ana Sayfa' || searchQuery.trim() !== '') return;
@@ -511,6 +652,7 @@ export const HomeView = memo(function HomeView({
           handleOpenDetails(channel);
         }
       }}
+      onContextMenu={(event) => openContextMenu(event, channel)}
     >
       <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transform group-hover:scale-[1.04] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
         <ImageWithFallback
@@ -545,7 +687,10 @@ export const HomeView = memo(function HomeView({
   const fallbackHeroImage = fallbackHeroItem?.img;
 
   return (
-    <div className="flex flex-col gap-8 animate-fade-in pb-12">
+    <div
+      className="flex flex-col gap-8 animate-fade-in pb-12"
+      onContextMenu={() => setContextMenu(null)}
+    >
       <div className="relative group/hero-outer">
         <div className="absolute -inset-8 z-0 opacity-45 blur-[90px] transition-all duration-1000 pointer-events-none rounded-[45px] overflow-hidden select-none">
           {isPlaylistHero && playlistHeroImage ? (
@@ -597,11 +742,11 @@ export const HomeView = memo(function HomeView({
           <div className="absolute bottom-10 left-10 max-w-xl flex flex-col gap-4 z-20">
             <div className="flex flex-wrap items-center gap-3">
               <span className="px-2.5 py-0.5 bg-[var(--accent-color)] text-black text-[9px] font-extrabold tracking-widest uppercase rounded shadow-sm shadow-[var(--accent-glow)]">
-                {isPlaylistHero ? 'ÖNE ÇIKAN YAPIM' : 'STRMLY SEÇKİ'}
+                {isPlaylistHero ? (language === 'tr' ? 'ÖNE ÇIKAN YAPIM' : 'FEATURED PRODUCTION') : (language === 'tr' ? 'STRMLY SEÇKİ' : 'STRMLY SELECTION')}
               </span>
               <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-wider">
                 {isPlaylistHero
-                  ? (currentHeroItem?.group || (currentHeroItem?.type === 'movie' ? 'Sinema (VOD)' : 'Dizi (VOD)'))
+                  ? (currentHeroItem?.group || (currentHeroItem?.type === 'movie' ? (language === 'tr' ? 'Sinema (VOD)' : 'Movies (VOD)') : (language === 'tr' ? 'Dizi (VOD)' : 'Series (VOD)')))
                   : fallbackHeroItem?.category}
               </span>
             </div>
@@ -616,7 +761,7 @@ export const HomeView = memo(function HomeView({
 
             {isPlaylistHero && (
               <div className="flex items-center gap-3 text-xs font-semibold text-neutral-300 mt-0.5">
-                <span className="text-emerald-400 font-extrabold">{featuredTmdbData?.match || '95% Eşleşme'}</span>
+                <span className="text-emerald-400 font-extrabold">{featuredTmdbData?.match || (language === 'tr' ? '95% Eşleşme' : '95% Match')}</span>
                 <span className="text-neutral-400">{featuredTmdbData?.year || '2025'}</span>
                 {featuredTmdbData?.rating && parseFloat(featuredTmdbData.rating) > 0 && (
                   <span className="px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-[10px] font-bold">
@@ -627,7 +772,7 @@ export const HomeView = memo(function HomeView({
             )}
 
             <p className="text-xs text-neutral-300 leading-relaxed font-normal max-w-md drop-shadow line-clamp-3">
-              {isPlaylistHero ? (featuredTmdbData?.desc || 'Strmly kütüphanesinden benzersiz bir yapım.') : fallbackHeroItem?.desc}
+              {isPlaylistHero ? (featuredTmdbData?.desc || (language === 'tr' ? 'Strmly kütüphanesinden benzersiz bir yapım.' : 'A unique production from the Strmly library.')) : fallbackHeroItem?.desc}
             </p>
 
             <div className="flex items-center gap-3 mt-2">
@@ -640,24 +785,24 @@ export const HomeView = memo(function HomeView({
                       handlePlayStream(currentHeroItem);
                     }
                   } else if (fallbackHeroItem) {
-                    showToast(`${fallbackHeroItem.title} çalma listenizden aranıyor...`);
+                    showToast(language === 'tr' ? `${fallbackHeroItem.title} çalma listenizden aranıyor...` : `Searching for ${fallbackHeroItem.title} in your playlist...`);
                   }
                 }}
                 className="px-6 py-3 bg-white text-black font-bold rounded-full flex items-center gap-2 hover:bg-neutral-200 transition-all duration-300 shadow-lg transform active:scale-95 text-xs"
               >
-                <Play size={13} fill="#000" className="ml-0.5" /> Şimdi İzle
+                <Play size={13} fill="#000" className="ml-0.5" /> {language === 'tr' ? 'Şimdi İzle' : 'Watch Now'}
               </button>
               <button
                 onClick={() => {
                   if (isPlaylistHero && currentHeroItem) {
                     handleOpenDetails(currentHeroItem);
                   } else {
-                    showToast("Kendi çalma listenizi yükleyerek tüm içerik detaylarına erişebilirsiniz.");
+                    showToast(language === 'tr' ? "Kendi çalma listenizi yükleyerek tüm içerik detaylarına erişebilirsiniz." : "Upload your own playlist to access all content details.");
                   }
                 }}
                 className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full transition-all duration-300 transform active:scale-95 text-xs"
               >
-                Detaylar
+                {language === 'tr' ? 'Detaylar' : 'Details'}
               </button>
             </div>
           </div>
@@ -678,17 +823,15 @@ export const HomeView = memo(function HomeView({
           <div className="flex items-center justify-between px-0 mb-1">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[var(--accent-color)] animate-pulse" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">İzlemeye Devam Et</h3>
+              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'İzlemeye Devam Et' : 'Continue Watching'}</h3>
             </div>
             <button
               onClick={() => {
-                setRecentlyWatched([]);
-                localStorage.removeItem('cinema_recently_watched');
-                showToast("İzleme geçmişi temizlendi.");
+                clearRecentlyWatched();
               }}
               className="text-[10px] text-neutral-500 hover:text-red-400 font-bold uppercase tracking-wider transition-colors"
             >
-              Geçmişi Temizle
+              {t('home.clearHistory')}
             </button>
           </div>
 
@@ -711,6 +854,7 @@ export const HomeView = memo(function HomeView({
                   onClick={() => {
                     handlePlayStream(channel);
                   }}
+                  onContextMenu={(event) => openContextMenu(event, channel, true)}
                 >
                   <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transform group-hover:scale-[1.04] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
                     <ImageWithFallback
@@ -739,7 +883,7 @@ export const HomeView = memo(function HomeView({
                   </div>
                   <div className="flex flex-col px-1.5">
                     <span className="text-xs font-bold text-neutral-200 group-hover:text-white truncate transition-colors">{channel.name}</span>
-                    <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mt-0.5">{channel.group || 'Genel'}</span>
+                    <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mt-0.5">{channel.group || (language === 'tr' ? 'Genel' : 'General')}</span>
                   </div>
                 </div>
               ))}
@@ -754,14 +898,27 @@ export const HomeView = memo(function HomeView({
           </div>
         </div>
       )}
-      {visibleHomeBlocks >= 2 && playlists.length > 0 && homeLiveTvQuickChannels.length > 0 && (
-        <div className="order-2 flex flex-col gap-4 select-none animate-fade-in">
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          title={contextMenu.item.type === 'series'
+            ? parseSeriesEpisodeInfo(getFlatItem(contextMenu.item).name).cleanTitle
+            : cleanMediaTitle(getFlatItem(contextMenu.item).name)}
+          subtitle={contextMenu.fromHistory ? (language === 'tr' ? 'İzlemeye Devam Et' : 'Continue Watching') : (contextMenu.item.group || (language === 'tr' ? 'Medya' : 'Media'))}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+      {visibleHomeBlocks >= getSectionPosition('live') && playlists.length > 0 && homeLiveTvQuickChannels.length > 0 && (
+        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('live') }}>
           <div className="flex items-center justify-between px-0 mb-1">
             <div className="flex items-center gap-2">
               <Play size={15} className="text-emerald-400 fill-emerald-400" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">Hızlı Canlı TV</h3>
+              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{contentPreferences.includes('sports') ? (language === 'tr' ? 'Spor Kanalları' : 'Sports Channels') : (language === 'tr' ? 'Hızlı Canlı TV' : 'Quick Live TV')}</h3>
             </div>
-            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Popüler Kanallar</span>
+            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">{contentPreferences.includes('sports') ? (language === 'tr' ? 'Tercihine göre sıralandı' : 'Sorted by preference') : (language === 'tr' ? 'Popüler Kanallar' : 'Popular Channels')}</span>
           </div>
 
           <div className="relative group/row">
@@ -788,14 +945,14 @@ export const HomeView = memo(function HomeView({
           </div>
         </div>
       )}
-      {visibleHomeBlocks >= 3 && playlists.length > 0 && homeDiscoveryItems.length > 0 && (
-        <div className="order-3 flex flex-col gap-4 select-none animate-fade-in">
+      {visibleHomeBlocks >= getSectionPosition('discovery') && playlists.length > 0 && homeDiscoveryItems.length > 0 && (
+        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('discovery') }}>
           <div className="flex items-center justify-between px-0 mb-1">
             <div className="flex items-center gap-2">
               <Sparkles size={15} className="text-amber-400" fill="currentColor" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">Trend Olanlar</h3>
+              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{contentPreferences.length ? (language === 'tr' ? 'Sana Özel' : 'For You') : (language === 'tr' ? 'Trend Olanlar' : 'Trending Now')}</h3>
             </div>
-            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Bugün en çok izlenenler</span>
+            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">{contentPreferences.length ? (language === 'tr' ? 'İçerik tercihlerine göre' : 'Based on content preferences') : (language === 'tr' ? 'Bugün en çok izlenenler' : 'Most watched today')}</span>
           </div>
 
           <div className="relative group/row">
@@ -816,6 +973,7 @@ export const HomeView = memo(function HomeView({
                   globalFavorites={globalFavorites}
                   toggleFavorite={toggleFavorite}
                   handleOpenDetails={handleOpenDetails}
+                  onContextMenu={openContextMenu}
                 />
               ))}
             </div>
@@ -828,18 +986,18 @@ export const HomeView = memo(function HomeView({
           </div>
         </div>
       )}
-      {visibleHomeBlocks >= 4 && playlists.length > 0 && populerFilmler.length > 0 && (
-        <div className="order-4 flex flex-col gap-4 select-none animate-fade-in">
+      {visibleHomeBlocks >= getSectionPosition('movies') && playlists.length > 0 && populerFilmler.length > 0 && (
+        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('movies') }}>
           <div className="flex items-center justify-between px-0 mb-1">
             <div className="flex items-center gap-2">
               <Play size={14} className="text-white fill-white" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">Popüler Filmler</h3>
+              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'Popüler Filmler' : 'Popular Movies'}</h3>
             </div>
             <button
               onClick={() => setSelectedGroup('Sinema')}
               className="text-[10px] text-neutral-500 hover:text-white font-bold uppercase tracking-wider transition-colors"
             >
-              Tümünü Gör
+              {language === 'tr' ? 'Tümünü Gör' : 'See All'}
             </button>
           </div>
 
@@ -861,6 +1019,7 @@ export const HomeView = memo(function HomeView({
                   globalFavorites={globalFavorites}
                   toggleFavorite={toggleFavorite}
                   handleOpenDetails={handleOpenDetails}
+                  onContextMenu={openContextMenu}
                   requireTmdbPoster
                 />
               ))}
@@ -874,18 +1033,18 @@ export const HomeView = memo(function HomeView({
           </div>
         </div>
       )}
-      {visibleHomeBlocks >= 5 && playlists.length > 0 && populerDiziler.length > 0 && (
-        <div className="order-5 flex flex-col gap-4 select-none animate-fade-in">
+      {visibleHomeBlocks >= getSectionPosition('series') && playlists.length > 0 && populerDiziler.length > 0 && (
+        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('series') }}>
           <div className="flex items-center justify-between px-0 mb-1">
             <div className="flex items-center gap-2">
               <Sparkles size={14} className="text-white" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">Popüler Diziler</h3>
+              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'Popüler Diziler' : 'Popular Series'}</h3>
             </div>
             <button
               onClick={() => setSelectedGroup('Diziler')}
               className="text-[10px] text-neutral-500 hover:text-white font-bold uppercase tracking-wider transition-colors"
             >
-              Tümünü Gör
+              {language === 'tr' ? 'Tümünü Gör' : 'See All'}
             </button>
           </div>
 
@@ -907,6 +1066,7 @@ export const HomeView = memo(function HomeView({
                   globalFavorites={globalFavorites}
                   toggleFavorite={toggleFavorite}
                   handleOpenDetails={handleOpenDetails}
+                  onContextMenu={openContextMenu}
                   requireTmdbPoster
                 />
               ))}
@@ -923,13 +1083,13 @@ export const HomeView = memo(function HomeView({
       {playlists.length === 0 && (
         <div className="flex flex-col items-center justify-center text-center p-12 bg-neutral-950/40 backdrop-blur-md border border-white/5 rounded-3xl mt-4">
           <UploadCloud size={38} className="text-neutral-600 mb-4 animate-bounce" />
-          <h3 className="text-base font-semibold text-neutral-200">Çalma Listesi Yüklü Değil</h3>
-          <p className="text-xs text-neutral-500 max-w-sm mt-1.5 mb-5">IPTV dünyasını keşfetmek ve kanalları görüntülemek için Ayarlar sekmesinden bir M3U çalma listesi yükleyin.</p>
+          <h3 className="text-base font-semibold text-neutral-200">{t('home.noPlaylistsTitle')}</h3>
+          <p className="text-xs text-neutral-500 max-w-sm mt-1.5 mb-5">{t('home.noPlaylistsDesc')}</p>
           <button
             onClick={() => setSelectedGroup('Ayarlar')}
             className="px-5 py-2.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-black text-xs font-semibold rounded-xl transition-all"
           >
-            Ayarlara Git
+            {t('home.goToSettings')}
           </button>
         </div>
       )}

@@ -124,6 +124,15 @@ export const getTmdbApiKey = () => {
   return storedKey || import.meta.env.VITE_TMDB_API_KEY || '';
 };
 
+export const getTmdbLanguage = () => {
+  try {
+    const lang = localStorage.getItem('cinema_language');
+    return lang === 'en' ? 'en-US' : 'tr-TR';
+  } catch {
+    return 'tr-TR';
+  }
+};
+
 const normalizeTmdbText = (value: string) => value
   .toLocaleLowerCase('tr-TR')
   .normalize('NFD')
@@ -199,7 +208,7 @@ export const buildTmdbSearchPath = (endpoint: TmdbEndpoint, apiKey: string, clea
   const params = new URLSearchParams({
     api_key: apiKey,
     query: cleanTitle,
-    language: 'tr-TR',
+    language: getTmdbLanguage(),
     include_adult: 'false'
   });
   return `/3/search/${endpoint}?${params.toString()}`;
@@ -208,7 +217,7 @@ export const buildTmdbSearchPath = (endpoint: TmdbEndpoint, apiKey: string, clea
 export const buildTmdbDetailsPath = (endpoint: TmdbEndpoint, apiKey: string, id: number) => {
   const params = new URLSearchParams({
     api_key: apiKey,
-    language: 'tr-TR'
+    language: getTmdbLanguage()
   });
   return `/3/${endpoint}/${id}?${params.toString()}`;
 };

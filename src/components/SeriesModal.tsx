@@ -3,9 +3,10 @@ import { Play, X, ChevronDown, Heart } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { EpisodeThumb } from './EpisodeThumb';
 import { cleanMediaTitle } from '../utils/seriesGroupers';
-import { fetchTmdbPath, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache } from '../utils/tmdb';
+import { fetchTmdbPath, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, getTmdbLanguage } from '../utils/tmdb';
 import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
 import type { PlaylistItem } from '../utils/m3uParser';
+import { useSettings } from '../context/SettingsContext';
 
 interface TmdbData {
   id?: number;
@@ -52,6 +53,7 @@ export const SeriesModal = ({
   isFavorite,
   onToggleFavorite
 }: SeriesModalProps) => {
+  const { language } = useSettings();
   const seasonsList = Object.keys(series.seasons).map(Number).sort((a, b) => a - b);
   const episodes = series.seasons[activeSeason] || [];
   const seriesCleanName = series.name.toLowerCase();
@@ -71,7 +73,7 @@ export const SeriesModal = ({
 
     let cancelled = false;
     const apiKey = getTmdbApiKey();
-    const path = `/3/tv/${tmdbShowId}/season/${activeSeason}?api_key=${apiKey}&language=tr-TR`;
+    const path = `/3/tv/${tmdbShowId}/season/${activeSeason}?api_key=${apiKey}&language=${getTmdbLanguage()}`;
 
     fetchTmdbPath<{ episodes?: { episode_number: number; still_path?: string }[]; error?: string }>(path)
       .then((data) => {
@@ -117,7 +119,7 @@ export const SeriesModal = ({
         }
 
         const apiKey = getTmdbApiKey();
-        const creditsPath = `/3/tv/${tmdbId}/credits?api_key=${apiKey}&language=tr-TR`;
+        const creditsPath = `/3/tv/${tmdbId}/credits?api_key=${apiKey}&language=${getTmdbLanguage()}`;
         
         let rawCast: any[] = [];
         if (window.electronAPI && window.electronAPI.fetchTmdb) {
@@ -227,7 +229,7 @@ export const SeriesModal = ({
               <button
                 onClick={onToggleFavorite}
                 className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 transition-all duration-300 active:scale-90 shrink-0 shadow-md cursor-pointer"
-                title={isFavorite ? "Favorilerden Çıkar" : "Favorilere Ekle"}
+                title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
               >
                 <Heart size={18} fill={isFavorite ? "currentColor" : "none"} className={isFavorite ? "text-red-500" : ""} />
               </button>
@@ -241,8 +243,16 @@ export const SeriesModal = ({
                 <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">★ {tmdbData.rating.replace('★ ', '')}</span>
               </>
             )}
-            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">{seasonsList.length} Sezon</span>
-            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">{series.episodesCount} Bölüm</span>
+            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">
+              {language === 'tr'
+                ? `${seasonsList.length} Sezon`
+                : `${seasonsList.length} Season${seasonsList.length > 1 ? 's' : ''}`}
+            </span>
+            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">
+              {language === 'tr'
+                ? `${series.episodesCount} Bölüm`
+                : `${series.episodesCount} Episode${series.episodesCount > 1 ? 's' : ''}`}
+            </span>
             {series.group && (
               <span className="px-2.5 py-1 rounded-lg bg-[var(--accent-color)]/10 border border-[var(--accent-color)]/25 text-[var(--accent-color)] uppercase tracking-wider">
                 {series.group}
@@ -250,9 +260,9 @@ export const SeriesModal = ({
             )}
           </div>
           <div className="flex flex-col gap-2 bg-white/[0.02] border border-white/5 rounded-xl p-4 shrink-0">
-            <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-neutral-500">Özet</span>
+            <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-neutral-500">{language === 'tr' ? 'Özet' : 'Overview'}</span>
             <p className="text-xs text-neutral-400 font-light leading-relaxed">
-              {tmdbData?.desc || 'Bu dizi için özet bulunmuyor.'}
+              {tmdbData?.desc || (language === 'tr' ? 'Bu dizi için özet bulunmuyor.' : 'No overview available for this series.')}
             </p>
           </div>
           {cast.length > 0 && (
@@ -261,9 +271,9 @@ export const SeriesModal = ({
                 onClick={() => setShowCastModal(true)}
                 className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0"
               >
-                <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-neutral-500 group-hover/cast-header:text-neutral-300 transition-colors">Oyuncular</span>
+                <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-neutral-500 group-hover/cast-header:text-neutral-300 transition-colors">{language === 'tr' ? 'Oyuncular' : 'Cast'}</span>
                 <span className="text-[9px] text-neutral-500 group-hover/cast-header:text-[var(--accent-color)] font-bold uppercase tracking-wider transition-colors flex items-center gap-1">
-                  TÜMÜNÜ GÖR
+                  {language === 'tr' ? 'TÜMÜNÜ GÖR' : 'SEE ALL'}
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
@@ -298,7 +308,7 @@ export const SeriesModal = ({
                   }}
                   className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
                 >
-                  <Play size={13} fill="#000" /> İzlemeye Devam Et
+                  <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Devam Et' : 'Resume Watching'}
                 </button>
               ) : (
                 <button
@@ -308,12 +318,14 @@ export const SeriesModal = ({
                   }}
                   className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
                 >
-                  <Play size={13} fill="#000" /> İzlemeye Başla
+                  <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Başla' : 'Start Watching'}
                 </button>
               )}
               {resumeEpisode && (
                 <span className="text-[10px] text-center text-neutral-500 font-medium">
-                  Kaldığın yer: {resumeEpisode.seasonNumber}. Sezon {resumeEpisode.episodeNumber}. Bölüm
+                  {language === 'tr'
+                    ? `Kaldığın yer: ${resumeEpisode.seasonNumber}. Sezon ${resumeEpisode.episodeNumber}. Bölüm`
+                    : `Where you left off: Season ${resumeEpisode.seasonNumber} Episode ${resumeEpisode.episodeNumber}`}
                 </span>
               )}
             </div>
@@ -323,9 +335,11 @@ export const SeriesModal = ({
         <div className="flex-1 flex flex-col min-w-0 bg-transparent select-none text-left">
           <div className="p-6 md:p-8 md:pr-20 pb-4 border-b border-white/[0.05] flex flex-col gap-3.5 shrink-0">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40">Sezonlar</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40">{language === 'tr' ? 'Sezonlar' : 'Seasons'}</span>
               <span className="text-[10px] font-bold text-neutral-500">
-                {seasonsList.length} Sezon Seçeneği
+                {language === 'tr'
+                  ? `${seasonsList.length} Sezon Seçeneği`
+                  : `${seasonsList.length} Season Option${seasonsList.length > 1 ? 's' : ''}`}
               </span>
             </div>
             {seasonsList.length >= 3 ? (
@@ -336,7 +350,7 @@ export const SeriesModal = ({
                 >
                   <span className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] shadow-[0_0_8px_var(--accent-glow)] animate-pulse" />
-                    {activeSeason}. Sezon
+                    {language === 'tr' ? `${activeSeason}. Sezon` : `Season ${activeSeason}`}
                   </span>
                   <ChevronDown size={14} className={`text-neutral-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-white' : ''}`} />
                 </button>
@@ -358,7 +372,7 @@ export const SeriesModal = ({
                               : 'bg-white/[0.02] hover:bg-white/[0.06] text-neutral-400 hover:text-white border border-transparent hover:border-white/5'
                           }`}
                         >
-                          {seasonNum}. Sezon
+                          {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
                         </button>
                       ))}
                     </div>
@@ -380,7 +394,7 @@ export const SeriesModal = ({
                         : 'bg-white/[0.03] hover:bg-white/[0.07] border-white/5 text-neutral-400 hover:text-white'
                     }`}
                   >
-                    {seasonNum}. Sezon
+                    {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
                   </button>
                 ))}
               </div>
@@ -389,8 +403,12 @@ export const SeriesModal = ({
           <div className="flex-1 overflow-y-auto pr-3 pl-6 md:pr-4 md:pl-8 pt-4 pb-6 md:pb-8 min-h-0 custom-modal-scrollbar flex flex-col gap-4">
 
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40 px-1 mb-1 shrink-0">
-              <span>Bölüm Listesi</span>
-              <span>({episodes.length} Bölüm)</span>
+              <span>{language === 'tr' ? 'Bölüm Listesi' : 'Episode List'}</span>
+              <span>
+                {language === 'tr'
+                  ? `(${episodes.length} Bölüm)`
+                  : `(${episodes.length} Episode${episodes.length > 1 ? 's' : ''})`}
+              </span>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -434,7 +452,7 @@ export const SeriesModal = ({
 
                       {isWatched && (
                         <div className="absolute bottom-2 right-1 px-1.5 py-0.5 bg-white text-black font-black text-[7px] uppercase tracking-wider rounded z-20">
-                          İzlendi
+                          {language === 'tr' ? 'İzlendi' : 'Watched'}
                         </div>
                       )}
                       {progress !== undefined && progress > 0 && (
@@ -448,10 +466,12 @@ export const SeriesModal = ({
                     </div>
                     <div className="flex-1 min-w-0 text-left">
                       <span className="block text-[10px] font-bold text-neutral-400">
-                        {ep.seasonNumber}. Sezon • {ep.episodeNumber}. Bölüm
+                        {language === 'tr'
+                          ? `${ep.seasonNumber}. Sezon • ${ep.episodeNumber}. Bölüm`
+                          : `Season ${ep.seasonNumber} • Episode ${ep.episodeNumber}`}
                       </span>
                       <h4 className="text-xs font-black text-white truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
-                        {epSubtitle || `Bölüm ${ep.episodeNumber}`}
+                        {epSubtitle || (language === 'tr' ? `Bölüm ${ep.episodeNumber}` : `Episode ${ep.episodeNumber}`)}
                       </h4>
                       <span className="block text-[9px] text-neutral-500 truncate mt-1">
                         {epTitle}
@@ -463,7 +483,7 @@ export const SeriesModal = ({
                         onPlay(ep.item);
                       }}
                       className="w-8 h-8 rounded-lg bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-all duration-200 active:scale-90 shadow-md cursor-pointer shrink-0"
-                      title="Oynat"
+                      title={language === 'tr' ? 'Oynat' : 'Play'}
                     >
                       <Play size={12} fill="#000" className="ml-0.5" />
                     </button>
@@ -495,7 +515,7 @@ export const SeriesModal = ({
             </button>
 
             <div className="flex flex-col text-left">
-              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">Oyuncu Kadrosu</span>
+              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">{language === 'tr' ? 'Oyuncu Kadrosu' : 'Cast & Crew'}</span>
               <h3 className="text-lg font-black text-white mt-0.5 truncate max-w-[85%]">{series.name}</h3>
             </div>
 

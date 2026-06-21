@@ -1,10 +1,11 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Heart, Tv, Film } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import { LiveChannelCard } from './LiveTvView';
 import { MovieCard } from './MoviesView';
 import { SeriesCard } from './SeriesView';
+import { useSettings } from '../context/SettingsContext';
 
 interface FavoritesViewProps {
   selectedGroup: string;
@@ -33,6 +34,7 @@ export function FavoritesView({
   genericLogosSet,
   checkedStatusMap
 }: FavoritesViewProps) {
+  const { t, language } = useSettings();
   const [activeTab, setActiveTab] = useState<'all' | 'live' | 'movie' | 'series'>('all');
 
   if (selectedGroup !== 'Favorilerim') return null;
@@ -42,10 +44,10 @@ export function FavoritesView({
   const hasSeries = favSeries.length > 0;
 
   const tabs = [
-    { id: 'all', label: 'Tümü', count: favChannels.length + favMovies.length + favSeries.length },
-    { id: 'live', label: 'Canlı TV', count: favChannels.length },
-    { id: 'movie', label: 'Sinema', count: favMovies.length },
-    { id: 'series', label: 'Diziler', count: favSeries.length }
+    { id: 'all', label: language === 'tr' ? 'Tümü' : 'All', count: favChannels.length + favMovies.length + favSeries.length },
+    { id: 'live', label: language === 'tr' ? 'Canlı TV' : 'Live TV', count: favChannels.length },
+    { id: 'movie', label: language === 'tr' ? 'Sinema' : 'Movies', count: favMovies.length },
+    { id: 'series', label: language === 'tr' ? 'Diziler' : 'Series', count: favSeries.length }
   ] as const;
 
   return (
@@ -56,8 +58,8 @@ export function FavoritesView({
             <Heart size={20} fill="currentColor" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-black tracking-tight text-white">Favorilerim</h1>
-            <p className="text-xs text-neutral-400 mt-0.5">Favoriye eklediğiniz tüm içerikler burada listelenir.</p>
+            <h1 className="text-xl md:text-2xl font-black tracking-tight text-white">{t('home.myFavorites')}</h1>
+            <p className="text-xs text-neutral-400 mt-0.5">{language === 'tr' ? 'Favoriye eklediğiniz tüm içerikler burada listelenir.' : 'All content you add to favorites is listed here.'}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 bg-neutral-950/45 p-1 border border-white/5 rounded-2xl self-start md:self-auto shadow-lg">
@@ -88,17 +90,17 @@ export function FavoritesView({
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 border-b border-white/5 pb-2">
               <Tv size={16} className="text-neutral-400" />
-              <h2 className="text-sm font-extrabold tracking-wider uppercase text-neutral-300">Canlı Kanallar</h2>
+              <h2 className="text-sm font-extrabold tracking-wider uppercase text-neutral-300">{language === 'tr' ? 'Canlı Kanallar' : 'Live Channels'}</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {favChannels.map(channel => (
                 <LiveChannelCard
-                  key={channel.id}
-                  channel={channel}
-                  onClick={handlePlayStream}
-                  isOnline={checkedStatusMap[channel.id]}
-                  isFavorite={globalFavorites.includes(channel.id)}
-                  onToggleFavorite={toggleFavorite}
+                   key={channel.id}
+                   channel={channel}
+                   onClick={handlePlayStream}
+                   isOnline={checkedStatusMap[channel.id]}
+                   isFavorite={globalFavorites.includes(channel.id)}
+                   onToggleFavorite={toggleFavorite}
                 />
               ))}
             </div>
@@ -108,18 +110,18 @@ export function FavoritesView({
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 border-b border-white/5 pb-2">
               <Film size={16} className="text-neutral-400" />
-              <h2 className="text-sm font-extrabold tracking-wider uppercase text-neutral-300">Filmler</h2>
+              <h2 className="text-sm font-extrabold tracking-wider uppercase text-neutral-300">{language === 'tr' ? 'Filmler' : 'Movies'}</h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
               {favMovies.map(movie => (
                 <MovieCard
-                  key={movie.id}
-                  channel={movie}
-                  onClick={handleOpenDetails}
-                  isOnline={checkedStatusMap[movie.id]}
-                  isFavorite={globalFavorites.includes(movie.id)}
-                  onToggleFavorite={toggleFavorite}
-                  isGenericLogo={movie.logo ? genericLogosSet.has(movie.logo) : false}
+                   key={movie.id}
+                   channel={movie}
+                   onClick={handleOpenDetails}
+                   isOnline={checkedStatusMap[movie.id]}
+                   isFavorite={globalFavorites.includes(movie.id)}
+                   onToggleFavorite={toggleFavorite}
+                   isGenericLogo={movie.logo ? genericLogosSet.has(movie.logo) : false}
                 />
               ))}
             </div>
@@ -129,18 +131,18 @@ export function FavoritesView({
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 border-b border-white/5 pb-2">
               <Tv size={16} className="text-neutral-400" />
-              <h2 className="text-sm font-extrabold tracking-wider uppercase text-neutral-300">Diziler</h2>
+              <h2 className="text-sm font-extrabold tracking-wider uppercase text-neutral-300">{language === 'tr' ? 'Diziler' : 'Series'}</h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
               {favSeries.map(series => (
                 <SeriesCard
-                  key={series.id}
-                  series={series}
-                  onClick={handleOpenSeriesModalDirect}
-                  isFavorite={globalFavorites.includes(series.id)}
-                  onToggleFavorite={toggleFavorite}
-                  isGenericLogo={series.logo ? genericLogosSet.has(series.logo) : false}
-                  seasonsCount={Object.keys(series.seasons).length}
+                   key={series.id}
+                   series={series}
+                   onClick={handleOpenSeriesModalDirect}
+                   isFavorite={globalFavorites.includes(series.id)}
+                   onToggleFavorite={toggleFavorite}
+                   isGenericLogo={series.logo ? genericLogosSet.has(series.logo) : false}
+                   seasonsCount={Object.keys(series.seasons).length}
                 />
               ))}
             </div>

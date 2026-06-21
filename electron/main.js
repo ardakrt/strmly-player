@@ -19,7 +19,12 @@ try {
 
 function logToFile(...args) {
   try {
-    const msg = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+    const msg = args.map(arg => {
+      if (arg instanceof Error) {
+        return arg.stack || arg.message;
+      }
+      return typeof arg === 'object' ? JSON.stringify(arg) : arg;
+    }).join(' ');
     const logLine = `[${new Date().toISOString()}] ${msg}\n`;
     fs.appendFileSync(logFile, logLine, 'utf8');
   } catch (e) {}
@@ -52,6 +57,12 @@ protocol.registerSchemesAsPrivileged([
 let ffmpegPath;
 try {
   ffmpegPath = require('ffmpeg-static');
+  
+  // In packaged/production builds, resolve path to app.asar.unpacked
+  if (ffmpegPath && ffmpegPath.includes('app.asar') && !ffmpegPath.includes('app.asar.unpacked')) {
+    ffmpegPath = ffmpegPath.replace(/app\.asar/i, 'app.asar.unpacked');
+  }
+
   if (ffmpegPath && fs.existsSync(ffmpegPath)) {
     console.log('FFmpeg found at:', ffmpegPath);
   } else {
@@ -331,10 +342,21 @@ ipcMain.handle('save-config', async (event, { key, value }) => {
     const configPath = getConfigPath();
     let config = {};
     if (fs.existsSync(configPath)) {
-      config = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch (parseErr) {
+        console.error("Config parse error on save, resetting to empty config:", parseErr);
+        try {
+          const backupPath = configPath + '.corrupted-' + Date.now();
+          fs.copyFileSync(configPath, backupPath);
+          console.log("Created backup of corrupted config at:", backupPath);
+        } catch (backupErr) {
+          console.error("Failed to create backup of corrupted config:", backupErr);
+        }
+      }
     }
     config[key] = value;
-    await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
     return { success: true };
   } catch (err) {
     console.error("Config save error:", err);
@@ -347,7 +369,11 @@ ipcMain.on('save-config-sync', (event, { key, value }) => {
     const configPath = getConfigPath();
     let config = {};
     if (fs.existsSync(configPath)) {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch (parseErr) {
+        console.error("Config parse error on save-sync, resetting:", parseErr);
+      }
     }
     config[key] = value;
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
@@ -362,7 +388,13 @@ ipcMain.handle('load-config', async (event, { key }) => {
   try {
     const configPath = getConfigPath();
     if (!fs.existsSync(configPath)) return null;
-    const config = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+    let config = {};
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (parseErr) {
+      console.error("Config parse error on load:", parseErr);
+      return null;
+    }
     return config[key] !== undefined ? config[key] : null;
   } catch (err) {
     console.error("Config load error:", err);
@@ -636,8 +668,8 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       '-reconnect', '1',
       '-reconnect_streamed', '1',
       '-reconnect_delay_max', '5',
-      '-analyzeduration', '5000000',
-      '-probesize', '5000000'
+      '-analyzeduration', '1000000',
+      '-probesize', '1000000'
     ];
 
     if (startTime && startTime > 0) {
@@ -719,6 +751,15 @@ ipcMain.handle('probe-audio-codec', async (event, { url }) => {
 
     const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderrOutput = '';
+
+    proc.on('error', (err) => {
+      console.error('Probe audio codec spawn error:', err);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeoutId);
+        resolve({ success: false, error: err.message, codec: 'unknown' });
+      }
+    });
 
     const timeoutId = setTimeout(() => {
       if (!resolved) {

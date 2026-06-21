@@ -10,6 +10,18 @@ interface UseCinematicPlayerProps {
   showToast: (message: string) => void;
 }
 
+const PLAYER_VOLUME_KEY = 'cinema_player_volume';
+const PLAYER_MUTED_KEY = 'cinema_player_muted';
+
+function getSavedPlayerVolume(): number {
+  const saved = Number(localStorage.getItem(PLAYER_VOLUME_KEY));
+  return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 1;
+}
+
+function getSavedPlayerMuted(): boolean {
+  return localStorage.getItem(PLAYER_MUTED_KEY) === 'true';
+}
+
 export function useCinematicPlayer({
   selectedChannel,
   onClose,
@@ -33,8 +45,8 @@ export function useCinematicPlayer({
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playerVolume, setPlayerVolume] = useState(1);
-  const [playerMuted, setPlayerMuted] = useState(false);
+  const [playerVolume, setPlayerVolume] = useState(getSavedPlayerVolume);
+  const [playerMuted, setPlayerMuted] = useState(getSavedPlayerMuted);
   const [ffmpegFallbackActive, setFfmpegFallbackActive] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [videoReady, setVideoReady] = useState(false);
@@ -56,8 +68,14 @@ export function useCinematicPlayer({
   const durationRef = useRef(duration);
 
   useEffect(() => { playbackSpeedRef.current = playbackSpeed; }, [playbackSpeed]);
-  useEffect(() => { playerVolumeRef.current = playerVolume; }, [playerVolume]);
-  useEffect(() => { playerMutedRef.current = playerMuted; }, [playerMuted]);
+  useEffect(() => {
+    playerVolumeRef.current = playerVolume;
+    localStorage.setItem(PLAYER_VOLUME_KEY, String(playerVolume));
+  }, [playerVolume]);
+  useEffect(() => {
+    playerMutedRef.current = playerMuted;
+    localStorage.setItem(PLAYER_MUTED_KEY, String(playerMuted));
+  }, [playerMuted]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
 
   const handlePlayerMouseMove = () => {
@@ -95,12 +113,6 @@ export function useCinematicPlayer({
       videoRef.current.pause();
       pausedTimeRef.current = Date.now();
     } else {
-      // If paused for more than 60 seconds, reload the stream to refresh connection/token
-      if (pausedTimeRef.current && Date.now() - pausedTimeRef.current > 60 * 1000) {
-        pausedTimeRef.current = null;
-        reloadStreamAtCurrentTime();
-        return;
-      }
       pausedTimeRef.current = null;
       videoRef.current.play().then(forceUnmute).catch(() => { });
     }
@@ -208,28 +220,34 @@ export function useCinematicPlayer({
     setActiveAudioTrack(trackId);
     if (hlsInstanceRef.current) {
       hlsInstanceRef.current.audioTrack = trackId;
-    } else if (isTranscodingRef.current && selectedChannel && window.electronAPI?.startFfmpegProxy && videoRef.current) {
-      const trackInfo = audioTracks.find(t => t.id === trackId);
-      const streamId = (trackInfo as any)?.streamId;
-      
-      showToast("Ses dili değiştiriliyor...");
-      const currentPos = videoRef.current.currentTime;
-      try {
-        const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, seekOffsetRef.current + currentPos, streamId);
-        if (result.success && result.url) {
-          seekOffsetRef.current = seekOffsetRef.current + currentPos;
-          videoRef.current.src = result.url;
-          videoRef.current.play().then(forceUnmute).catch(() => { });
-        }
-      } catch (e) {
-        console.error("Transcoded audio track change error:", e);
-      }
     } else {
       const video = videoRef.current;
-      if (video && (video as any).audioTracks) {
-        const list = (video as any).audioTracks;
-        for (let i = 0; i < list.length; i++) {
-          list[i].enabled = (i === trackId);
+      const nativeTracks = video ? (video as any).audioTracks : null;
+      
+      // Use transcoding if we are already transcoding, or if native audio tracks are not available
+      const useTranscoding = isTranscodingRef.current || (!nativeTracks || nativeTracks.length === 0);
+      
+      if (useTranscoding && selectedChannel && window.electronAPI?.startFfmpegProxy && video) {
+        const trackInfo = audioTracks.find(t => t.id === trackId);
+        const streamId = (trackInfo as any)?.streamId;
+        
+        showToast("Ses dili değiştiriliyor (Transcode)...");
+        const currentPos = video.currentTime;
+        try {
+          const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, seekOffsetRef.current + currentPos, streamId);
+          if (result.success && result.url) {
+            seekOffsetRef.current = seekOffsetRef.current + currentPos;
+            isTranscodingRef.current = true;
+            setFfmpegFallbackActive(true);
+            video.src = result.url;
+            video.play().then(forceUnmute).catch(() => { });
+          }
+        } catch (e) {
+          console.error("Transcoded audio track change error:", e);
+        }
+      } else if (video && nativeTracks) {
+        for (let i = 0; i < nativeTracks.length; i++) {
+          nativeTracks[i].enabled = (i === trackId);
         }
       }
     }
@@ -375,16 +393,16 @@ export function useCinematicPlayer({
     isTranscodingRef.current = false;
     seekOffsetRef.current = 0;
 
-    // Ensure audio is on
-    video.muted = false;
-    video.volume = playerVolumeRef.current || 1;
+    // Restore the user's last volume and mute preference.
+    video.muted = playerMutedRef.current;
+    video.volume = playerVolumeRef.current;
 
     let active = true;
 
-    const startFfmpegFallback = async () => {
+    const startFfmpegFallback = async (forceStartTime?: number) => {
       if (!active || !window.electronAPI?.startFfmpegProxy) return;
-      const currentPos = video.currentTime;
-      console.warn(`[AutoTranscode] Dynamic fallback triggered on media error. Resuming from second: ${currentPos}`);
+      const currentPos = forceStartTime !== undefined ? forceStartTime : video.currentTime;
+      console.warn(`[AutoTranscode] Transcoding triggered. Starting from second: ${currentPos}`);
       isTranscodingRef.current = true;
       setFfmpegFallbackActive(true);
       try {
@@ -398,15 +416,15 @@ export function useCinematicPlayer({
           seekOffsetRef.current = currentPos;
           if (!video.isConnected || !active) return;
           video.src = result.url;
-          video.muted = false;
-          video.volume = playerVolumeRef.current || 1;
+          video.muted = playerMutedRef.current;
+          video.volume = playerVolumeRef.current;
           video.play().catch(() => { });
         } else {
           isTranscodingRef.current = false;
           setFfmpegFallbackActive(false);
         }
       } catch (err) {
-        console.error('[AutoTranscode] Dynamic fallback error:', err);
+        console.error('[AutoTranscode] Fallback error:', err);
         isTranscodingRef.current = false;
         setFfmpegFallbackActive(false);
       }
@@ -526,6 +544,7 @@ export function useCinematicPlayer({
     const onPlayEvent = () => {
       forceUnmute();
       setIsPlaying(true);
+      pausedTimeRef.current = null;
     };
 
     const onPauseEvent = () => {
@@ -625,72 +644,105 @@ export function useCinematicPlayer({
 
     const init = async () => {
       let playUrl = selectedChannel.url;
-      let transcodeActive = false;
 
-      if (selectedChannel.type !== 'live' && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
-        console.log(`[AutoTranscode] Probing audio codecs for: ${selectedChannel.name}`);
-        try {
-          const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
-          if (!active) return;
+      const isMkv = playUrl.toLowerCase().includes('.mkv') || playUrl.toLowerCase().split('?')[0].endsWith('.mkv');
+      if (isMkv && window.electronAPI?.startFfmpegProxy) {
+        console.log(`[AutoTranscode] Direct MKV stream detected, starting transcode immediately.`);
+        const startTime = resumeTimeRef.current !== null ? resumeTimeRef.current : (selectedChannel.currentTime || 0);
+        startFfmpegFallback(startTime);
+      } else {
+        // Start playing naturally and instantly first!
+        loadPlayerSource(playUrl, false);
 
-          if (res.success) {
-            if (res.duration && res.duration > 0) {
-              setDuration(res.duration);
+        // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams in the background
+        if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
+          // ffprobe opens a second connection to the same VOD URL. Starting it
+          // alongside the video competes for the first bytes and delays the
+          // first frame on many IPTV servers, so wait until playback begins.
+          await new Promise<void>((resolve) => {
+            if (!active || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+              resolve();
+              return;
             }
 
-            if (res.audioStreams && res.audioStreams.length > 0) {
-              setAudioTracks(res.audioStreams);
-              
-              // Automatically select Turkish track if present, otherwise first track
-              const trTrack = res.audioStreams.findIndex(
-                (t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'
-              );
-              const selectedTrack = trTrack >= 0 ? trTrack : 0;
-              setActiveAudioTrack(selectedTrack);
-            }
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeoutId);
+              video.removeEventListener('playing', finish);
+              video.removeEventListener('error', finish);
+              resolve();
+            };
+            const timeoutId = window.setTimeout(finish, 5000);
+            video.addEventListener('playing', finish, { once: true });
+            video.addEventListener('error', finish, { once: true });
+          });
 
-            let shouldTranscode = false;
-            if (res.codec) {
-              const codec = res.codec.toLowerCase();
-              const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp'];
-              if (unsupportedCodecs.includes(codec)) {
-                shouldTranscode = true;
+          if (!active || isTranscodingRef.current) return;
+          console.log(`[AutoTranscode] Probing audio codecs in background for: ${selectedChannel.name}`);
+          try {
+            const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
+            if (!active) return;
+
+            if (res.success) {
+              if (res.duration && res.duration > 0) {
+                setDuration(res.duration);
+              }
+
+              if (res.audioStreams && res.audioStreams.length > 0) {
+                setAudioTracks(res.audioStreams);
+                
+                // Automatically select Turkish track if present, otherwise first track
+                const trTrack = res.audioStreams.findIndex(
+                  (t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'
+                );
+                const selectedTrack = trTrack >= 0 ? trTrack : 0;
+                setActiveAudioTrack(selectedTrack);
+              }
+
+              let shouldTranscode = false;
+              if (res.codec) {
+                const codec = res.codec.toLowerCase();
+                const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp'];
+                if (unsupportedCodecs.includes(codec)) {
+                  shouldTranscode = true;
+                }
+              }
+
+              if (shouldTranscode) {
+                console.log(`[AutoTranscode] Transcoding triggered in background. Switching source.`);
+                
+                // Find actual stream ID of the selected track
+                const initialTrackId = res.audioStreams && res.audioStreams.length > 0
+                  ? (res.audioStreams.findIndex((t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'))
+                  : -1;
+                const selectedTrackIndex = initialTrackId >= 0 ? initialTrackId : 0;
+                const streamId = res.audioStreams && res.audioStreams.length > selectedTrackIndex
+                  ? res.audioStreams[selectedTrackIndex].streamId
+                  : undefined;
+
+                const currentPos = video.currentTime;
+                const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId);
+                if (!active) return;
+                if (transcodeRes.success && transcodeRes.url) {
+                  if (hlsInstanceRef.current) {
+                    hlsInstanceRef.current.destroy();
+                    hlsInstanceRef.current = null;
+                  }
+                  seekOffsetRef.current = currentPos;
+                  isTranscodingRef.current = true;
+                  setFfmpegFallbackActive(true);
+                  video.src = transcodeRes.url;
+                  video.play().then(forceUnmute).catch(() => { });
+                }
               }
             }
-
-            // Force transcoding if there are multiple audio tracks so we can switch between them
-            if (res.audioStreams && res.audioStreams.length > 1) {
-              shouldTranscode = true;
-            }
-
-            if (shouldTranscode) {
-              console.log(`[AutoTranscode] Transcoding triggered (codec or multiple audio tracks).`);
-              
-              // Find actual stream ID of the selected track
-              const initialTrackId = res.audioStreams && res.audioStreams.length > 0
-                ? (res.audioStreams.findIndex((t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'))
-                : -1;
-              const selectedTrackIndex = initialTrackId >= 0 ? initialTrackId : 0;
-              const streamId = res.audioStreams && res.audioStreams.length > selectedTrackIndex
-                ? res.audioStreams[selectedTrackIndex].streamId
-                : undefined;
-
-              const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, undefined, streamId);
-              if (transcodeRes.success && transcodeRes.url) {
-                playUrl = transcodeRes.url;
-                transcodeActive = true;
-                isTranscodingRef.current = true;
-                setFfmpegFallbackActive(true);
-              }
-            }
+          } catch (e) {
+            console.error('[AutoTranscode] Error during background codec probing:', e);
           }
-        } catch (e) {
-          console.error('[AutoTranscode] Error during codec probing:', e);
         }
       }
-
-      if (!active) return;
-      loadPlayerSource(playUrl, transcodeActive);
     };
 
     init();

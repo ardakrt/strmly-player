@@ -3,7 +3,7 @@ import type { PlaylistItem } from './utils/m3uParser';
 import { groupPlaylistItemsToSeries, parseSeriesEpisodeInfo, cleanMediaTitle } from './utils/seriesGroupers';
 import type { GroupedSeries, SeriesEpisode } from './utils/seriesGroupers';
 import './types';
-import type { SavedPlaylist, Profile } from './types';
+import type { ContentPreference, SavedPlaylist, Profile } from './types';
 import { HERO_BACKDROPS, GLOBAL_KEYS, DEFAULT_AVATARS, TMDB_CACHE_VERSION } from './constants';
 import { getMockDetails, hexToRgbStr } from './utils/helpers';
 import {
@@ -12,12 +12,15 @@ import {
   buildTmdbSearchPath,
   getResolvedTmdbResult,
   getTmdbApiKey,
-  resolveTmdbImageSrc
+  resolveTmdbImageSrc,
+  getTmdbLanguage
 } from './utils/tmdb';
 
 import { useCategoryManager } from './hooks/useCategoryManager';
 import { CinematicPlayer } from './components/CinematicPlayer';
 import { SettingsProvider } from './context/SettingsContext';
+import { getTranslation } from './utils/translations';
+import type { Language } from './utils/translations';
 
 import {
   getSearchScore,
@@ -53,7 +56,14 @@ const turkishCollator = new Intl.Collator('tr', { sensitivity: 'base', numeric: 
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [splashStatus, setSplashStatus] = useState<string>('Strmly başlatılıyor...');
+  const [splashStatus, setSplashStatus] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('cinema_language');
+      return stored === 'en' ? 'Starting Strmly...' : 'Strmly başlatılıyor...';
+    } catch {
+      return 'Strmly başlatılıyor...';
+    }
+  });
   const [toast, setToast] = useState({ show: false, message: '' });
 
   const showToast = useCallback((message: string) => {
@@ -110,6 +120,20 @@ export default function App() {
   const [neonGlowEnabled, setNeonGlowEnabled] = useState<boolean>(true);
   const [cardLayoutSize, setCardLayoutSize] = useState<string>('medium');
   const [activeSettingsTab, setActiveSettingsTab] = useState<string>('players');
+  const [language, setLanguageState] = useState<Language>(() => {
+    try {
+      const stored = localStorage.getItem('cinema_language');
+      if (stored) {
+        const parsed = stored.startsWith('"') ? JSON.parse(stored) : stored;
+        if (parsed === 'en' || parsed === 'tr') return parsed;
+      }
+    } catch (e) {}
+    return 'tr';
+  });
+
+  const t = useCallback((key: string) => {
+    return getTranslation(key, language);
+  }, [language]);
   const [scrolled, setScrolled] = useState<boolean>(false);
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
 
@@ -207,22 +231,23 @@ export default function App() {
     saveAppSetting: (key, val, profileId) => saveAppSetting(key, val, profileId),
     loadAppSetting: (key, isJson, profileId) => loadAppSetting(key, isJson, profileId),
     showToast: (msg) => showToast(msg),
-    loadProfileData: (id) => loadProfileData(id),
+    loadProfileData: (id) => loadProfileData(id, false),
     resetAllProfileData: () => resetAllProfileData(),
     setIsParsing: (val) => setIsParsing(val)
   });
 
   const { activeProfileId, setActiveProfileId, currentProfile } = profilesHook;
+  const activeContentPreferences = useMemo<ContentPreference[]>(() => currentProfile?.contentPreferences || [], [currentProfile]);
 
   useEffect(() => {
     activeProfileIdRef.current = activeProfileId;
   }, [activeProfileId]);
 
-  async function loadProfileData(profileId: string) {
+  async function loadProfileData(profileId: string, activateProfile = true) {
     await preferences.load(profileId);
     await playlistsHook.load(profileId);
     await playerState.load(profileId);
-    setActiveProfileId(profileId);
+    if (activateProfile) setActiveProfileId(profileId);
   }
 
   async function resetAllProfileData() {
@@ -280,6 +305,7 @@ export default function App() {
     profileSelectMode, setProfileSelectMode,
     profileFormName, setProfileFormName,
     profileFormAvatar, setProfileFormAvatar,
+    profileContentPreferences, setProfileContentPreferences,
     editingProfileId, setEditingProfileId,
     profilePlaylistType, setProfilePlaylistType,
     profileM3uUrl, setProfileM3uUrl,
@@ -296,6 +322,8 @@ export default function App() {
     seriesCast, setSeriesCast,
     castLoading, setCastLoading,
     profileDropdownOpen, setProfileDropdownOpen,
+    profileEntryReady,
+    profileSetupStatus,
     handleSelectProfile,
     handleLogoutProfile,
     handleDeleteProfile,
@@ -305,6 +333,13 @@ export default function App() {
   const [selectedSeriesForModal, setSelectedSeriesForModal] = useState<GroupedSeries | null>(null);
   const [activeSeason, setActiveSeason] = useState<number>(1);
   const [expandedEpisodeId, setExpandedEpisodeId] = useState<string | null>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const playerReturnStateRef = useRef<{
+    seriesModal: GroupedSeries | null;
+    channelModal: PlaylistItem | null;
+    scrollTop: number;
+  } | null>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -660,6 +695,13 @@ export default function App() {
         if (item.type === 'series') score += 30;
         if (item.type === 'movie') score += 20;
 
+        if (activeContentPreferences.includes('series') && item.type === 'series') score += 180;
+        if (activeContentPreferences.includes('movies') && item.type === 'movie') score += 180;
+        if (activeContentPreferences.includes('kids')) {
+          const kidsKeywords = ['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney', 'nickelodeon'];
+          if (kidsKeywords.some(keyword => name.includes(keyword) || group.includes(keyword))) score += 240;
+        }
+
         return score;
       };
 
@@ -826,7 +868,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [items, itemBuckets, tmdbApiKey]);
+  }, [items, itemBuckets, tmdbApiKey, activeContentPreferences]);
 
   // Fetch TMDB data for active featured carousel item
   useEffect(() => {
@@ -954,12 +996,12 @@ export default function App() {
 
           const unsub = onUpdateStatus((data: any) => {
             if (data.status === 'checking') {
-              setSplashStatus('Güncelleştirmeler kontrol ediliyor...');
+              setSplashStatus(getTranslation('splash.checkingUpdates', language));
             } else if (data.status === 'available') {
-              setSplashStatus('Yeni güncelleme indiriliyor...');
+              setSplashStatus(getTranslation('settings.about.updateFound', language).replace('{{version}}', ''));
               clearTimeout(safetyTimeout);
             } else if (data.status === 'downloaded') {
-              setSplashStatus('Güncelleme indirildi, kuruluyor...');
+              setSplashStatus(getTranslation('splash.updateDownloaded', language));
               setTimeout(() => {
                 installUpdate();
               }, 1200);
@@ -981,7 +1023,7 @@ export default function App() {
       }
 
       // Stage 2: Kullanıcı ayarları yükleniyor
-      setSplashStatus('Kullanıcı ayarları yükleniyor...');
+      setSplashStatus(getTranslation('splash.loadingSettings', language));
       const [
         savedProfiles,
         configPlayer,
@@ -990,7 +1032,8 @@ export default function App() {
         configTheme,
         configGlass,
         configGlow,
-        configCardSize
+        configCardSize,
+        configLanguage
       ] = await Promise.all([
         loadAppSetting('cinema_profiles', true),
         loadAppSetting('cinema_default_player'),
@@ -999,7 +1042,8 @@ export default function App() {
         loadAppSetting('cinema_theme'),
         loadAppSetting('cinema_glass_intensity'),
         loadAppSetting('cinema_neon_glow'),
-        loadAppSetting('cinema_card_layout_size')
+        loadAppSetting('cinema_card_layout_size'),
+        loadAppSetting('cinema_language')
       ]);
 
       let loadedProfiles = Array.isArray(savedProfiles) ? savedProfiles : [];
@@ -1013,6 +1057,9 @@ export default function App() {
       setGlassIntensity(configGlass || 'medium');
       setNeonGlowEnabled(configGlow !== null ? configGlow === 'true' || configGlow === true : true);
       setCardLayoutSize(configCardSize || 'medium');
+      if (configLanguage === 'en' || configLanguage === 'tr') {
+        setLanguageState(configLanguage);
+      }
 
       // Migrate checks
       const hasOldPlaylists = localStorage.getItem('cinema_playlists');
@@ -1057,7 +1104,7 @@ export default function App() {
       await ensureMinDelay(1800);
 
       // Stage 3: Playlistler güncelleniyor
-      setSplashStatus('Playlistler güncelleniyor...');
+      setSplashStatus(getTranslation('splash.loadingContents', language));
       try {
         await tmdbCache.loadAllToMemory();
       } catch (err) {
@@ -1066,14 +1113,14 @@ export default function App() {
       await ensureMinDelay(2600);
 
       // Stage 4: Profil verileri yükleniyor & Strmly başlatılıyor
-      setSplashStatus('Strmly başlatılıyor...');
+      setSplashStatus(getTranslation('splash.loadingProfiles', language));
       const activeProfId = await loadAppSetting('cinema_active_profile_id');
       if (activeProfId && loadedProfiles.some(p => p.id === activeProfId)) {
         try {
           await loadProfileData(activeProfId);
         } catch (error) {
           console.error("Error loading active profile:", error);
-          showToast("Profil verileri yüklenirken bir hata oluştu.");
+          showToast(getTranslation('profiles.loadingProfilesError', language));
         }
       } else {
         setActiveProfileId(null);
@@ -1087,104 +1134,41 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch popular avatars from TMDB (trending weekly movies/series and popular actors)
-  useEffect(() => {
-    const fetchTrendingAvatars = async () => {
-      if (!tmdbApiKey) return;
-      try {
-        let trendingResults: any[] = [];
-        let popularPeopleResults: any[] = [];
-
-        // 1. Fetch weekly trending
-        const trendingPath = `/3/trending/all/week?api_key=${tmdbApiKey}&language=tr-TR`;
-        if (window.electronAPI && window.electronAPI.fetchTmdb) {
-          const res = await window.electronAPI.fetchTmdb(trendingPath);
-          if (res && Array.isArray(res.results)) {
-            trendingResults = res.results;
-          }
-        } else {
-          const res = await fetch(`https://api.themoviedb.org${trendingPath}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data.results)) {
-              trendingResults = data.results;
-            }
-          }
-        }
-
-        // 2. Fetch popular actors
-        const popularPeoplePath = `/3/person/popular?api_key=${tmdbApiKey}&language=tr-TR`;
-        if (window.electronAPI && window.electronAPI.fetchTmdb) {
-          const res = await window.electronAPI.fetchTmdb(popularPeoplePath);
-          if (res && Array.isArray(res.results)) {
-            popularPeopleResults = res.results;
-          }
-        } else {
-          const res = await fetch(`https://api.themoviedb.org${popularPeoplePath}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data.results)) {
-              popularPeopleResults = data.results;
-            }
-          }
-        }
-
-        const imagePaths: { path: string; size: string }[] = [];
-
-        // Interleave actor profiles and trending posters for a mixed avatar pool.
-        const maxLength = Math.max(popularPeopleResults.length, trendingResults.length);
-        for (let i = 0; i < maxLength; i++) {
-          if (i < popularPeopleResults.length && popularPeopleResults[i].profile_path) {
-            imagePaths.push({ path: popularPeopleResults[i].profile_path, size: 'w185' });
-          }
-          if (i < trendingResults.length && trendingResults[i].poster_path) {
-            imagePaths.push({ path: trendingResults[i].poster_path, size: 'w185' });
-          }
-        }
-
-        const uniquePaths = Array.from(new Set(imagePaths.map(p => `${p.size}:${p.path}`))).map(str => {
-          const [size, path] = str.split(':');
-          return { size, path };
-        }).slice(0, 36);
-
-        const imagePromises = uniquePaths.map(p => resolveTmdbImageSrc(p.path, p.size));
-        const resolvedImages = await Promise.all(imagePromises);
-        setTrendingAvatars(resolvedImages.filter((img): img is string => !!img));
-      } catch (e) {
-        console.error("Error fetching trending avatars:", e);
-      }
-    };
-
-    if (loaded) {
-      fetchTrendingAvatars();
-    }
-  }, [loaded, tmdbApiKey, setTrendingAvatars]);
-
   // Fetch popular Turkish series on boot
   useEffect(() => {
+    let cancelled = false;
+
     const fetchLocalSeriesList = async () => {
-      if (!tmdbApiKey) return;
+      if (!tmdbApiKey) {
+        setTrendingAvatars([]);
+        return;
+      }
+
+      // Never leave an avatar pool from a previous request/profile visible.
+      setTrendingAvatars([]);
       try {
-        let results: any[] = [];
-        const discoverPath = `/3/discover/tv?api_key=${tmdbApiKey}&with_original_language=tr&sort_by=popularity.desc&language=tr-TR`;
-
-        if (window.electronAPI && window.electronAPI.fetchTmdb) {
-          const res = await window.electronAPI.fetchTmdb(discoverPath);
-          if (res && Array.isArray(res.results)) {
-            results = res.results;
+        const fetchTmdbJson = async (path: string) => {
+          if (window.electronAPI?.fetchTmdb) {
+            return await window.electronAPI.fetchTmdb(path) as any;
           }
-        } else {
-          const res = await fetch(`https://api.themoviedb.org${discoverPath}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data.results)) {
-              results = data.results;
-            }
-          }
-        }
+          const response = await fetch(`https://api.themoviedb.org${path}`);
+          if (!response.ok) throw new Error(`TMDB HTTP ${response.status}`);
+          return await response.json();
+        };
 
-        // We only need the first 24 local series
-        const items = results.filter(item => item.poster_path).slice(0, 24);
+        const tmdbLang = getTmdbLanguage();
+        // Pull several pages and explicitly prioritize productions originating
+        // from Turkey. One TMDB page only contains 20 results.
+        const pages = await Promise.all([1, 2, 3].map(page => {
+          const discoverPath = `/3/discover/tv?api_key=${tmdbApiKey}&with_origin_country=TR&with_original_language=tr&sort_by=popularity.desc&include_null_first_air_dates=false&language=${tmdbLang}&page=${page}`;
+          return fetchTmdbJson(discoverPath);
+        }));
+        const seenIds = new Set<number>();
+        const results = pages
+          .flatMap(data => Array.isArray(data?.results) ? data.results : [])
+          .filter(item => item?.id && !seenIds.has(item.id) && seenIds.add(item.id));
+
+        const items = results.filter(item => item.poster_path).slice(0, 48);
 
         // Resolve images in parallel
         const resolvedList = await Promise.all(
@@ -1198,7 +1182,27 @@ export default function App() {
           })
         );
 
+        if (cancelled) return;
         setLocalSeries(resolvedList.filter(item => item.posterUrl));
+
+        // Build the quick-avatar row from actors in prominent Turkish series,
+        // so every thumbnail is a face rather than a poster.
+        const credits = await Promise.all(items.slice(0, 12).map(item => (
+          fetchTmdbJson(`/3/tv/${item.id}/credits?api_key=${tmdbApiKey}&language=${tmdbLang}`).catch(() => ({ cast: [] }))
+        )));
+        const seenProfiles = new Set<string>();
+        const actorPaths = credits
+          .flatMap(data => Array.isArray(data?.cast) ? data.cast : [])
+          .filter(actor => actor?.profile_path && !seenProfiles.has(actor.profile_path) && seenProfiles.add(actor.profile_path))
+          .slice(0, 36)
+          .map(actor => actor.profile_path as string);
+
+        if (actorPaths.length > 0) {
+          const actorImages = await Promise.all(actorPaths.map(path => resolveTmdbImageSrc(path, 'w185')));
+          if (!cancelled) {
+            setTrendingAvatars(actorImages.filter((image): image is string => Boolean(image)));
+          }
+        }
       } catch (e) {
         console.error("Error fetching local series:", e);
       }
@@ -1207,14 +1211,18 @@ export default function App() {
     if (loaded) {
       fetchLocalSeriesList();
     }
-  }, [loaded, tmdbApiKey, setLocalSeries]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded, tmdbApiKey, setLocalSeries, setTrendingAvatars]);
 
   const handleFetchSeriesCast = async (seriesId: number, seriesName: string, mediaType: 'movie' | 'tv' = 'tv') => {
     setCastLoading(true);
     setSelectedSeriesForCast({ id: seriesId, name: seriesName });
     try {
       let castList: any[] = [];
-      const creditsPath = `/3/${mediaType}/${seriesId}/credits?api_key=${tmdbApiKey}&language=tr-TR`;
+      const creditsPath = `/3/${mediaType}/${seriesId}/credits?api_key=${tmdbApiKey}&language=${getTmdbLanguage()}`;
 
       if (window.electronAPI && window.electronAPI.fetchTmdb) {
         const res = await window.electronAPI.fetchTmdb(creditsPath) as any;
@@ -1248,7 +1256,7 @@ export default function App() {
       setSeriesCast(resolvedCast.filter(item => item.avatarUrl));
     } catch (e) {
       console.error("Error fetching cast:", e);
-      showToast("Oyuncular yüklenirken bir hata oluştu.");
+      showToast(language === 'tr' ? "Oyuncular yüklenirken bir hata oluştu." : "An error occurred while loading actors.");
     } finally {
       setCastLoading(false);
     }
@@ -1479,6 +1487,42 @@ export default function App() {
     }
   };
 
+  const getFavoriteIdForItem = (item: PlaylistItem | GroupedSeries): string => {
+    if ('seasons' in item) return item.id;
+    if (item.type !== 'series') return item.id;
+
+    const parsed = parseSeriesEpisodeInfo(item.name);
+    const grouped = allGroupedSeries.find(series =>
+      series.name === parsed.cleanTitle &&
+      (series.group || 'Genel') === (item.group || 'Genel')
+    );
+    return grouped?.id ?? item.id;
+  };
+
+  const clearRecentlyWatched = () => {
+    setRecentlyWatched([]);
+    saveAppSetting('cinema_recently_watched', []);
+    showToast(language === 'tr' ? "İzleme geçmişi temizlendi." : "Watch history cleared.");
+  };
+
+  const removeFromRecentlyWatched = (item: PlaylistItem) => {
+    setRecentlyWatched(previous => {
+      const parsedTarget = item.type === 'series' ? parseSeriesEpisodeInfo(item.name) : null;
+      const updated = previous.filter(candidate => {
+        if (candidate.id === item.id) return false;
+        if (!parsedTarget || candidate.type !== 'series') return true;
+        const parsedCandidate = parseSeriesEpisodeInfo(candidate.name);
+        return parsedCandidate.cleanTitle !== parsedTarget.cleanTitle ||
+          (candidate.group || 'Genel') !== (item.group || 'Genel');
+      });
+      saveAppSetting('cinema_recently_watched', updated);
+      return updated;
+    });
+    showToast(item.type === 'series'
+      ? (language === 'tr' ? "Dizi izleme geçmişinden kaldırıldı." : "Series removed from watch history.")
+      : (language === 'tr' ? "İçerik izleme geçmişinden kaldırıldı." : "Content removed from watch history."));
+  };
+
   const handleScrollSlider = (sliderId: string, direction: 'left' | 'right') => {
     const el = document.getElementById(sliderId);
     if (el) {
@@ -1489,6 +1533,16 @@ export default function App() {
 
   // Launch Internal/External Media Player
   const handlePlayStream = (item: PlaylistItem) => {
+    // Preserve the exact screen that launched the player. Episode changes
+    // inside the player must not overwrite the original return destination.
+    if (!selectedChannel) {
+      playerReturnStateRef.current = {
+        seriesModal: selectedSeriesForModal,
+        channelModal: selectedChannelForModal,
+        scrollTop: mainContentRef.current?.scrollTop ?? 0
+      };
+    }
+
     setSelectedChannelForModal(null);
     setSelectedSeriesForModal(null);
 
@@ -1513,12 +1567,12 @@ export default function App() {
             // Fallback to internal player if external player launch fails
             setSelectedChannel(itemToPlay);
           } else {
-            showToast(`${defaultPlayer.toUpperCase()} Oynatıcıda başlatıldı.`);
+            showToast(language === 'tr' ? `${defaultPlayer.toUpperCase()} Oynatıcıda başlatıldı.` : `Started in ${defaultPlayer.toUpperCase()} Player.`);
           }
         })
         .catch((err) => {
           console.error("External player failed:", err);
-          showToast("Harici oynatıcı başlatılamadı.");
+          showToast(language === 'tr' ? "Harici oynatıcı başlatılamadı." : "External player could not be started.");
           setSelectedChannel(itemToPlay);
         });
     } else {
@@ -1540,11 +1594,15 @@ export default function App() {
 
   const runPlaylistDiagnostics = useCallback(async () => {
     if (items.length === 0) {
-      showToast("Kontrol edilecek kanal bulunamadı!");
+      showToast(language === 'tr' ? "Kontrol edilecek kanal bulunamadı!" : "No channels found to check!");
       return;
     }
     setIsCheckingHealth(true);
-    setCheckerLog(["Test başlatılıyor...", `Toplam kanal sayısı: ${items.length}`, "HEAD istekleri gönderiliyor..."]);
+    setCheckerLog([
+      language === 'tr' ? "Test başlatılıyor..." : "Starting diagnostics...",
+      language === 'tr' ? `Toplam kanal sayısı: ${items.length}` : `Total channel count: ${items.length}`,
+      language === 'tr' ? "HEAD istekleri gönderiliyor..." : "Sending HEAD requests..."
+    ]);
 
     const limit = 20; // Check up to 20 channels to save performance
     const toCheck = items.slice(0, limit);
@@ -1552,19 +1610,19 @@ export default function App() {
 
     for (let i = 0; i < toCheck.length; i++) {
       const ch = toCheck[i];
-      setCheckerLog(prev => [...prev, `[Sorgu ${i + 1}/${limit}] ${ch.name} test ediliyor...`]);
+      setCheckerLog(prev => [...prev, language === 'tr' ? `[Sorgu ${i + 1}/${limit}] ${ch.name} test ediliyor...` : `[Query ${i + 1}/${limit}] Checking ${ch.name}...`]);
       try {
         const res = await fetch(ch.url, { method: 'HEAD', mode: 'cors', headers: { 'User-Agent': '9XtreamPlayer LibVLC/3.0.22-rc1' } }).catch(() => null);
         if (res && res.status >= 200 && res.status < 400) {
           statusResults[ch.id] = 'online';
-          setCheckerLog(prev => [...prev, `ÇEVRİMİÇİ | Kod: ${res.status}`]);
+          setCheckerLog(prev => [...prev, language === 'tr' ? `ÇEVRİMİÇİ | Kod: ${res.status}` : `ONLINE | Status: ${res.status}`]);
         } else {
           statusResults[ch.id] = 'offline';
-          setCheckerLog(prev => [...prev, `ÇEVRİMDIŞI veya CORS Engeli`]);
+          setCheckerLog(prev => [...prev, language === 'tr' ? `ÇEVRİMDIŞI veya CORS Engeli` : `OFFLINE or CORS blocked`]);
         }
       } catch {
         statusResults[ch.id] = 'offline';
-        setCheckerLog(prev => [...prev, `HATA | Ulaşılamadı`]);
+        setCheckerLog(prev => [...prev, language === 'tr' ? `HATA | Ulaşılamadı` : `ERROR | Unreachable`]);
       }
       // Brief pause
       await new Promise(r => setTimeout(r, 100));
@@ -1572,9 +1630,9 @@ export default function App() {
 
     setCheckedStatusMap(prev => ({ ...prev, ...statusResults }));
     setIsCheckingHealth(false);
-    setCheckerLog(prev => [...prev, "✓ Test tamamlandı. Sonuçlar listelere yansıtıldı!"]);
-    showToast("Sağlık kontrolü tamamlandı!");
-  }, [items, showToast]);
+    setCheckerLog(prev => [...prev, language === 'tr' ? "✓ Test tamamlandı. Sonuçlar listelere yansıtıldı!" : "✓ Diagnostics complete. Results updated in lists!"]);
+    showToast(language === 'tr' ? "Sağlık kontrolü tamamlandı!" : "Health check complete!");
+  }, [items, showToast, language]);
 
   // Theme variable bindings for dynamic CSS overrides
   const getAccentStyles = () => {
@@ -1889,6 +1947,10 @@ export default function App() {
       for (let i = 0; i < seed.length; i++) {
         score = (score + seed.charCodeAt(i)) % 997;
       }
+      if (activeContentPreferences.includes('kids')) {
+        const text = `${item.name} ${item.group || ''}`.toLocaleLowerCase('tr-TR');
+        if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1200;
+      }
       return score;
     };
 
@@ -1907,7 +1969,7 @@ export default function App() {
       .sort((a, b) => b.score - a.score)
       .map(entry => entry.item)
       .slice(0, 80);
-  }, [itemBuckets.movie]);
+  }, [itemBuckets.movie, activeContentPreferences]);
 
   // Memoized popular series, excluding maintenance/test/backup items
   const populerDiziler = useMemo(() => {
@@ -1918,6 +1980,10 @@ export default function App() {
       let score = 0;
       for (let i = 0; i < seed.length; i++) {
         score = (score + seed.charCodeAt(i)) % 997;
+      }
+      if (activeContentPreferences.includes('kids')) {
+        const text = `${item.name} ${item.group || ''}`.toLocaleLowerCase('tr-TR');
+        if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1200;
       }
       return score;
     };
@@ -1937,7 +2003,7 @@ export default function App() {
       .sort((a, b) => b.score - a.score)
       .map(entry => entry.item)
       .slice(0, 80);
-  }, [allGroupedSeries]);
+  }, [allGroupedSeries, activeContentPreferences]);
 
   const homeDiscoveryItems = useMemo(() => {
     if (itemBuckets.movie.length + allGroupedSeries.length === 0) return [];
@@ -1947,6 +2013,12 @@ export default function App() {
       let score = 0;
       for (let i = 0; i < seed.length; i++) {
         score = (score + seed.charCodeAt(i)) % 997;
+      }
+      if (activeContentPreferences.includes('series') && item.type === 'series') score += 700;
+      if (activeContentPreferences.includes('movies') && item.type === 'movie') score += 700;
+      if (activeContentPreferences.includes('kids')) {
+        const text = `${item.name} ${item.group || ''}`.toLocaleLowerCase('tr-TR');
+        if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1000;
       }
       return score;
     };
@@ -1981,7 +2053,7 @@ export default function App() {
     return selected
       .sort((a, b) => b.score - a.score)
       .map(entry => entry.item);
-  }, [itemBuckets.movie, allGroupedSeries]);
+  }, [itemBuckets.movie, allGroupedSeries, activeContentPreferences]);
 
   // Memoized Live TV quick popular Turkish channels
   const homeLiveTvQuickChannels = useMemo(() => {
@@ -2045,8 +2117,19 @@ export default function App() {
       }
     }
 
-    return selected.slice(0, 15);
-  }, [itemBuckets.live]);
+    const visibleChannels = selected.slice(0, 15);
+    if (activeContentPreferences.includes('sports')) {
+      const sportsKeywords = ['spor', 'sport', 'bein', 's sport', 'ssport', 'tivibu spor', 'smart spor', 'nba', 'futbol'];
+      return [...visibleChannels].sort((a, b) => {
+        const aText = `${a.name} ${a.group || ''}`.toLocaleLowerCase('tr-TR');
+        const bText = `${b.name} ${b.group || ''}`.toLocaleLowerCase('tr-TR');
+        const aSport = sportsKeywords.some(keyword => aText.includes(keyword)) ? 1 : 0;
+        const bSport = sportsKeywords.some(keyword => bText.includes(keyword)) ? 1 : 0;
+        return bSport - aSport;
+      });
+    }
+    return visibleChannels;
+  }, [itemBuckets.live, activeContentPreferences]);
 
   const player = useCinematicPlayer({
     selectedChannel,
@@ -2054,13 +2137,39 @@ export default function App() {
       if (player.videoRef.current && player.duration > 0) {
         if (selectedChannel) saveWatchProgress(selectedChannel, player.videoRef.current.currentTime, player.duration);
       }
+      const returnState = playerReturnStateRef.current;
+      pendingScrollRestoreRef.current = returnState?.scrollTop ?? 0;
       setSelectedChannel(null);
+      setSelectedSeriesForModal(returnState?.seriesModal ?? null);
+      setSelectedChannelForModal(returnState?.channelModal ?? null);
+      playerReturnStateRef.current = null;
     },
     saveWatchProgress,
     showToast
   });
 
+  useEffect(() => {
+    if (selectedChannel || pendingScrollRestoreRef.current === null) return;
+
+    const scrollTop = pendingScrollRestoreRef.current;
+    pendingScrollRestoreRef.current = null;
+    const frameId = requestAnimationFrame(() => {
+      if (mainContentRef.current) {
+        mainContentRef.current.scrollTop = scrollTop;
+      }
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [selectedChannel]);
+
+  const setLanguage = useCallback((lang: Language) => {
+    setLanguageState(lang);
+    saveAppSetting('cinema_language', lang);
+  }, [saveAppSetting]);
+
   const settingsContextValue = useMemo(() => ({
+    language,
+    setLanguage,
+    t,
     activeSettingsTab,
     setActiveSettingsTab,
     defaultPlayer,
@@ -2194,14 +2303,16 @@ export default function App() {
     setActiveAccent,
     setGlassIntensity,
     setNeonGlowEnabled,
-    setCardLayoutSize
+    setCardLayoutSize,
+    language,
+    t,
+    setLanguage
   ]);
 
   if (selectedChannel) {
     return (
       <CinematicPlayer
         channel={selectedChannel}
-        recentlyWatched={recentlyWatched}
         channels={items}
         onChannelChange={handlePlayStream}
         videoRef={player.videoRef}
@@ -2226,7 +2337,12 @@ export default function App() {
           if (player.videoRef.current && player.duration > 0) {
             saveWatchProgress(selectedChannel, player.videoRef.current.currentTime, player.duration);
           }
+          const returnState = playerReturnStateRef.current;
+          pendingScrollRestoreRef.current = returnState?.scrollTop ?? 0;
           setSelectedChannel(null);
+          setSelectedSeriesForModal(returnState?.seriesModal ?? null);
+          setSelectedChannelForModal(returnState?.channelModal ?? null);
+          playerReturnStateRef.current = null;
         }}
         onTogglePlay={player.handleTogglePlay}
         onToggleMute={player.handleTogglePlayerMute}
@@ -2309,6 +2425,7 @@ export default function App() {
           profileSelectMode={profileSelectMode}
           profileFormName={profileFormName}
           profileFormAvatar={profileFormAvatar}
+          profileContentPreferences={profileContentPreferences}
           editingProfileId={editingProfileId}
           profilePlaylistType={profilePlaylistType}
           profileM3uUrl={profileM3uUrl}
@@ -2325,12 +2442,15 @@ export default function App() {
           seriesCast={seriesCast}
           castLoading={castLoading}
           isParsing={isParsing}
+          profileSetupStatus={profileSetupStatus}
+          profileEntryReady={profileEntryReady}
           toast={toast}
           activeTheme={activeTheme}
           accentStyles={getAccentStyles()}
           setProfileSelectMode={setProfileSelectMode}
           setProfileFormName={setProfileFormName}
           setProfileFormAvatar={setProfileFormAvatar}
+          setProfileContentPreferences={setProfileContentPreferences}
           setEditingProfileId={setEditingProfileId}
           setProfilePlaylistType={setProfilePlaylistType}
           setProfileM3uUrl={setProfileM3uUrl}
@@ -2365,6 +2485,7 @@ export default function App() {
       <div
         className={`app-wrapper flex flex-col h-screen bg-[var(--bg-main)] text-white relative overflow-hidden select-none ${activeTheme}`}
         style={getAccentStyles()}
+        onContextMenu={(event) => event.preventDefault()}
       >
       <div className="absolute top-[-15%] left-[10%] w-[800px] h-[800px] rounded-full bg-glow-one blur-[120px] pointer-events-none z-0" />
       <div className="absolute bottom-[-15%] right-[5%] w-[700px] h-[700px] rounded-full bg-glow-two blur-[100px] pointer-events-none z-0" />
@@ -2408,7 +2529,7 @@ export default function App() {
         updateAvailable={updateAvailable}
       />
 
-      <div className="flex-1 overflow-y-auto px-6 md:px-10 pt-28 pb-10 relative z-30 select-none hide-scrollbar" onScroll={handleMainScroll}>
+      <div ref={mainContentRef} className="flex-1 overflow-y-auto px-6 md:px-10 pt-28 pb-10 relative z-30 select-none hide-scrollbar" onScroll={handleMainScroll}>
         {selectedGroup === 'Ana Sayfa' && !deferredSearchQuery.trim() && (
           <Suspense fallback={null}>
         <HomeView
@@ -2423,17 +2544,20 @@ export default function App() {
           activeShowcaseList={activeShowcaseList}
           playlists={playlists}
           uniqueRecentlyWatched={uniqueRecentlyWatched}
-          setRecentlyWatched={setRecentlyWatched}
+          clearRecentlyWatched={clearRecentlyWatched}
+          removeFromRecentlyWatched={removeFromRecentlyWatched}
           handleScrollSlider={handleScrollSlider}
           handlePlayStream={handlePlayStream}
           handleOpenDetails={handleOpenDetails}
           genericLogosSet={genericLogosSet}
           toggleFavorite={toggleFavorite}
           globalFavorites={globalFavorites}
+          getFavoriteIdForItem={getFavoriteIdForItem}
           homeDiscoveryItems={homeDiscoveryItems}
           homeLiveTvQuickChannels={homeLiveTvQuickChannels}
           populerFilmler={populerFilmler}
           populerDiziler={populerDiziler}
+          contentPreferences={activeContentPreferences}
           setSelectedGroup={setSelectedGroup}
           setActiveLiveCategory={setActiveLiveCategory}
           setActiveSeriesCategory={setActiveSeriesCategory}
@@ -2556,6 +2680,7 @@ export default function App() {
           filteredDisplayItems={favItems}
           handleMainScroll={handleMainScroll}
           handleOpenDetails={handleOpenDetails}
+          handlePlayStream={handlePlayStream}
           genericLogosSet={genericLogosSet}
           checkedStatusMap={checkedStatusMap}
           toggleFavorite={toggleFavorite}

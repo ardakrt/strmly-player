@@ -1,7 +1,11 @@
 import React, { createContext, useContext } from 'react';
 import type { SavedPlaylist } from '../types';
+import type { Language } from '../utils/translations';
 
 export interface SettingsContextType {
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: string) => string;
   activeSettingsTab: string;
   setActiveSettingsTab: (tab: string) => void;
   defaultPlayer: string;

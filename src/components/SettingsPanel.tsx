@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Activity,
   BarChart3,
@@ -56,6 +56,69 @@ const helpStyle = 'text-xs leading-relaxed text-neutral-400 mt-1 font-light';
 const primaryButton = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent-color)] px-4 text-xs font-black uppercase tracking-wider text-black transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
 const secondaryButton = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.02] px-4 text-xs font-bold uppercase tracking-wider text-neutral-200 transition-all hover:bg-white/[0.06] hover:text-white active:scale-[0.98] disabled:opacity-50 cursor-pointer';
 const dangerButton = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-red-500/15 bg-red-950/15 px-3 text-xs font-bold uppercase tracking-wider text-red-300 transition-all hover:bg-red-900/20 active:scale-[0.98] cursor-pointer';
+
+interface CustomSelectProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}
+
+function CustomSelect({ value, onChange, options, className = '' }: CustomSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find(o => o.value === value) || options[0];
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className={`relative w-full md:w-64 select-none ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 pr-9 text-xs text-white outline-none flex items-center justify-between transition-all hover:bg-white/[0.04] hover:border-white/20 active:scale-[0.98] text-left"
+      >
+        <span className="truncate">{selectedOption?.label}</span>
+        <ChevronDown size={14} className={`text-neutral-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-[100] max-h-60 overflow-y-auto rounded-lg border border-white/10 bg-neutral-950 p-1 backdrop-blur-xl shadow-2xl animate-fade-in scrollbar-thin">
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-md transition-colors flex items-center justify-between ${
+                  isSelected
+                    ? 'bg-[var(--accent-color)] text-black font-black'
+                    : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <span className="truncate pr-2">{option.label}</span>
+                {isSelected && <Check size={12} strokeWidth={3} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PageHeader({ title, description }: { title: string; description: string }) {
   return (
@@ -125,6 +188,7 @@ function EmptyState({ icon: Icon, title, description }: { icon: React.ComponentT
 
 export const SettingsPanel = () => {
   const {
+    language, setLanguage, t,
     activeSettingsTab, setActiveSettingsTab,
     defaultPlayer, setDefaultPlayer,
     tmdbApiKey, setTmdbApiKey,
@@ -193,13 +257,13 @@ export const SettingsPanel = () => {
 
   const handleCheckUpdates = async () => {
     if (window.electronAPI && window.electronAPI.checkForUpdates) {
-      setUpdateState({ status: 'checking', message: 'Güncellemeler denetleniyor...' });
+      setUpdateState({ status: 'checking', message: language === 'tr' ? 'Güncellemeler denetleniyor...' : 'Checking for updates...' });
       const res = await window.electronAPI.checkForUpdates();
       if (res && !res.success) {
-        setUpdateState({ status: 'error', message: `Güncelleme denetleme başarısız: ${res.error}` });
+        setUpdateState({ status: 'error', message: language === 'tr' ? `Güncelleme denetleme başarısız: ${res.error}` : `Update check failed: ${res.error}` });
       }
     } else {
-      setUpdateState({ status: 'error', message: 'Electron API bulunamadı.' });
+      setUpdateState({ status: 'error', message: language === 'tr' ? 'Electron API bulunamadı.' : 'Electron API not found.' });
     }
   };
 
@@ -271,15 +335,15 @@ export const SettingsPanel = () => {
   };
 
   const tabs = [
-    { id: 'players', label: 'Genel', icon: Activity },
-    { id: 'playlists', label: 'Çalma Listeleri', icon: Database },
-    { id: 'categories', label: 'Gizli Kategoriler', icon: EyeOff },
-    { id: 'appearance', label: 'Arayüz ve Görünüm', icon: Palette },
-    { id: 'playback', label: 'Oynatma Seçenekleri', icon: Check },
-    { id: 'network', label: 'Ağ ve Bağlantı', icon: UploadCloud },
-    { id: 'stats', label: 'Sağlık ve Analiz', icon: BarChart3 },
-    { id: 'data', label: 'Veri Yönetimi', icon: HardDrive },
-    { id: 'about', label: 'Hakkında', icon: Info }
+    { id: 'players', label: t('settings.tabs.players'), icon: Activity },
+    { id: 'playlists', label: t('settings.tabs.playlists'), icon: Database },
+    { id: 'categories', label: t('settings.tabs.categories'), icon: EyeOff },
+    { id: 'appearance', label: t('settings.tabs.appearance'), icon: Palette },
+    { id: 'playback', label: t('settings.tabs.playback'), icon: Check },
+    { id: 'network', label: t('settings.tabs.network'), icon: UploadCloud },
+    { id: 'stats', label: t('settings.tabs.stats'), icon: BarChart3 },
+    { id: 'data', label: t('settings.tabs.data'), icon: HardDrive },
+    { id: 'about', label: t('settings.tabs.about'), icon: Info }
   ];
 
   const activeTab = tabs.find(tab => tab.id === activeSettingsTab) || tabs[0];
@@ -288,7 +352,7 @@ export const SettingsPanel = () => {
   const topGroups = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const item of items) {
-      const group = item.group || 'Diğer';
+      const group = item.group || (language === 'tr' ? 'Diğer' : 'Other');
       counts[group] = (counts[group] || 0) + 1;
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -316,9 +380,9 @@ export const SettingsPanel = () => {
       a.download = `strmly-settings-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      onShowToast('Ayarlar dışa aktarıldı.');
+      onShowToast(language === 'tr' ? 'Ayarlar dışa aktarıldı.' : 'Settings exported.');
     } catch {
-      onShowToast('Dışa aktarma hatası.');
+      onShowToast(language === 'tr' ? 'Dışa aktarma hatası.' : 'Export error.');
     }
   };
 
@@ -331,9 +395,9 @@ export const SettingsPanel = () => {
         Object.entries(settings).forEach(([key, value]) => {
           localStorage.setItem(key, String(value));
         });
-        onShowToast('Ayarlar içe aktarıldı. Uygulamayı yenileyin.');
+        onShowToast(language === 'tr' ? 'Ayarlar içe aktarıldı. Uygulamayı yenileyin.' : 'Settings imported. Please refresh the app.');
       } catch {
-        onShowToast('İçe aktarma hatası.');
+        onShowToast(language === 'tr' ? 'İçe aktarma hatası.' : 'Import error.');
       }
     };
     reader.readAsText(file);
@@ -356,12 +420,12 @@ export const SettingsPanel = () => {
               <span className="truncate text-[14px] font-bold text-white group-hover/play:text-[var(--accent-color)] transition-colors">{playlist.name}</span>
               {isActive && (
                 <span className="rounded bg-[var(--accent-color)] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-black">
-                  Aktif
+                  {language === 'tr' ? 'Aktif' : 'Active'}
                 </span>
               )}
             </div>
             <div className="mt-1 text-xs font-medium text-neutral-500">
-              {playlist.channelCount || 0} içerik • {playlist.groupCount || playlist.groups.length} grup
+              {playlist.channelCount || 0} {language === 'tr' ? 'içerik' : 'items'} • {playlist.groupCount || playlist.groups.length} {language === 'tr' ? 'grup' : 'groups'}
             </div>
           </button>
           <div className="flex shrink-0 gap-1.5">
@@ -369,14 +433,14 @@ export const SettingsPanel = () => {
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.02] text-neutral-300 hover:bg-white/[0.08] hover:text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               disabled={isParsing}
               onClick={() => onRefreshPlaylist(playlist)}
-              title="Listeyi Güncelle"
+              title={language === 'tr' ? 'Listeyi Güncelle' : 'Update Playlist'}
             >
               <RefreshCw size={12} className={isParsing && isActive ? 'animate-spin text-[var(--accent-color)]' : ''} />
             </button>
             <button
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/15 bg-red-950/15 text-red-300 hover:bg-red-900/20 transition-all active:scale-95 cursor-pointer"
               onClick={() => onDeletePlaylist(playlist.id)}
-              title="Listeyi Sil"
+              title={language === 'tr' ? 'Listeyi Sil' : 'Delete Playlist'}
             >
               <Trash2 size={12} />
             </button>
@@ -384,7 +448,7 @@ export const SettingsPanel = () => {
         </div>
 
         <div className="mt-4 border-t border-white/5 pt-3">
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">Otomatik Güncelleme</div>
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Otomatik Güncelleme' : 'Auto Update'}</div>
           <div className="grid grid-cols-4 gap-1.5">
             {UPDATE_OPTIONS.map(option => (
               <button
@@ -396,7 +460,10 @@ export const SettingsPanel = () => {
                 }`}
                 onClick={() => onUpdatePlaylistAutoUpdateInterval(playlist.id, option.value)}
               >
-                {option.label.split(' ')[0]}
+                {option.value === 6 ? (language === 'tr' ? '6 Sa' : '6h') :
+                 option.value === 12 ? (language === 'tr' ? '12 Sa' : '12h') :
+                 option.value === 24 ? (language === 'tr' ? '24 Sa' : '24h') :
+                 (language === 'tr' ? '7 G' : '7d')}
               </button>
             ))}
           </div>
@@ -431,7 +498,7 @@ export const SettingsPanel = () => {
           </div>
           {q && (
             <div className="text-[10px] px-2.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-neutral-400">
-              {filtered.length} eşleşti
+              {filtered.length} {language === 'tr' ? 'eşleşti' : 'matched'}
             </div>
           )}
         </div>
@@ -439,11 +506,11 @@ export const SettingsPanel = () => {
           {groups.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center opacity-65">
               <Eye className="text-neutral-500 mb-2.5" size={22} />
-              <div className="text-xs font-bold text-neutral-300">Gizli kategori bulunmuyor</div>
-              <div className="text-[10px] text-neutral-500 mt-0.5">Bu bölümdeki tüm kategoriler şu an görünür durumda.</div>
+              <div className="text-xs font-bold text-neutral-300">{language === 'tr' ? 'Gizli kategori bulunmuyor' : 'No hidden categories'}</div>
+              <div className="text-[10px] text-neutral-500 mt-0.5">{language === 'tr' ? 'Bu bölümdeki tüm kategoriler şu an görünür durumda.' : 'All categories in this section are currently visible.'}</div>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-xs text-neutral-500 italic text-center py-6">Arama kriterinize uygun gizli kategori bulunamadı.</div>
+            <div className="text-xs text-neutral-500 italic text-center py-6">{language === 'tr' ? 'Arama kriterinize uygun gizli kategori bulunamadı.' : 'No hidden categories found matching your search criteria.'}</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto pr-1 hide-scrollbar">
               {filtered.map(group => (
@@ -460,10 +527,10 @@ export const SettingsPanel = () => {
                   <button
                     onClick={() => restore(group)}
                     className="inline-flex h-7.5 items-center justify-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400 hover:text-white hover:border-[var(--accent-color)]/30 hover:bg-[var(--accent-color)]/10 transition-all cursor-pointer shrink-0"
-                    title="Kategoriyi Göster"
+                    title={language === 'tr' ? 'Kategoriyi Göster' : 'Show Category'}
                   >
                     <Eye size={11} className="shrink-0" />
-                    <span>Göster</span>
+                    <span>{language === 'tr' ? 'Göster' : 'Show'}</span>
                   </button>
                 </div>
               ))}
@@ -479,26 +546,26 @@ export const SettingsPanel = () => {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent-color)]/70">Strmly</span>
-          <h1 className="text-2xl font-black tracking-tight text-white leading-none mt-0.5">Ayarlar</h1>
+          <h1 className="text-2xl font-black tracking-tight text-white leading-none mt-0.5">{t('settings.title')}</h1>
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.01] p-1 select-none backdrop-blur-md">
           <div className="px-3 py-1 text-center border-r border-white/5 last:border-r-0">
-            <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">Liste</span>
+            <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Liste' : 'Playlists'}</span>
             <span className="block mt-0.5 text-sm font-black text-white">{playlists.length}</span>
           </div>
           <div className="px-3 py-1 text-center border-r border-white/5 last:border-r-0">
-            <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">İçerik</span>
+            <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'İçerik' : 'Items'}</span>
             <span className="block mt-0.5 text-sm font-black text-white">{itemStats.total}</span>
           </div>
           <div className="px-3 py-1 text-center last:border-r-0">
-            <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">Gizli</span>
+            <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Gizli' : 'Hidden'}</span>
             <span className="block mt-0.5 text-sm font-black text-white">{categoryTotal}</span>
           </div>
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] rounded-[24px] border border-white/5 bg-white/[0.015] backdrop-blur-2xl shadow-2xl overflow-hidden min-h-[600px]">
         <aside className="border-b lg:border-b-0 lg:border-r border-white/5 bg-black/15 p-4 flex flex-col gap-0.5 select-none w-full shrink-0">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-500 px-3 mb-2 hidden lg:block">Menü</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-500 px-3 mb-2 hidden lg:block">{language === 'tr' ? 'Menü' : 'Menu'}</span>
           {tabs.map(tab => {
             const Icon = tab.icon;
             const selected = activeTab.id === tab.id;
@@ -506,10 +573,10 @@ export const SettingsPanel = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveSettingsTab(tab.id)}
-                className={`flex h-10 items-center gap-3 rounded-lg px-3 text-left text-xs font-bold transition-all duration-200 cursor-pointer ${
+                className={`flex h-10 items-center gap-3 rounded-lg px-3 text-left text-xs font-bold transition-all duration-200 cursor-pointer border ${
                   selected
-                    ? 'bg-white/[0.05] text-[var(--accent-color)] border border-white/10 shadow-sm'
-                    : 'text-neutral-400 hover:bg-white/[0.02] hover:text-white'
+                    ? 'bg-white/[0.05] text-[var(--accent-color)] border-white/10 shadow-sm'
+                    : 'text-neutral-400 hover:bg-white/[0.02] hover:text-white border-transparent'
                 }`}
               >
                 <Icon size={14} className={selected ? 'text-[var(--accent-color)]' : 'text-neutral-400'} />
@@ -521,28 +588,45 @@ export const SettingsPanel = () => {
         <section className="p-6 md:p-8 overflow-y-auto max-h-[72vh] bg-black/5">
           {activeTab.id === 'players' && (
             <>
-              <PageHeader title="Genel Ayarlar" description="Varsayılan oynatma motorunu ve medya verisi API ayarlarını buradan yönetin." />
+              <PageHeader 
+                title={language === 'tr' ? 'Genel Ayarlar' : 'General Settings'} 
+                description={language === 'tr' ? 'Varsayılan oynatma motorunu, dil ve medya API ayarlarını buradan yönetin.' : 'Manage default player, language, and media API settings here.'} 
+              />
               <div>
-                <SettingRow title="Varsayılan Oynatıcı" description="Kanallar ve VOD içerikleri açılırken kullanılacak ana oynatma motoru.">
-                  <div className="relative w-full md:w-64">
-                    <select
-                      value={defaultPlayer}
-                      onChange={(e) => {
-                        setDefaultPlayer(e.target.value);
-                        onSaveSetting('cinema_default_player', e.target.value);
-                        onShowToast(`Varsayılan oynatıcı: ${e.target.value.toUpperCase()}`);
-                      }}
-                      className={`${fieldStyle} appearance-none pr-9 cursor-pointer`}
-                    >
-                      <option value="internal">Dahili Oynatıcı</option>
-                      <option value="vlc">VLC Player (Harici)</option>
-                      <option value="mpv">MPV Player (Harici)</option>
-                    </select>
-                    <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                  </div>
+                <SettingRow title={t('settings.appearance.language')} description={t('settings.appearance.languageDesc')}>
+                  <CustomSelect
+                    value={language}
+                    onChange={(val) => {
+                      setLanguage(val as any);
+                      onShowToast(val === 'tr' ? 'Dil Türkçe olarak ayarlandı.' : 'Language set to English.');
+                    }}
+                    options={[
+                      { value: 'tr', label: 'Türkçe' },
+                      { value: 'en', label: 'English' }
+                    ]}
+                  />
                 </SettingRow>
 
-                <SettingRow title="TMDB API Anahtarı" description="Film ve dizilerin poster, özet ve puan bilgileri gibi görsel zenginliklerini çekmek için kullanılır.">
+                <SettingRow title={t('settings.players.title')} description={t('settings.players.desc')}>
+                  <CustomSelect
+                    value={defaultPlayer}
+                    onChange={(val) => {
+                      setDefaultPlayer(val);
+                      onSaveSetting('cinema_default_player', val);
+                      onShowToast(`${t('settings.players.saveSuccess')} (${val.toUpperCase()})`);
+                    }}
+                    options={[
+                      { value: 'internal', label: t('settings.players.internal') },
+                      { value: 'vlc', label: `VLC Player (${language === 'tr' ? 'Harici' : 'External'})` },
+                      { value: 'mpv', label: `MPV Player (${language === 'tr' ? 'Harici' : 'External'})` }
+                    ]}
+                  />
+                </SettingRow>
+ 
+                <SettingRow 
+                  title={`TMDB API ${language === 'tr' ? 'Anahtarı' : 'Key'}`} 
+                  description={language === 'tr' ? 'Film ve dizilerin poster, özet ve puan bilgileri gibi görsel zenginliklerini çekmek için kullanılır.' : 'Used to fetch visual details like posters, summaries, and ratings for movies and series.'}
+                >
                   <div className="relative w-full md:w-80">
                     <input
                       type={showApiKey ? 'text' : 'password'}
@@ -557,7 +641,7 @@ export const SettingsPanel = () => {
                     <button
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white cursor-pointer"
                       onClick={() => setShowApiKey(!showApiKey)}
-                      title={showApiKey ? 'Gizle' : 'Göster'}
+                      title={showApiKey ? (language === 'tr' ? 'Gizle' : 'Hide') : (language === 'tr' ? 'Göster' : 'Show')}
                     >
                       {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
@@ -569,11 +653,14 @@ export const SettingsPanel = () => {
 
           {activeTab.id === 'playlists' && (
             <>
-              <PageHeader title="Çalma Listeleri" description="M3U ve Xtream kaynaklarını ekleyin, aktif listeyi seçin ve otomatik güncelleme aralığını belirleyin." />
+              <PageHeader 
+                title={t('settings.playlists.title')} 
+                description={language === 'tr' ? 'M3U ve Xtream kaynaklarını ekleyin, aktif listeyi seçin ve otomatik güncelleme aralığını belirleyin.' : 'Add M3U and Xtream sources, select the active playlist, and set the auto-update interval.'} 
+              />
               <div className="mb-5 flex justify-end">
                 <button className={showAddPlaylistForm ? secondaryButton : primaryButton} onClick={() => setShowAddPlaylistForm(!showAddPlaylistForm)}>
                   {showAddPlaylistForm ? <X size={14} /> : <Plus size={14} />}
-                  {showAddPlaylistForm ? 'Kapat' : 'Liste Ekle'}
+                  {showAddPlaylistForm ? t('common.close') : t('settings.playlists.addPlaylist')}
                 </button>
               </div>
 
@@ -604,22 +691,22 @@ export const SettingsPanel = () => {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="md:col-span-2">
-                      <div className={labelStyle}>Liste İsmi</div>
-                      <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={playlistFormName} onChange={(e) => setPlaylistFormName(e.target.value)} placeholder="Örn: Ev Sineması, Spor Listem" />
+                      <div className={labelStyle}>{t('settings.playlists.playlistName')}</div>
+                      <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={playlistFormName} onChange={(e) => setPlaylistFormName(e.target.value)} placeholder={language === 'tr' ? 'Örn: Ev Sineması, Spor Listem' : 'e.g., Home Cinema, My Playlist'} />
                     </label>
 
                     {playlistMode === 'm3u' ? (
                       <>
                         <label className="md:col-span-2">
-                          <div className={labelStyle}>M3U URL Adresi</div>
+                          <div className={labelStyle}>{language === 'tr' ? 'M3U URL Adresi' : 'M3U URL Address'}</div>
                           <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={m3uUrl} onChange={(e) => setM3uUrl(e.target.value)} placeholder="http://example.com/playlist.m3u" />
                         </label>
                         <div className="flex flex-col gap-2.5 md:col-span-2 sm:flex-row mt-1">
                           <button className={primaryButton} disabled={isParsing || !m3uUrl.trim()} onClick={onPlaylistLoadFromUrl}>
-                            {isParsing ? 'İndiriliyor...' : 'URL İndir'}
+                            {isParsing ? t('common.loading') : (language === 'tr' ? 'URL İndir' : 'Download URL')}
                           </button>
                           <label className={secondaryButton}>
-                            Dosya Yükle
+                            {t('profiles.importLocalFile')}
                             <input type="file" accept=".m3u" onChange={onPlaylistLoadLocal} className="hidden" />
                           </label>
                         </div>
@@ -627,19 +714,19 @@ export const SettingsPanel = () => {
                     ) : (
                       <>
                         <label className="md:col-span-2">
-                          <div className={labelStyle}>Sunucu Adresi</div>
-                          <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={xtreamUrl} onChange={(e) => setXtreamUrl(e.target.value)} placeholder="http://sunucu-adresi.com:8080" />
+                          <div className={labelStyle}>{language === 'tr' ? 'Sunucu Adresi' : 'Server Address'}</div>
+                          <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={xtreamUrl} onChange={(e) => setXtreamUrl(e.target.value)} placeholder="http://server-address.com:8080" />
                         </label>
                         <label>
-                          <div className={labelStyle}>Kullanıcı Adı</div>
-                          <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={xtreamUser} onChange={(e) => setXtreamUser(e.target.value)} placeholder="Kullanıcı adı" />
+                          <div className={labelStyle}>{t('profiles.xtreamUser')}</div>
+                          <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={xtreamUser} onChange={(e) => setXtreamUser(e.target.value)} placeholder={language === 'tr' ? 'Kullanıcı adı' : 'Username'} />
                         </label>
                         <label>
-                          <div className={labelStyle}>Şifre</div>
-                          <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} type="password" value={xtreamPass} onChange={(e) => setXtreamPass(e.target.value)} placeholder="Şifre" />
+                          <div className={labelStyle}>{t('profiles.xtreamPass')}</div>
+                          <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} type="password" value={xtreamPass} onChange={(e) => setXtreamPass(e.target.value)} placeholder={language === 'tr' ? 'Şifre' : 'Password'} />
                         </label>
                         <button className={`${primaryButton} md:col-span-2 mt-1`} disabled={isParsing || !xtreamUrl.trim() || !xtreamUser.trim() || !xtreamPass.trim()} onClick={onXtreamLoad}>
-                          {isParsing ? 'Bağlanılıyor...' : 'Xtream ile Giriş Yap'}
+                          {isParsing ? (language === 'tr' ? 'Bağlanılıyor...' : 'Connecting...') : (language === 'tr' ? 'Xtream ile Giriş Yap' : 'Login with Xtream')}
                         </button>
                       </>
                     )}
@@ -648,7 +735,11 @@ export const SettingsPanel = () => {
               )}
 
               {playlists.length === 0 ? (
-                <EmptyState icon={UploadCloud} title="Kayıtlı çalma listesi yok" description="Listenizi M3U URL'i veya Xtream API ile ekledikten sonra kanallarınız ve kataloglarınız burada listelenecektir." />
+                <EmptyState 
+                  icon={UploadCloud} 
+                  title={t('settings.playlists.noPlaylists')} 
+                  description={language === 'tr' ? 'Listenizi M3U URL\'i veya Xtream API ile ekledikten sonra kanallarınız ve kataloglarınız burada listelenecektir.' : 'After adding your list via M3U URL or Xtream API, your channels and catalogs will be listed here.'} 
+                />
               ) : (
                 <div className="grid gap-4 xl:grid-cols-2">{playlists.map(renderPlaylistCard)}</div>
               )}
@@ -657,13 +748,13 @@ export const SettingsPanel = () => {
 
           {activeTab.id === 'categories' && (
             <>
-              <PageHeader title="Gizli Kategoriler" description="Daha önce ana ekranda veya listelerde gizlediğiniz tüm kategorileri buradan geri getirebilirsiniz." />
+              <PageHeader title={language === 'tr' ? "Gizli Kategoriler" : "Hidden Categories"} description={language === 'tr' ? "Daha önce ana ekranda veya listelerde gizlediğiniz tüm kategorileri buradan geri getirebilirsiniz." : "You can restore all categories that you previously hid on the main screen or lists from here."} />
               
               {/* Kategori İstatistik Kartları */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <button
                   onClick={() => setCategorySubTab(categorySubTab === 'live' ? 'all' : 'live')}
-                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-300 hover:translate-y-[-2px] cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
                     categorySubTab === 'live'
                       ? 'border-indigo-500/30 bg-indigo-500/5 shadow-[0_8px_30px_rgba(99,102,241,0.1)]'
                       : 'border-white/5 bg-white/[0.01] hover:border-indigo-500/20 hover:bg-indigo-500/[0.02]'
@@ -675,20 +766,20 @@ export const SettingsPanel = () => {
                     }`}>
                       <Tv size={18} />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-400/10 px-2.5 py-0.5 rounded-full select-none">Canlı TV</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-400/10 px-2.5 py-0.5 rounded-full select-none">{language === 'tr' ? 'Canlı TV' : 'Live TV'}</span>
                   </div>
                   <div className="mt-4">
                     <span className="block text-2xl font-black tracking-tight text-white leading-none">
                       {hiddenCategories.length}
                     </span>
-                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">Gizli Kategori</span>
+                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
                   </div>
                   <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-indigo-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
                 </button>
 
                 <button
                   onClick={() => setCategorySubTab(categorySubTab === 'series' ? 'all' : 'series')}
-                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-300 hover:translate-y-[-2px] cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
                     categorySubTab === 'series'
                       ? 'border-pink-500/30 bg-pink-500/5 shadow-[0_8px_30px_rgba(244,63,94,0.1)]'
                       : 'border-white/5 bg-white/[0.01] hover:border-pink-500/20 hover:bg-pink-500/[0.02]'
@@ -700,20 +791,20 @@ export const SettingsPanel = () => {
                     }`}>
                       <Video size={18} />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-pink-400 bg-pink-400/10 px-2.5 py-0.5 rounded-full select-none">Dizi</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-pink-400 bg-pink-400/10 px-2.5 py-0.5 rounded-full select-none">{language === 'tr' ? 'Dizi' : 'Series'}</span>
                   </div>
                   <div className="mt-4">
                     <span className="block text-2xl font-black tracking-tight text-white leading-none">
                       {hiddenSeriesCategories.length}
                     </span>
-                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">Gizli Kategori</span>
+                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
                   </div>
                   <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-pink-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
                 </button>
 
                 <button
                   onClick={() => setCategorySubTab(categorySubTab === 'movie' ? 'all' : 'movie')}
-                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-300 hover:translate-y-[-2px] cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
                     categorySubTab === 'movie'
                       ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_8px_30px_rgba(245,158,11,0.1)]'
                       : 'border-white/5 bg-white/[0.01] hover:border-amber-500/20 hover:bg-amber-500/[0.02]'
@@ -725,13 +816,13 @@ export const SettingsPanel = () => {
                     }`}>
                       <Film size={18} />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-0.5 rounded-full select-none">Film</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-0.5 rounded-full select-none">{language === 'tr' ? 'Film' : 'Movie'}</span>
                   </div>
                   <div className="mt-4">
                     <span className="block text-2xl font-black tracking-tight text-white leading-none">
                       {hiddenMovieCategories.length}
                     </span>
-                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">Gizli Kategori</span>
+                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
                   </div>
                   <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-amber-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
                 </button>
@@ -748,7 +839,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    Tümü ({categoryTotal})
+                    {language === 'tr' ? 'Tümü' : 'All'} ({categoryTotal})
                   </button>
                   <button
                     onClick={() => setCategorySubTab('live')}
@@ -758,7 +849,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    Canlı TV ({hiddenCategories.length})
+                    {language === 'tr' ? 'Canlı TV' : 'Live TV'} ({hiddenCategories.length})
                   </button>
                   <button
                     onClick={() => setCategorySubTab('series')}
@@ -768,7 +859,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    Diziler ({hiddenSeriesCategories.length})
+                    {language === 'tr' ? 'Diziler' : 'Series'} ({hiddenSeriesCategories.length})
                   </button>
                   <button
                     onClick={() => setCategorySubTab('movie')}
@@ -778,7 +869,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    Filmler ({hiddenMovieCategories.length})
+                    {language === 'tr' ? 'Filmler' : 'Movies'} ({hiddenMovieCategories.length})
                   </button>
                 </div>
 
@@ -789,7 +880,7 @@ export const SettingsPanel = () => {
                       type="text"
                       value={categorySearch}
                       onChange={(e) => setCategorySearch(e.target.value)}
-                      placeholder="Gizli kategori ara..."
+                      placeholder={language === 'tr' ? 'Gizli kategori ara...' : 'Search hidden categories...'}
                       className="w-full h-9 pl-9.5 pr-4 rounded-xl border border-white/5 bg-black/25 text-xs font-semibold text-white placeholder-neutral-500 focus:outline-none focus:border-white/12 focus:bg-black/35 transition-all"
                     />
                     {categorySearch && (
@@ -817,20 +908,20 @@ export const SettingsPanel = () => {
                       (categorySubTab === 'movie' && hiddenMovieCategories.length === 0)
                     }
                   >
-                    <Eye size={13} /> Seçilileri Göster
+                    <Eye size={13} /> {language === 'tr' ? 'Seçilileri Göster' : 'Show Selected'}
                   </button>
                 </div>
               </div>
 
               <div className="grid gap-5">
                 {(categorySubTab === 'all' || categorySubTab === 'live') && 
-                  renderHiddenGroup('Canlı TV Kategorileri', Tv, hiddenCategories, onRestoreCategory, 'text-indigo-400')
+                  renderHiddenGroup(language === 'tr' ? 'Canlı TV Kategorileri' : 'Live TV Categories', Tv, hiddenCategories, onRestoreCategory, 'text-indigo-400')
                 }
                 {(categorySubTab === 'all' || categorySubTab === 'series') && 
-                  renderHiddenGroup('Dizi Kategorileri', Video, hiddenSeriesCategories, onRestoreSeriesCategory, 'text-pink-400')
+                  renderHiddenGroup(language === 'tr' ? 'Dizi Kategorileri' : 'Series Categories', Video, hiddenSeriesCategories, onRestoreSeriesCategory, 'text-pink-400')
                 }
                 {(categorySubTab === 'all' || categorySubTab === 'movie') && 
-                  renderHiddenGroup('Film Kategorileri', Film, hiddenMovieCategories, onRestoreMovieCategory, 'text-amber-400')
+                  renderHiddenGroup(language === 'tr' ? 'Film Kategorileri' : 'Movie Categories', Film, hiddenMovieCategories, onRestoreMovieCategory, 'text-amber-400')
                 }
               </div>
             </>
@@ -838,9 +929,9 @@ export const SettingsPanel = () => {
 
           {activeTab.id === 'appearance' && (
             <>
-              <PageHeader title="Arayüz ve Görünüm" description="Tema, vurgu rengi ve kart boyutunu değiştirerek Strmly'i tarzınıza göre kişiselleştirin." />
+              <PageHeader title={t('settings.appearance.title')} description={t('settings.appearance.desc')} />
               <div>
-                <SettingRow title="Arayüz Teması" description="Uygulamanın genel arka plan ve atmosfer rengini seçin." vertical={true}>
+                <SettingRow title={t('settings.appearance.theme')} description={t('settings.appearance.themeDesc')} vertical={true}>
                   <div className="grid max-w-4xl gap-4 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
                     {THEMES.map(theme => {
                       const isActive = activeTheme === theme.id;
@@ -919,7 +1010,12 @@ export const SettingsPanel = () => {
                             )}
                           </div>
                           <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-[var(--accent-color)] font-black' : 'text-neutral-400 group-hover/theme:text-white'}`}>
-                            {theme.label}
+                            {theme.id === 'space-black' ? (language === 'tr' ? 'OLED Siyah' : 'OLED Space Black') :
+                             theme.id === 'deep-space' ? (language === 'tr' ? 'Gece Mavisi' : 'Deep Space Blue') :
+                             theme.id === 'slate-dark' ? (language === 'tr' ? 'Koyu Slate' : 'Slate Dark') :
+                             theme.id === 'forest-mint' ? (language === 'tr' ? 'Orman Yeşili' : 'Forest Mint') :
+                             theme.id === 'sunset-orange' ? (language === 'tr' ? 'Günbatımı Kızılı' : 'Sunset Orange') :
+                             theme.id === 'midnight-purple' ? (language === 'tr' ? 'Gece Yarısı Moru' : 'Midnight Purple') : theme.label}
                           </span>
                         </button>
                       );
@@ -927,7 +1023,7 @@ export const SettingsPanel = () => {
                   </div>
                 </SettingRow>
 
-                <SettingRow title="Vurgu Rengi" description="Butonlarda, aktif sekmelerde ve vurgulanacak tüm öğelerde kullanılacak renk." vertical={true}>
+                <SettingRow title={t('settings.appearance.accentColor')} description={t('settings.appearance.accentDesc')} vertical={true}>
                   <div className="flex flex-wrap gap-2">
                     {ACCENT_COLORS.map(item => (
                       <button
@@ -943,13 +1039,21 @@ export const SettingsPanel = () => {
                         }}
                       >
                         <span className="h-3 w-3 rounded-full border border-white/10" style={{ backgroundColor: item.color }} />
-                        {item.name}
+                        {language === 'tr' ? item.name : (
+                          item.name === 'Beyaz' ? 'White' :
+                          item.name === 'Mavi' ? 'Blue' :
+                          item.name === 'Yeşil' ? 'Green' :
+                          item.name === 'Sarı' ? 'Yellow' :
+                          item.name === 'Mor' ? 'Purple' :
+                          item.name === 'Kırmızı' ? 'Red' :
+                          item.name === 'Pembe' ? 'Pink' : 'Cyan'
+                        )}
                       </button>
                     ))}
                   </div>
                 </SettingRow>
 
-                <SettingRow title="Cam Efekti Gücü" description="Arayüz cam panellerinin bulanıklık (blur) ve geçirgenlik yoğunluğu.">
+                <SettingRow title={t('settings.appearance.glass')} description={t('settings.appearance.glassDesc')}>
                   <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-white/5 bg-black/30 select-none">
                     {['low', 'medium', 'high'].map(level => {
                       const isActive = glassIntensity === level;
@@ -966,19 +1070,21 @@ export const SettingsPanel = () => {
                               : 'text-neutral-400 hover:text-white'
                           }`}
                         >
-                          {level === 'low' ? 'Az' : level === 'medium' ? 'Orta' : 'Yüksek'}
+                          {level === 'low' ? (language === 'tr' ? 'Az' : 'Low') : 
+                           level === 'medium' ? (language === 'tr' ? 'Orta' : 'Medium') : 
+                           (language === 'tr' ? 'Yüksek' : 'High')}
                         </button>
                       );
                     })}
                   </div>
                 </SettingRow>
 
-                <SettingRow title="Kart Boyutu" description="Film ve dizi kartlarının ekran kaplama yoğunluğunu belirleyin.">
+                <SettingRow title={t('settings.appearance.cardSize')} description={t('settings.appearance.cardSizeDesc')}>
                   <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-white/5 bg-black/30 select-none">
                     {[
-                      { id: 'small', label: 'Küçük' },
-                      { id: 'medium', label: 'Orta' },
-                      { id: 'large', label: 'Büyük' }
+                      { id: 'small', label: language === 'tr' ? 'Küçük' : 'Small' },
+                      { id: 'medium', label: language === 'tr' ? 'Orta' : 'Medium' },
+                      { id: 'large', label: language === 'tr' ? 'Büyük' : 'Large' }
                     ].map(size => {
                       const isActive = cardLayoutSize === size.id;
                       return (
@@ -1001,12 +1107,12 @@ export const SettingsPanel = () => {
                   </div>
                 </SettingRow>
 
-                <SettingRow title="Arayüz Ölçeği" description="Uygulamanın genel yazı boyutu ve arayüz elemanlarının ölçeğini ayarlayın.">
+                <SettingRow title={language === 'tr' ? 'Arayüz Ölçeği' : 'UI Scale'} description={language === 'tr' ? 'Uygulamanın genel yazı boyutu ve arayüz elemanlarının ölçeğini ayarlayın.' : 'Adjust the overall font size and interface element scaling.'}>
                   <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-white/5 bg-black/30 select-none">
                     {[
-                      { id: 'small', label: 'Küçük' },
-                      { id: 'medium', label: 'Orta' },
-                      { id: 'large', label: 'Büyük' }
+                      { id: 'small', label: language === 'tr' ? 'Küçük' : 'Small' },
+                      { id: 'medium', label: language === 'tr' ? 'Orta' : 'Medium' },
+                      { id: 'large', label: language === 'tr' ? 'Büyük' : 'Large' }
                     ].map(size => {
                       const isActive = uiScale === size.id;
                       return (
@@ -1026,7 +1132,7 @@ export const SettingsPanel = () => {
                   </div>
                 </SettingRow>
 
-                <SettingRow title="Neon Parlama Efekti" description="Aktif öğelerin etrafında dinamik vurgu rengi neon ışıması oluşturur.">
+                <SettingRow title={t('settings.appearance.neon')} description={t('settings.appearance.neonDesc')}>
                   <button
                     onClick={() => {
                       const next = !neonGlowEnabled;
@@ -1049,7 +1155,7 @@ export const SettingsPanel = () => {
                   </button>
                 </SettingRow>
 
-                <SettingRow title="Sinematik Film Greni" description="Arka plana hafif, hareketli hissettiren pürüzlü film dokusu katmanı ekler.">
+                <SettingRow title={language === 'tr' ? 'Sinematik Film Greni' : 'Cinematic Film Grain'} description={language === 'tr' ? 'Arka plana hafif, hareketli hissettiren pürüzlü film dokusu katmanı ekler.' : 'Adds a subtle, moving textured film grain overlay to the background.'}>
                   <button
                     onClick={() => toggleGrainOverlay(!backgroundGrain)}
                     className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${

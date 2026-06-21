@@ -47,7 +47,10 @@ export interface Profile {
   name: string;
   avatarUrl: string;
   autoUpdateIntervalHours?: 6 | 12 | 24 | 168;
+  contentPreferences?: ContentPreference[];
 }
+
+export type ContentPreference = 'series' | 'movies' | 'sports' | 'live' | 'kids';
 
 export interface AvatarSearchResult {
   id: number;
@@ -102,14 +105,6 @@ export interface ImageWithFallbackProps {
   aspect?: 'portrait' | 'landscape';
 }
 
-export interface QuadCellProps {
-  channel: PlaylistItem | null;
-  cellIndex: number;
-  isSelected: boolean;
-  onSelect: () => void;
-  onRemove: () => void;
-  accentStyles: React.CSSProperties;
-}
 
 export interface EpisodeThumbProps {
   tmdbShowId: number | null;

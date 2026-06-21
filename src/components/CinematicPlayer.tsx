@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize2, Minimize2, PictureInPicture, Plus, Settings, ChevronRight, ChevronLeft, ChevronDown, ListCollapse, History, Search, X, Tv, Gauge, Subtitles, SkipForward, Scan } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize2, Minimize2, PictureInPicture, Plus, Settings, ChevronRight, ChevronLeft, ChevronDown, Search, X, Tv, Gauge, Subtitles, SkipForward, SkipBack, Scan } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { SPEED_OPTIONS } from '../constants';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
+import { useSettings } from '../context/SettingsContext';
 
 interface CinematicPlayerProps {
   channel: PlaylistItem;
@@ -43,12 +44,12 @@ interface CinematicPlayerProps {
   formatTime: (time: number) => string;
   onMouseMove?: () => void;
   onMouseLeave?: () => void;
-  recentlyWatched: PlaylistItem[];
   channels: PlaylistItem[];
   onChannelChange: (channel: PlaylistItem) => void;
 }
 
 export const CinematicPlayer = (props: CinematicPlayerProps) => {
+  const { t, language } = useSettings();
   const {
     channel,
     videoRef, playerContainerRef,
@@ -66,7 +67,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     onHideControls,
     formatTime,
     onMouseMove, onMouseLeave,
-    recentlyWatched, channels, onChannelChange
+    channels, onChannelChange
   } = props;
 
   const isLive = channel.type === 'live';
@@ -79,91 +80,31 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     if (audioTracks && audioTracks.length > 0) {
       return audioTracks;
     }
-    return [{ id: 0, name: 'Varsayılan Ses', lang: '' }];
-  }, [audioTracks]);
+    return [{ id: 0, name: language === 'tr' ? 'Varsayılan Ses' : 'Default Audio', lang: '' }];
+  }, [audioTracks, language]);
 
   // Timeline Dragging states
   const [isDraggingTimeline, setIsDraggingTimeline] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
   const [dragTime, setDragTime] = useState<number | null>(null);
 
-  const [autoPlayNext, setAutoPlayNext] = useState<boolean>(() => {
-    const saved = localStorage.getItem('player_auto_play_next');
-    return saved !== null ? saved === 'true' : true;
-  });
+  const autoPlayNext = true;
 
   const [isAutoplayCancelled, setIsAutoplayCancelled] = useState(false);
 
-  const toggleAutoPlayNext = () => {
-    const newVal = !autoPlayNext;
-    setAutoPlayNext(newVal);
-    localStorage.setItem('player_auto_play_next', String(newVal));
-  };
-  
-  const [showSidebarList, setShowSidebarList] = useState(false);
-  const [showRecentPanel, setShowRecentPanel] = useState(false);
-  const [showGroupMenu, setShowGroupMenu] = useState(false);
-  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
-  const [selectedSidebarGroup, setSelectedSidebarGroup] = useState<string>('');
-
   const settingsRef = useRef<HTMLDivElement>(null);
-  const sidebarPickerLabel = channel.type === 'series'
-    ? 'Hızlı Dizi Seçici'
-    : channel.type === 'movie'
-      ? 'Hızlı Film Seçici'
-      : 'Hızlı Kanal Seçici';
-  const sidebarEmptyLabel = channel.type === 'series'
-    ? 'Dizi Bulunamadı'
-    : channel.type === 'movie'
-      ? 'Film Bulunamadı'
-      : 'Kanal Bulunamadı';
-  const sidebarSearchPlaceholder = channel.type === 'series'
-    ? 'Dizi ara...'
-    : channel.type === 'movie'
-      ? 'Film ara...'
-      : 'Kanal ara...';
 
   // Sync sidebar group with currently playing channel on mount/change
   useEffect(() => {
     setIsAutoplayCancelled(false);
-    if (channel && channel.group) {
-      setSelectedSidebarGroup(channel.group);
-    }
   }, [channel]);
 
-  const sidebarItems = useMemo(() => (
-    channels.filter(ch => ch.type === channel.type)
-  ), [channels, channel.type]);
-
-  // Extract unique categories/groups for the dropdown
-  const sidebarGroups = useMemo(() => {
-    const groups = new Set<string>();
-    sidebarItems.forEach(ch => {
-      if (ch.group) groups.add(ch.group);
-    });
-    return Array.from(groups).sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [sidebarItems]);
-
-  // Filter channels based on chosen group & search input
-  const filteredSidebarChannels = useMemo(() => {
-    let base = sidebarItems;
-    if (selectedSidebarGroup) {
-      base = base.filter(ch => ch.group === selectedSidebarGroup);
-    }
-    if (sidebarSearchQuery.trim()) {
-      const q = sidebarSearchQuery.toLowerCase();
-      base = base.filter(ch => ch.name.toLowerCase().includes(q));
-    }
-    // Limit to first 100 for high rendering performance
-    return base.slice(0, 100);
-  }, [sidebarItems, selectedSidebarGroup, sidebarSearchQuery]);
-
-  // Find next episode sibling for series autoplay
-  const nextEpisode = useMemo(() => {
-    if (channel.type !== 'series') return null;
+  // Find sibling episodes sorted by season & episode
+  const sortedSiblings = useMemo(() => {
+    if (channel.type !== 'series') return [];
 
     const currentParsed = parseSeriesEpisodeInfo(channel.name);
-    if (!currentParsed) return null;
+    if (!currentParsed) return [];
 
     const currentClean = currentParsed.cleanTitle.toLowerCase();
 
@@ -189,17 +130,36 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       return a.info.episode - b.info.episode;
     });
 
-    // Find current episode index
-    const currentIndex = parsedSiblings.findIndex(sib =>
+    return parsedSiblings;
+  }, [channel, channels]);
+
+  // Find current episode index in the sorted siblings list
+  const currentEpisodeIndex = useMemo(() => {
+    if (channel.type !== 'series') return -1;
+
+    const currentParsed = parseSeriesEpisodeInfo(channel.name);
+    if (!currentParsed) return -1;
+
+    return sortedSiblings.findIndex(sib =>
       sib.info.season === currentParsed.season && sib.info.episode === currentParsed.episode
     );
+  }, [channel, sortedSiblings]);
 
-    if (currentIndex !== -1 && currentIndex < parsedSiblings.length - 1) {
-      return parsedSiblings[currentIndex + 1].item;
+  // Find next episode sibling
+  const nextEpisode = useMemo(() => {
+    if (currentEpisodeIndex !== -1 && currentEpisodeIndex < sortedSiblings.length - 1) {
+      return sortedSiblings[currentEpisodeIndex + 1].item;
     }
-
     return null;
-  }, [channel, channels]);
+  }, [currentEpisodeIndex, sortedSiblings]);
+
+  // Find previous episode sibling
+  const prevEpisode = useMemo(() => {
+    if (currentEpisodeIndex > 0) {
+      return sortedSiblings[currentEpisodeIndex - 1].item;
+    }
+    return null;
+  }, [currentEpisodeIndex, sortedSiblings]);
 
   // Auto-play next episode trigger when video reaches duration
   useEffect(() => {
@@ -264,9 +224,6 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     if (!showControls) {
       setShowSettingsMenu(false);
       setCurrentSubmenu('main');
-      setShowSidebarList(false);
-      setShowRecentPanel(false);
-      setShowGroupMenu(false);
     }
   }, [showControls]);
 
@@ -308,7 +265,6 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
         if (e.key === 'Escape') {
           (document.activeElement as HTMLElement).blur();
-          setShowSidebarList(false);
         }
         return;
       }
@@ -320,23 +276,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
         return;
       }
 
-      // Enter -> Toggle Sidebar list
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        setShowSidebarList(prev => !prev);
-        setShowRecentPanel(false);
-        if (onMouseMove) onMouseMove();
-        return;
-      }
 
-      // Tab -> Toggle Recent channels panel
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        setShowRecentPanel(prev => !prev);
-        setShowSidebarList(false);
-        if (onMouseMove) onMouseMove();
-        return;
-      }
 
       // Space or K -> Play/Pause
       if (e.key === ' ' || key === 'k') {
@@ -450,12 +390,12 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             className="absolute bottom-28 right-8 z-30 bg-neutral-950/90 border border-white/10 backdrop-blur-2xl p-5 rounded-2xl shadow-2xl flex flex-col gap-3 min-w-[280px] max-w-[90%] animate-scale-in"
           >
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-extrabold text-[var(--accent-color,white)] uppercase tracking-widest">Sonraki Bölüm</span>
+              <span className="text-[10px] font-extrabold text-[var(--accent-color,white)] uppercase tracking-widest">{language === 'tr' ? 'Sonraki Bölüm' : 'Next Episode'}</span>
               <span className="text-xs font-bold text-white line-clamp-1">{nextEpisode.name}</span>
               <span className="text-[10px] text-neutral-400">
                 {autoPlayNext
-                  ? `${Math.max(0, Math.ceil(duration - currentTime))} saniye içinde başlıyor...`
-                  : 'Sonraki bölüm hazır'}
+                  ? (language === 'tr' ? `${Math.max(0, Math.ceil(duration - currentTime))} saniye içinde başlıyor...` : `Starting in ${Math.max(0, Math.ceil(duration - currentTime))} seconds...`)
+                  : (language === 'tr' ? 'Sonraki bölüm hazır' : 'Next episode is ready')}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -467,7 +407,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 className="flex-1 py-2 bg-white text-black font-bold text-xs rounded-xl hover:bg-neutral-200 active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <Play size={12} fill="#000" />
-                Şimdi Oynat
+                {language === 'tr' ? 'Şimdi Oynat' : 'Play Now'}
               </button>
               {autoPlayNext && (
                 <button
@@ -477,200 +417,14 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                   }}
                   className="px-3 py-2 bg-white/5 border border-white/10 text-white font-bold text-xs rounded-xl hover:bg-white/10 active:scale-95 transition-all"
                 >
-                  İptal
+                  {language === 'tr' ? 'İptal' : 'Cancel'}
                 </button>
               )}
             </div>
           </div>
         )}
-        <div
-          className={`absolute top-0 left-0 h-full w-80 z-40 bg-neutral-950/95 border-r border-white/10 backdrop-blur-2xl flex flex-col p-4 shadow-2xl transition-all duration-300 transform ${
-            showSidebarList ? 'translate-x-0' : '-translate-x-full'
-          }`}
-          onClick={(e) => e.stopPropagation()} // Prevent triggering play/pause overlay
-        >
-          <div className="flex items-center justify-between border-b border-white/5 pb-3.5 mb-4 shrink-0">
-            <div className="flex items-center gap-2">
-              <ListCollapse size={16} className="text-[var(--accent-color)]" />
-              <span className="text-sm font-bold text-white">{sidebarPickerLabel}</span>
-            </div>
-            <button
-              onClick={() => setShowSidebarList(false)}
-              className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-            >
-              <X size={12} />
-            </button>
-          </div>
-          <div className="flex flex-col gap-1.5 mb-3.5 shrink-0 relative">
-            <span className="text-[9px] font-extrabold text-neutral-500 uppercase tracking-widest px-1">Kategori</span>
-            <button
-              type="button"
-              onClick={() => setShowGroupMenu(prev => !prev)}
-              className={`w-full h-10 bg-neutral-950/90 border text-left px-3 rounded-xl outline-none cursor-pointer transition-all flex items-center justify-between gap-3 ${
-                showGroupMenu
-                  ? 'border-[var(--accent-color)] shadow-[0_0_0_1px_var(--accent-color),0_12px_35px_rgba(0,0,0,0.35)]'
-                  : 'border-white/10 hover:border-white/20 hover:bg-neutral-900'
-              }`}
-            >
-              <span className="min-w-0 truncate text-xs font-bold text-white">
-                {selectedSidebarGroup || 'Tüm Kategoriler'}
-              </span>
-              <ChevronDown
-                size={15}
-                className={`shrink-0 text-neutral-400 transition-transform ${showGroupMenu ? 'rotate-180 text-white' : ''}`}
-              />
-            </button>
-            {showGroupMenu && (
-              <div className="absolute left-0 right-0 top-[62px] z-50 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/98 shadow-[0_22px_70px_rgba(0,0,0,0.65)] backdrop-blur-2xl animate-scale-in">
-                <div className="max-h-72 overflow-y-auto hide-scrollbar p-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSidebarGroup('');
-                      setSidebarSearchQuery('');
-                      setShowGroupMenu(false);
-                    }}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-bold transition-colors flex items-center justify-between ${
-                      !selectedSidebarGroup ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    Tüm Kategoriler
-                    <span className="text-[10px] opacity-60">{sidebarItems.length}</span>
-                  </button>
-                  {sidebarGroups.map(grp => {
-                    const count = sidebarItems.reduce((total, item) => total + (item.group === grp ? 1 : 0), 0);
-                    const isSelected = selectedSidebarGroup === grp;
-                    return (
-                      <button
-                        type="button"
-                        key={grp}
-                        onClick={() => {
-                          setSelectedSidebarGroup(grp);
-                          setSidebarSearchQuery('');
-                          setShowGroupMenu(false);
-                        }}
-                        className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-bold transition-colors flex items-center gap-3 ${
-                          isSelected ? 'bg-[var(--accent-color)] text-black' : 'text-neutral-300 hover:bg-white/10 hover:text-white'
-                        }`}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{grp}</span>
-                        <span className={`text-[10px] ${isSelected ? 'text-black/60' : 'text-neutral-500'}`}>{count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="relative mb-4 shrink-0">
-            <Search size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
-            <input
-              type="text"
-              placeholder={sidebarSearchPlaceholder}
-              value={sidebarSearchQuery}
-              onChange={(e) => setSidebarSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 bg-neutral-900/60 border border-white/5 focus:border-[var(--accent-color)] rounded-xl text-xs text-white placeholder-neutral-500 outline-none transition-all"
-            />
-            {sidebarSearchQuery && (
-              <button
-                onClick={() => setSidebarSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
-              >
-                <X size={10} />
-              </button>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-1.5 pr-0.5">
-            {filteredSidebarChannels.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-neutral-500 select-none">
-                <Tv size={24} className="mb-2 opacity-50" />
-                <span className="text-xs">{sidebarEmptyLabel}</span>
-              </div>
-            ) : (
-              filteredSidebarChannels.map(item => {
-                const isCurrent = item.id === channel.id;
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      onChannelChange(item);
-                      if (onMouseMove) onMouseMove();
-                    }}
-                    className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer border transition-all ${
-                      isCurrent
-                        ? 'bg-[var(--accent-color)]/10 text-[var(--accent-color)] border-[var(--accent-color)]/20 shadow-md font-bold'
-                        : 'bg-white/[0.02] border-transparent hover:bg-white/5 hover:border-white/5 text-neutral-300 hover:text-white'
-                    }`}
-                  >
-                    <div className="relative w-8 h-8 rounded-lg bg-neutral-950 border border-white/5 overflow-hidden shrink-0 shadow-inner">
-                      <ImageWithFallback
-                        src={item.logo}
-                        name={item.name}
-                        group={item.group || 'GENEL'}
-                        itemType={item.type}
-                        size="sm"
-                      />
-                    </div>
-                    <div className="flex flex-col min-w-0 flex-1 leading-snug">
-                      <span className="text-xs truncate">{item.name}</span>
-                      <span className="text-[9px] text-neutral-500 truncate mt-0.5 uppercase tracking-wider font-semibold">{item.group || 'Genel'}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-        <div
-          className={`absolute bottom-28 left-1/2 -translate-x-1/2 z-40 bg-neutral-950/90 border border-white/10 backdrop-blur-2xl p-4 rounded-[24px] shadow-2xl flex flex-col gap-3 min-w-[480px] max-w-[90%] transition-all duration-300 transform ${
-            showRecentPanel ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-6 opacity-0 pointer-events-none scale-95'
-          }`}
-          onClick={(e) => e.stopPropagation()} // Prevent play/pause toggle
-        >
-          <div className="flex items-center justify-between border-b border-white/5 pb-2">
-            <div className="flex items-center gap-2">
-              <History size={14} className="text-yellow-500" />
-              <span className="text-xs font-bold text-white">Son İzlenen Kanallar</span>
-            </div>
-            <button
-              onClick={() => setShowRecentPanel(false)}
-              className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-            >
-              <X size={10} />
-            </button>
-          </div>
-          <div className="flex items-center gap-3 overflow-x-auto hide-scrollbar py-1">
-            {!(recentlyWatched && recentlyWatched.length) ? (
-              <span className="text-[11px] text-neutral-500 py-6 text-center w-full">İzleme geçmişi bulunmuyor.</span>
-            ) : (
-              recentlyWatched
-                .filter(item => item.id !== channel.id)
-                .slice(0, 6)
-                .map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      onChannelChange(item);
-                      setShowRecentPanel(false);
-                      if (onMouseMove) onMouseMove();
-                    }}
-                    className="w-20 shrink-0 flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/[0.02] hover:bg-white/5 border border-transparent hover:border-white/5 cursor-pointer text-center group transition-all"
-                  >
-                    <div className="relative w-12 h-12 rounded-xl bg-neutral-950 border border-white/5 overflow-hidden shadow-inner group-hover:scale-105 transition-transform">
-                      <ImageWithFallback
-                        src={item.logo}
-                        name={item.name}
-                        group={item.group || 'VOD'}
-                        itemType={item.type}
-                        size="md"
-                      />
-                    </div>
-                    <span className="text-[10px] text-neutral-400 group-hover:text-white truncate w-full font-medium transition-colors">{item.name}</span>
-                  </div>
-                ))
-            )}
-          </div>
-        </div>
+
+
         <div
           className="absolute inset-0 z-0 cursor-pointer"
           onClick={() => {
@@ -680,7 +434,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
         {!videoReady && (
           <div className="absolute inset-0 bg-black/70 backdrop-blur-2xl flex flex-col items-center justify-center gap-4 z-30 animate-fade-in">
             <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-            <span className="text-xs text-white/60 font-medium tracking-wide">Yükleniyor...</span>
+            <span className="text-xs text-white/60 font-medium tracking-wide">{t('common.loading')}</span>
           </div>
         )}
         <div
@@ -696,7 +450,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 if (onMouseMove) onMouseMove();
               }}
               className="pointer-events-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/30 hover:bg-black/45 border border-white/10 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl backdrop-blur-sm group/skip"
-              title="10 Sn Geri"
+              title={language === 'tr' ? '10 Sn Geri' : '10 Sec Backward'}
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
@@ -712,7 +466,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               if (onMouseMove) onMouseMove();
             }}
             className="pointer-events-auto w-16 h-16 md:w-20 md:h-20 rounded-full bg-black/30 hover:bg-black/45 border border-white/10 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-90 shadow-2xl backdrop-blur-sm group/play"
-            title={isPlaying ? "Durdur" : "Başlat"}
+            title={isPlaying ? (language === 'tr' ? 'Durdur' : 'Pause') : (language === 'tr' ? 'Başlat' : 'Play')}
           >
             {isPlaying ? (
               <Pause size={28} fill="#fff" className="text-white transition-transform group-hover/play:scale-110" />
@@ -728,7 +482,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 if (onMouseMove) onMouseMove();
               }}
               className="pointer-events-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/30 hover:bg-black/45 border border-white/10 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl backdrop-blur-sm group/skip"
-              title="10 Sn İleri"
+              title={language === 'tr' ? '10 Sn İleri' : '10 Sec Forward'}
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
@@ -758,17 +512,43 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             className="w-full bg-black/60 rounded-full p-3 flex items-center gap-4 border border-white/10"
             style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}
           >
+            {channel.type === 'series' && (
+              <button
+                disabled={!prevEpisode}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (prevEpisode) onChannelChange(prevEpisode);
+                }}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0"
+                title={language === 'tr' ? 'Önceki Bölüm' : 'Previous Episode'}
+              >
+                <SkipBack size={12} fill="currentColor" />
+              </button>
+            )}
             <button
               className="w-10 h-10 shrink-0 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
               onClick={onTogglePlay}
             >
               {isPlaying ? <Pause size={18} fill="#000" /> : <Play size={18} fill="#000" className="ml-0.5" />}
             </button>
+            {channel.type === 'series' && (
+              <button
+                disabled={!nextEpisode}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (nextEpisode) onChannelChange(nextEpisode);
+                }}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0"
+                title={language === 'tr' ? 'Sonraki Bölüm' : 'Next Episode'}
+              >
+                <SkipForward size={12} fill="currentColor" />
+              </button>
+            )}
             <div className="flex items-center shrink-0 group/vol">
               <button
                 className="w-9 h-9 rounded-full hover:bg-white/10 hover:text-[var(--accent-color,white)] text-white flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-90 z-10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] backdrop-blur-sm"
                 onClick={onToggleMute}
-                title="Sessiz (M)"
+                title={language === 'tr' ? 'Sessiz (M)' : 'Mute (M)'}
               >
                 {playerMuted || playerVolume === 0 ? (
                   <VolumeX size={17} className="text-neutral-400 hover:text-red-400 transition-colors duration-300" />
@@ -795,7 +575,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     value={playerMuted ? 0 : playerVolume}
                     onChange={onVolumeChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    title="Ses Seviyesi (↑↓)"
+                    title={language === 'tr' ? 'Ses Seviyesi (↑↓)' : 'Volume Level (↑↓)'}
                   />
                 </div>
               </div>
@@ -805,7 +585,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               {isLive ? (
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-[11px] font-semibold text-white/90 tracking-wide uppercase">Canlı Yayın</span>
+                  <span className="text-[11px] font-semibold text-white/90 tracking-wide uppercase">{language === 'tr' ? 'Canlı Yayın' : 'Live Stream'}</span>
                 </div>
               ) : (
                 <>
@@ -839,7 +619,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     setShowSettingsMenu(!showSettingsMenu);
                     setCurrentSubmenu('main');
                   }}
-                  title="Ayarlar"
+                  title={t('settings.title')}
                 >
                   <Settings size={14} className={`transition-transform duration-300 ${showSettingsMenu ? 'rotate-45' : ''}`} />
                 </button>
@@ -849,7 +629,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     {currentSubmenu === 'main' && (
                       <div className="absolute bottom-full right-0 mb-3 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 shadow-2xl animate-scale-in min-w-[200px] z-30 flex flex-col gap-0.5">
                         <div className="px-3 py-2 text-[10px] font-extrabold text-neutral-400 uppercase border-b border-white/5 mb-1 tracking-wider">
-                          Ayarlar
+                          {t('settings.title')}
                         </div>
                         <button
                           onClick={() => setCurrentSubmenu('speed')}
@@ -857,7 +637,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         >
                           <span className="flex items-center gap-2">
                             <Gauge size={12} className="text-neutral-400" />
-                            Oynatma Hızı
+                            {language === 'tr' ? 'Oynatma Hızı' : 'Playback Speed'}
                           </span>
                           <span className="text-[11px] text-neutral-400 font-bold flex items-center gap-0.5">
                             {playbackSpeed}x
@@ -870,10 +650,10 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         >
                           <span className="flex items-center gap-2">
                             <Subtitles size={12} className="text-neutral-400" />
-                            Altyazı
+                            {t('player.subtitles')}
                           </span>
                           <span className="text-[11px] text-neutral-400 font-bold flex items-center gap-0.5 truncate max-w-[90px]">
-                            {activeSubtitle === -1 ? 'Kapalı' : (subtitleTracks[activeSubtitle]?.label || 'Açık')}
+                            {activeSubtitle === -1 ? (language === 'tr' ? 'Kapalı' : 'Off') : (subtitleTracks[activeSubtitle]?.label || (language === 'tr' ? 'Açık' : 'On'))}
                             <ChevronRight size={12} className="text-neutral-500" />
                           </span>
                         </button>
@@ -883,12 +663,12 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         >
                           <span className="flex items-center gap-2">
                             <Scan size={12} className="text-neutral-400" />
-                            Video Ölçeği
+                            {language === 'tr' ? 'Video Ölçeği' : 'Aspect Ratio'}
                           </span>
                           <span className="text-[11px] text-neutral-400 font-bold flex items-center gap-0.5">
-                            {videoScaleMode === 'fit' ? 'Orijinal' :
-                             videoScaleMode === 'fill' ? 'Sığdır' :
-                             videoScaleMode === 'zoom' ? 'Yakınlaştır' : videoScaleMode}
+                            {videoScaleMode === 'fit' ? (language === 'tr' ? 'Orijinal' : 'Original') :
+                             videoScaleMode === 'fill' ? (language === 'tr' ? 'Sığdır' : 'Fit') :
+                             videoScaleMode === 'zoom' ? (language === 'tr' ? 'Yakınlaştır' : 'Zoom') : videoScaleMode}
                             <ChevronRight size={12} className="text-neutral-500" />
                           </span>
                         </button>
@@ -898,10 +678,10 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         >
                           <span className="flex items-center gap-2">
                             <Volume2 size={12} className="text-neutral-400" />
-                            Ses Kanalı
+                            {t('player.audio')}
                           </span>
                           <span className="text-[11px] text-neutral-400 font-bold flex items-center gap-0.5 truncate max-w-[90px]">
-                            {displayAudioTracks[activeAudioTrack]?.name || `Parça ${activeAudioTrack + 1}`}
+                            {displayAudioTracks[activeAudioTrack]?.name || (language === 'tr' ? `Parça ${activeAudioTrack + 1}` : `Track ${activeAudioTrack + 1}`)}
                             <ChevronRight size={12} className="text-neutral-500" />
                           </span>
                         </button>
@@ -913,29 +693,10 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           className="w-full px-3 py-2 rounded-xl text-xs font-semibold text-left text-neutral-300 hover:bg-white/10 hover:text-white transition-colors flex items-center gap-2"
                         >
                           <PictureInPicture size={12} className="text-neutral-400" />
-                          PiP Modunu Başlat
+                          {language === 'tr' ? 'PiP Modunu Başlat' : 'Start PiP Mode'}
                         </button>
 
-                        {channel.type === 'series' && (
-                          <>
-                            <div className="w-full h-px bg-white/5 my-1" />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleAutoPlayNext();
-                              }}
-                              className="w-full px-3 py-2 rounded-xl text-xs font-semibold text-left text-neutral-300 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-between"
-                            >
-                              <span className="flex items-center gap-2">
-                                <SkipForward size={12} className="text-neutral-400" />
-                                Otomatik Sonraki Bölüm
-                              </span>
-                              <div className={`w-8 h-4 rounded-full p-0.5 transition-colors duration-200 ${autoPlayNext ? 'bg-[var(--accent-color,white)]' : 'bg-neutral-700'}`}>
-                                <div className={`w-3 h-3 rounded-full bg-black transition-transform duration-200 transform ${autoPlayNext ? 'translate-x-4' : 'translate-x-0'}`} />
-                              </div>
-                            </button>
-                          </>
-                        )}
+
                       </div>
                     )}
 
@@ -948,7 +709,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           >
                             <ChevronLeft size={14} />
                           </button>
-                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Oynatma Hızı</span>
+                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{language === 'tr' ? 'Oynatma Hızı' : 'Playback Speed'}</span>
                         </div>
                         {SPEED_OPTIONS.map(optSpeed => (
                           <button
@@ -976,7 +737,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           >
                             <ChevronLeft size={14} />
                           </button>
-                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Altyazı</span>
+                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{t('player.subtitles')}</span>
                         </div>
                         <button
                           onClick={() => {
@@ -987,7 +748,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             activeSubtitle === -1 ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10'
                           }`}
                         >
-                          Altyazı Yok
+                          {language === 'tr' ? 'Altyazı Yok' : 'No Subtitles'}
                         </button>
                         {subtitleTracks.map((track, idx) => (
                           <button
@@ -1005,7 +766,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         ))}
                         <div className="w-full h-px bg-white/5 my-1" />
                         <label className="w-full px-3 py-2 rounded-xl text-xs font-semibold text-left text-neutral-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer flex items-center gap-2">
-                          <Plus size={12} /> Altyazı Yükle (Yerel)
+                          <Plus size={12} /> {language === 'tr' ? 'Altyazı Yükle (Yerel)' : 'Load Subtitles (Local)'}
                           <input type="file" accept=".srt,.vtt,.ass" className="hidden" onChange={onSubtitleUpload} />
                         </label>
                       </div>
@@ -1022,14 +783,14 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           >
                             <ChevronLeft size={14} />
                           </button>
-                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Video Ölçeği</span>
+                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{language === 'tr' ? 'Video Ölçeği' : 'Aspect Ratio'}</span>
                         </div>
                         {[
-                          { mode: 'fit', label: 'Orijinal Oran' },
-                          { mode: 'fill', label: 'Ekrana Sığdır' },
-                          { mode: 'zoom', label: 'Yakınlaştır (Kırp)' },
-                          { mode: '16:9', label: '16:9 Oranı' },
-                          { mode: '4:3', label: '4:3 Oranı' }
+                          { mode: 'fit', label: language === 'tr' ? 'Orijinal Oran' : 'Original Ratio' },
+                          { mode: 'fill', label: language === 'tr' ? 'Ekrana Sığdır' : 'Fit to Screen' },
+                          { mode: 'zoom', label: language === 'tr' ? 'Yakınlaştır (Kırp)' : 'Zoom (Crop)' },
+                          { mode: '16:9', label: language === 'tr' ? '16:9 Oranı' : '16:9 Ratio' },
+                          { mode: '4:3', label: language === 'tr' ? '4:3 Oranı' : '4:3 Ratio' }
                         ].map(opt => (
                           <button
                             key={opt.mode}
@@ -1056,7 +817,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           >
                             <ChevronLeft size={14} />
                           </button>
-                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Ses Kanalı</span>
+                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{t('player.audio')}</span>
                         </div>
                         {displayAudioTracks.map((track) => (
                           <button
@@ -1070,7 +831,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                               activeAudioTrack === track.id ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10 hover:text-white'
                             }`}
                           >
-                            {track.name || `Parça ${track.id + 1}`}
+                            {track.name || (language === 'tr' ? `Parça ${track.id + 1}` : `Track ${track.id + 1}`)}
                           </button>
                         ))}
                       </div>
@@ -1079,33 +840,9 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 )}
               </div>
               <button
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  showSidebarList ? 'bg-white/20 text-white font-bold' : 'hover:bg-white/20 text-white'
-                }`}
-                onClick={() => {
-                  setShowSidebarList(!showSidebarList);
-                  setShowRecentPanel(false);
-                }}
-                title="Kanal Listesi (Enter)"
-              >
-                <ListCollapse size={14} />
-              </button>
-              <button
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  showRecentPanel ? 'bg-white/20 text-white font-bold' : 'hover:bg-white/20 text-white'
-                }`}
-                onClick={() => {
-                  setShowRecentPanel(!showRecentPanel);
-                  setShowSidebarList(false);
-                }}
-                title="Son İzlenenler (Tab)"
-              >
-                <History size={14} />
-              </button>
-              <button
                 className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition-colors"
                 onClick={onToggleFullscreen}
-                title="Tam Ekran (F)"
+                title={language === 'tr' ? 'Tam Ekran (F)' : 'Fullscreen (F)'}
               >
                 {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               </button>
