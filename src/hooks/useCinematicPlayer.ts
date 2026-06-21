@@ -34,6 +34,8 @@ export function useCinematicPlayer({
   const controlsTimeoutRef = useRef<any>(null);
   const seekOffsetRef = useRef(0);
   const isTranscodingRef = useRef(false);
+  const activeAudioStreamIdRef = useRef<number | undefined>(undefined);
+  const seekRequestIdRef = useRef(0);
   const subtitleObjectUrlsRef = useRef<string[]>([]);
   const subtitleRef = useRef<HTMLTrackElement>(null);
 
@@ -78,17 +80,54 @@ export function useCinematicPlayer({
   }, [playerMuted]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
 
+  const scheduleControlsHide = () => {
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = window.setTimeout(() => {
+      setShowControls(false);
+    }, 2500);
+  };
+
   const handlePlayerMouseMove = () => {
     setShowControls(true);
-    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    controlsTimeoutRef.current = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
+    scheduleControlsHide();
   };
 
   const handlePlayerMouseLeave = () => {
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     setShowControls(false);
   };
+
+  useEffect(() => {
+    if (!selectedChannel) {
+      setShowControls(true);
+      return;
+    }
+
+    setShowControls(true);
+    scheduleControlsHide();
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+    // scheduleControlsHide intentionally uses the current timeout ref only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChannel]);
+
+  useEffect(() => {
+    if (!selectedChannel) {
+      document.documentElement.style.removeProperty('cursor');
+      document.body.style.removeProperty('cursor');
+      return;
+    }
+
+    const cursor = showControls ? 'default' : 'none';
+    document.documentElement.style.cursor = cursor;
+    document.body.style.cursor = cursor;
+
+    return () => {
+      document.documentElement.style.removeProperty('cursor');
+      document.body.style.removeProperty('cursor');
+    };
+  }, [selectedChannel, showControls]);
 
   const forceUnmute = () => {
     if (videoRef.current) {
@@ -120,20 +159,33 @@ export function useCinematicPlayer({
 
   const handlePlayerSeek = async (newTime: number) => {
     if (!videoRef.current || !selectedChannel) return;
+    const targetTime = Math.max(0, durationRef.current > 0
+      ? Math.min(newTime, Math.max(0, durationRef.current - 0.25))
+      : newTime);
+
     if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
-      showToast("Yayın yeniden yapılandırılıyor...");
+      const requestId = ++seekRequestIdRef.current;
+      showToast("Video ileri sarılıyor...");
       try {
-        const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, newTime);
-        if (result.success && result.url) {
-          seekOffsetRef.current = newTime;
+        const result = await window.electronAPI.startFfmpegProxy(
+          selectedChannel.url,
+          targetTime,
+          activeAudioStreamIdRef.current
+        );
+        if (requestId !== seekRequestIdRef.current) return;
+        if (result.success && result.url && videoRef.current) {
+          seekOffsetRef.current = targetTime;
+          setCurrentTime(targetTime);
           videoRef.current.src = result.url;
+          videoRef.current.muted = playerMutedRef.current;
+          videoRef.current.volume = playerVolumeRef.current;
           videoRef.current.play().then(forceUnmute).catch(() => { });
         }
       } catch (e) {
         console.error("Transcoded seek error:", e);
       }
     } else {
-      videoRef.current.currentTime = newTime;
+      videoRef.current.currentTime = targetTime;
     }
   };
 
@@ -230,6 +282,7 @@ export function useCinematicPlayer({
       if (useTranscoding && selectedChannel && window.electronAPI?.startFfmpegProxy && video) {
         const trackInfo = audioTracks.find(t => t.id === trackId);
         const streamId = (trackInfo as any)?.streamId;
+        activeAudioStreamIdRef.current = streamId;
         
         showToast("Ses dili değiştiriliyor (Transcode)...");
         const currentPos = video.currentTime;
@@ -303,86 +356,12 @@ export function useCinematicPlayer({
     return `${minsStr}:${secsStr}`;
   };
 
-  // Keyboard controls effect specific to active playback
-  useEffect(() => {
-    if (!selectedChannel) return;
-
-    const handlePlayerKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        return;
-      }
-      
-      switch (e.key.toLowerCase()) {
-        case ' ':
-          e.preventDefault();
-          handleTogglePlay();
-          break;
-        case 'arrowright':
-          e.preventDefault();
-          handleSeekForward();
-          break;
-        case 'arrowleft':
-          e.preventDefault();
-          handleSeekBackward();
-          break;
-        case 'arrowup':
-          e.preventDefault();
-          setPlayerVolume(prev => {
-            const next = Math.min(1, prev + 0.1);
-            if (videoRef.current) {
-              videoRef.current.volume = next;
-              videoRef.current.muted = false;
-            }
-            setPlayerMuted(false);
-            return next;
-          });
-          break;
-        case 'arrowdown':
-          e.preventDefault();
-          setPlayerVolume(prev => {
-            const next = Math.max(0, prev - 0.1);
-            if (videoRef.current) {
-              videoRef.current.volume = next;
-              if (next === 0) {
-                videoRef.current.muted = true;
-                setPlayerMuted(true);
-              }
-            }
-            return next;
-          });
-          break;
-        case 'f':
-          e.preventDefault();
-          handleToggleFullscreen();
-          break;
-        case 'm':
-          e.preventDefault();
-          handleTogglePlayerMute();
-          break;
-        case 'escape':
-          if (document.fullscreenElement) {
-            e.preventDefault();
-            document.exitFullscreen().catch(() => {});
-          } else {
-            e.preventDefault();
-            // Call close player
-            onClose();
-          }
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handlePlayerKeyDown);
-    return () => window.removeEventListener('keydown', handlePlayerKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChannel, isPlaying, duration, playerMuted, playerVolume, activeSubtitle, subtitleTracks]);
-
   // Main Media Source setup effect
   useEffect(() => {
     if (!selectedChannel || !videoRef.current) return;
     setIsPlaying(true);
     setCurrentTime(0);
-    setDuration(0);
+    setDuration(selectedChannel.duration && selectedChannel.duration > 0 ? selectedChannel.duration : 0);
     setAudioTracks([]);
     setActiveAudioTrack(0);
     setVideoReady(false);
@@ -391,6 +370,8 @@ export function useCinematicPlayer({
     video.playbackRate = playbackSpeedRef.current;
     setFfmpegFallbackActive(false);
     isTranscodingRef.current = false;
+    activeAudioStreamIdRef.current = undefined;
+    seekRequestIdRef.current = 0;
     seekOffsetRef.current = 0;
 
     // Restore the user's last volume and mute preference.
@@ -442,7 +423,45 @@ export function useCinematicPlayer({
     const unmuteInterval = setInterval(forceUnmute, 500);
 
     const onInteract = () => forceUnmute();
-    const onPlaying = () => { forceUnmute(); setVideoReady(true); };
+    let transcodeMetadataProbeStarted = false;
+
+    const probeTranscodedMetadata = async () => {
+      if (
+        transcodeMetadataProbeStarted ||
+        selectedChannel.type === 'live' ||
+        !window.electronAPI?.probeAudioCodec
+      ) return;
+
+      transcodeMetadataProbeStarted = true;
+      try {
+        const result = await window.electronAPI.probeAudioCodec(selectedChannel.url);
+        if (!active || !result.success) return;
+
+        if (result.duration && result.duration > 0) {
+          setDuration(result.duration);
+        }
+
+        if (result.audioStreams && result.audioStreams.length > 0) {
+          setAudioTracks(result.audioStreams);
+          const turkishTrackIndex = result.audioStreams.findIndex(
+            track => track.name?.toLowerCase().includes('türk') || track.name?.toLowerCase().includes('turk') || track.lang === 'tr'
+          );
+          const selectedTrackIndex = turkishTrackIndex >= 0 ? turkishTrackIndex : 0;
+          setActiveAudioTrack(selectedTrackIndex);
+          activeAudioStreamIdRef.current = result.audioStreams[selectedTrackIndex]?.streamId;
+        }
+      } catch (error) {
+        console.warn('[AutoTranscode] Metadata probe failed:', error);
+      }
+    };
+
+    const onPlaying = () => {
+      forceUnmute();
+      setVideoReady(true);
+      if (isTranscodingRef.current) {
+        void probeTranscodedMetadata();
+      }
+    };
 
     let hasResumed = false;
     const resumePlayback = (durationVal: number) => {
@@ -682,6 +701,7 @@ export function useCinematicPlayer({
           if (!active || isTranscodingRef.current) return;
           console.log(`[AutoTranscode] Probing audio codecs in background for: ${selectedChannel.name}`);
           try {
+            transcodeMetadataProbeStarted = true;
             const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
             if (!active) return;
 
@@ -721,6 +741,7 @@ export function useCinematicPlayer({
                 const streamId = res.audioStreams && res.audioStreams.length > selectedTrackIndex
                   ? res.audioStreams[selectedTrackIndex].streamId
                   : undefined;
+                activeAudioStreamIdRef.current = streamId;
 
                 const currentPos = video.currentTime;
                 const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId);

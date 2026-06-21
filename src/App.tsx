@@ -381,8 +381,10 @@ export default function App() {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const group = item.group || 'Genel';
+      const nameLower = item.nameLower || item.name.toLocaleLowerCase('tr-TR');
+      const groupLower = item.groupLower || group.toLocaleLowerCase('tr-TR');
+
       if (item.type === 'live') {
-        const groupLower = group.toLowerCase();
         if (groupLower.includes('ulusal') && !isHdChannel(item.name)) continue;
         liveSet.add(group);
         live.push(item);
@@ -394,8 +396,6 @@ export default function App() {
         }
         groupItems.push(item);
       } else if (item.type === 'series') {
-        const nameLower = item.name.toLocaleLowerCase('tr-TR');
-        const groupLower = group.toLocaleLowerCase('tr-TR');
         const isSecIzle = nameLower.includes('seçizle') || nameLower.includes('seç izle') ||
                            nameLower.includes('secizle') || nameLower.includes('sec izle') ||
                            nameLower.includes('seç-izle') || nameLower.includes('sec-izle') ||
@@ -407,8 +407,6 @@ export default function App() {
         seriesSet.add(group);
         series.push(item);
       } else if (item.type === 'movie') {
-        const nameLower = item.name.toLocaleLowerCase('tr-TR');
-        const groupLower = group.toLocaleLowerCase('tr-TR');
         const isSecIzle = nameLower.includes('seçizle') || nameLower.includes('seç izle') ||
                            nameLower.includes('secizle') || nameLower.includes('sec izle') ||
                            nameLower.includes('seç-izle') || nameLower.includes('sec-izle') ||
@@ -1692,14 +1690,15 @@ export default function App() {
     // Filter national channels to only show HD versions
     base = base.filter(ch => {
       const groupName = ch.group || 'Genel';
-      if (groupName.toLowerCase().includes('ulusal')) return isHdChannel(ch.name);
+      const gLower = ch.groupLower || groupName.toLocaleLowerCase('tr-TR');
+      if (gLower.includes('ulusal')) return isHdChannel(ch.name);
       return true;
     });
 
     // Filter by quality / resolution
     if (qualityFilter !== 'all') {
       base = base.filter(ch => {
-        const nameLower = ch.name.toLowerCase();
+        const nameLower = ch.nameLower || ch.name.toLocaleLowerCase('tr-TR');
         const is4k = nameLower.includes('4k') || nameLower.includes('uhd') || nameLower.includes('2160p');
         const isFhd = nameLower.includes('fhd') || nameLower.includes('1080p') || nameLower.includes('1080i');
         const isHd = (nameLower.includes('hd') && !nameLower.includes('fhd')) || nameLower.includes('720p') || nameLower.includes('720i');
@@ -1745,19 +1744,23 @@ export default function App() {
         const sGroupLower = (series as any).groupLower || (series.group || 'Genel').toLocaleLowerCase('tr-TR');
         if (sNameLower.includes(query) || sGroupLower.includes(query)) return true;
 
-        return Object.values(series.seasons).some(episodes =>
-          episodes.some(ep => {
+        const seasons = Object.values(series.seasons);
+        for (let s = 0; s < seasons.length; s++) {
+          const episodes = seasons[s];
+          for (let e = 0; e < episodes.length; e++) {
+            const ep = episodes[e];
             const epNameLower = ep.item.nameLower || ep.item.name.toLocaleLowerCase('tr-TR');
-            return epNameLower.includes(query);
-          })
-        );
+            if (epNameLower.includes(query)) return true;
+          }
+        }
+        return false;
       });
     }
 
     // Filter by quality / resolution
     if (qualityFilter !== 'all') {
       base = base.filter(series => {
-        const nameLower = series.name.toLowerCase();
+        const nameLower = (series as any).nameLower || series.name.toLocaleLowerCase('tr-TR');
         const is4k = nameLower.includes('4k') || nameLower.includes('uhd') || nameLower.includes('2160p');
         const isFhd = nameLower.includes('fhd') || nameLower.includes('1080p') || nameLower.includes('1080i');
         const isHd = (nameLower.includes('hd') && !nameLower.includes('fhd')) || nameLower.includes('720p') || nameLower.includes('720i');
@@ -1792,12 +1795,16 @@ export default function App() {
         const sGroupLower = (series as any).groupLower || (series.group || 'Genel').toLocaleLowerCase('tr-TR');
         if (sNameLower.includes(query) || sGroupLower.includes(query)) return true;
 
-        return Object.values(series.seasons).some(episodes =>
-          episodes.some(ep => {
+        const seasons = Object.values(series.seasons);
+        for (let s = 0; s < seasons.length; s++) {
+          const episodes = seasons[s];
+          for (let e = 0; e < episodes.length; e++) {
+            const ep = episodes[e];
             const epNameLower = ep.item.nameLower || ep.item.name.toLocaleLowerCase('tr-TR');
-            return epNameLower.includes(query);
-          })
-        );
+            if (epNameLower.includes(query)) return true;
+          }
+        }
+        return false;
       });
     }
     return base;
@@ -1883,7 +1890,7 @@ export default function App() {
         const groupLower = ch.groupLower || (ch.group || 'Genel').toLocaleLowerCase('tr-TR');
         const score = getSearchScore(ch.name, ch.group || 'Genel', query, clNameLower, nameLower, groupLower, clNameLower);
         if (score > 0) {
-          const qRank = getQualityRank(ch.name);
+          const qRank = getQualityRank(ch.name, nameLower);
           const existing = dedupedMovies[clNameLower];
           if (!existing || score > existing.score || (score === existing.score && qRank > existing.qualityRank)) {
             dedupedMovies[clNameLower] = { item: ch, score, qualityRank: qRank };
@@ -1948,15 +1955,17 @@ export default function App() {
         score = (score + seed.charCodeAt(i)) % 997;
       }
       if (activeContentPreferences.includes('kids')) {
-        const text = `${item.name} ${item.group || ''}`.toLocaleLowerCase('tr-TR');
+        const nLower = item.nameLower || item.name.toLocaleLowerCase('tr-TR');
+        const gLower = item.groupLower || (item.group || '').toLocaleLowerCase('tr-TR');
+        const text = `${nLower} ${gLower}`;
         if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1200;
       }
       return score;
     };
 
     const filtered = itemBuckets.movie.filter(item => {
-      const nameLower = item.name.toLowerCase();
-      const groupLower = (item.group || '').toLowerCase();
+      const nameLower = item.nameLower || item.name.toLocaleLowerCase('tr-TR');
+      const groupLower = item.groupLower || (item.group || '').toLocaleLowerCase('tr-TR');
       if (nameLower.includes('bakim') || nameLower.includes('test') || nameLower.includes('yedek') || nameLower.includes('bakimda') ||
           groupLower.includes('bakim') || groupLower.includes('test') || groupLower.includes('yedek') || groupLower.includes('bakimda')) {
         return false;
@@ -1982,15 +1991,17 @@ export default function App() {
         score = (score + seed.charCodeAt(i)) % 997;
       }
       if (activeContentPreferences.includes('kids')) {
-        const text = `${item.name} ${item.group || ''}`.toLocaleLowerCase('tr-TR');
+        const nLower = (item as any).nameLower || item.name.toLocaleLowerCase('tr-TR');
+        const gLower = (item as any).groupLower || (item.group || '').toLocaleLowerCase('tr-TR');
+        const text = `${nLower} ${gLower}`;
         if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1200;
       }
       return score;
     };
 
     const filtered = allGroupedSeries.filter(item => {
-      const nameLower = item.name.toLowerCase();
-      const groupLower = (item.group || '').toLowerCase();
+      const nameLower = (item as any).nameLower || item.name.toLocaleLowerCase('tr-TR');
+      const groupLower = (item as any).groupLower || (item.group || '').toLocaleLowerCase('tr-TR');
       if (nameLower.includes('bakim') || nameLower.includes('test') || nameLower.includes('yedek') || nameLower.includes('bakimda') ||
           groupLower.includes('bakim') || groupLower.includes('test') || groupLower.includes('yedek') || groupLower.includes('bakimda')) {
         return false;
@@ -2017,7 +2028,9 @@ export default function App() {
       if (activeContentPreferences.includes('series') && item.type === 'series') score += 700;
       if (activeContentPreferences.includes('movies') && item.type === 'movie') score += 700;
       if (activeContentPreferences.includes('kids')) {
-        const text = `${item.name} ${item.group || ''}`.toLocaleLowerCase('tr-TR');
+        const nLower = (item as any).nameLower || item.name.toLocaleLowerCase('tr-TR');
+        const gLower = (item as any).groupLower || (item.group || '').toLocaleLowerCase('tr-TR');
+        const text = `${nLower} ${gLower}`;
         if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1000;
       }
       return score;
@@ -2025,8 +2038,8 @@ export default function App() {
 
     const selected: { item: PlaylistItem | GroupedSeries; score: number }[] = [];
     const visitItem = (item: PlaylistItem | GroupedSeries) => {
-      const nameLower = item.name.toLowerCase();
-      const groupLower = (item.group || '').toLowerCase();
+      const nameLower = (item as any).nameLower || item.name.toLocaleLowerCase('tr-TR');
+      const groupLower = (item as any).groupLower || (item.group || '').toLocaleLowerCase('tr-TR');
       if (nameLower.includes('bakim') || nameLower.includes('test') || nameLower.includes('yedek') || nameLower.includes('bakimda') ||
           groupLower.includes('bakim') || groupLower.includes('test') || groupLower.includes('yedek') || groupLower.includes('bakimda')) {
         return;

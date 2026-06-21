@@ -61,7 +61,7 @@ export function useTmdbCrawler({
     const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
     const runPreFetch = async () => {
-      const concurrencyLimit = 6;
+      const concurrencyLimit = 3;
       for (let i = 0; i < itemsToPreFetch.length; i += concurrencyLimit) {
         if (isCancelled) break;
         const chunk = itemsToPreFetch.slice(i, i + concurrencyLimit);

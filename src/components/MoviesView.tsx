@@ -99,7 +99,7 @@ export const MovieCard = React.memo(({
   );
 });
 
-export function MoviesView({
+export const MoviesView = React.memo(function MoviesView({
   selectedGroup,
   activeMovieCategory,
   setActiveMovieCategory,
@@ -293,4 +293,4 @@ export function MoviesView({
       )}
     </div>
   );
-}
+});

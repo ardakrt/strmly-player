@@ -587,6 +587,27 @@ ipcMain.handle('fetch-tmdb-image', async (event, { path: imagePath, size = 'w500
 
 // ── FFmpeg Audio Transcoding Proxy ──
 
+async function prepareFfmpegInput(rawUrl) {
+  try {
+    const parsedUrl = new URL(rawUrl);
+    if (parsedUrl.protocol !== 'http:') {
+      return { inputUrl: rawUrl, hostHeader: null };
+    }
+
+    const originalHostname = parsedUrl.hostname;
+    const resolvedIp = await resolveHostIp(originalHostname);
+    if (!resolvedIp || resolvedIp === originalHostname) {
+      return { inputUrl: rawUrl, hostHeader: null };
+    }
+
+    const hostHeader = parsedUrl.port ? `${originalHostname}:${parsedUrl.port}` : originalHostname;
+    parsedUrl.hostname = resolvedIp;
+    return { inputUrl: parsedUrl.toString(), hostHeader };
+  } catch {
+    return { inputUrl: rawUrl, hostHeader: null };
+  }
+}
+
 function stopFfmpegProxy() {
   if (ffmpegProcess) {
     try { ffmpegProcess.kill('SIGKILL'); } catch {}
@@ -605,6 +626,7 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
   }
 
   stopFfmpegProxy();
+  const { inputUrl, hostHeader } = await prepareFfmpegInput(url);
 
   return new Promise((resolve) => {
     let resolved = false;
@@ -676,7 +698,10 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       args.push('-ss', Math.floor(startTime).toString());
     }
 
-    args.push('-i', url);
+    if (hostHeader) {
+      args.push('-headers', `Host: ${hostHeader}\r\n`);
+    }
+    args.push('-i', inputUrl);
     args.push('-map', '0:v:0');
     if (audioStreamId !== undefined && audioStreamId !== null) {
       args.push('-map', `0:${audioStreamId}`);
@@ -686,9 +711,15 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
     args.push(
       '-vf', 'setpts=PTS-STARTPTS,format=yuv420p',
       '-c:v', 'libx264',
-      '-preset', 'veryfast',
+      // This stream is consumed only by the local player. Favor first-frame
+      // latency and low CPU usage over compression efficiency.
+      '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-crf', '23',
+      '-g', '30',
+      '-keyint_min', '30',
+      '-sc_threshold', '0',
+      '-threads', '0',
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ar', '48000',
@@ -699,6 +730,8 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       '-max_muxing_queue_size', '2048',
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      '-frag_duration', '500000',
+      '-flush_packets', '1',
       '-muxdelay', '0',
       '-muxpreload', '0',
       'pipe:1'
@@ -740,14 +773,18 @@ ipcMain.handle('probe-audio-codec', async (event, { url }) => {
     return { success: false, error: 'FFmpeg bulunamadı' };
   }
 
+  const { inputUrl, hostHeader } = await prepareFfmpegInput(url);
+
   return new Promise((resolve) => {
     let resolved = false;
     const args = [
       '-analyzeduration', '1000000',
-      '-probesize', '1000000',
-      '-i', url,
-      '-hide_banner'
+      '-probesize', '1000000'
     ];
+    if (hostHeader) {
+      args.push('-headers', `Host: ${hostHeader}\r\n`);
+    }
+    args.push('-i', inputUrl, '-hide_banner');
 
     const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderrOutput = '';

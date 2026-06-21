@@ -104,7 +104,7 @@ export const SeriesCard = React.memo(({
   );
 });
 
-export function SeriesView({
+export const SeriesView = React.memo(function SeriesView({
   selectedGroup,
   activeSeriesCategory,
   setActiveSeriesCategory,
@@ -295,4 +295,4 @@ export function SeriesView({
       )}
     </div>
   );
-}
+});

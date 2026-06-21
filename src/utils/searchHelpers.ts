@@ -46,8 +46,8 @@ export function getSearchScore(
 }
 
 // Helper to determine media quality rank from its name
-export function getQualityRank(name: string): number {
-  const n = name.toLocaleLowerCase('tr-TR');
+export function getQualityRank(name: string, nameLower?: string): number {
+  const n = nameLower || name.toLocaleLowerCase('tr-TR');
   if (n.includes('4k') || n.includes('uhd') || n.includes('2160p') || n.includes('2160')) return 4;
   if (n.includes('1080') || n.includes('fhd') || n.includes('1080p')) return 3;
   if (n.includes('720') || n.includes('hd') || n.includes('720p')) return 2;

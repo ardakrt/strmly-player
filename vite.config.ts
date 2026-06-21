@@ -9,6 +9,26 @@ export default defineConfig({
     tailwindcss()
   ],
   base: './',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('scheduler')) {
+              return 'vendor-react';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (id.includes('hls.js')) {
+              return 'vendor-hls';
+            }
+            return 'vendor-others';
+          }
+        }
+      }
+    }
+  },
   server: {
     watch: {
       ignored: ['**/profiles/**']

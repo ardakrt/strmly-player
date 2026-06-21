@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Tv, Search, ArrowLeft, Settings } from 'lucide-react';
 import type { Profile, SavedPlaylist } from '../types';
 import type { PlaylistItem } from '../utils/m3uParser';
@@ -25,7 +26,7 @@ interface NavbarProps {
   updateAvailable?: boolean;
 }
 
-export function Navbar({
+export const Navbar = memo(function Navbar({
   loaded,
   scrolled,
   selectedGroup,
@@ -264,4 +265,5 @@ export function Navbar({
       </nav>
     </div>
   );
-}
+});
+

@@ -4,6 +4,15 @@ import { cleanMediaTitle } from './seriesGroupers';
 // Global cache for TMDB poster lookups
 export const globalPosterPromises: Record<string, Promise<string | null> | undefined> = {};
 export const globalSyncPosterMap = new Map<string, string>();
+const originalSet = globalSyncPosterMap.set.bind(globalSyncPosterMap);
+const MAX_POSTER_MAP_SIZE = 10000;
+globalSyncPosterMap.set = function(key: string, value: string) {
+  if (this.size >= MAX_POSTER_MAP_SIZE && !this.has(key)) {
+    const firstKey = this.keys().next().value;
+    if (firstKey) this.delete(firstKey);
+  }
+  return originalSet(key, value);
+};
 
 // Simple IndexedDB cache helper
 class IndexedDBCache {

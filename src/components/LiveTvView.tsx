@@ -94,7 +94,7 @@ export const LiveChannelCard = React.memo(({
   );
 });
 
-export function LiveTvView({
+export const LiveTvView = React.memo(function LiveTvView({
   selectedGroup,
   activeLiveCategory,
   setActiveLiveCategory,
@@ -293,4 +293,4 @@ export function LiveTvView({
       )}
     </div>
   );
-}
+});
