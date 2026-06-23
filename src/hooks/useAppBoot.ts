@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Profile } from '../types';
 import { DEFAULT_AVATARS } from '../constants';
-import { tmdbCache } from '../utils/tmdb';
+import { getTmdbApiKey, tmdbCache } from '../utils/tmdb';
 import { initSpatialNavigation } from '../utils/spatialNavigation';
 import { getTranslation } from '../utils/translations';
 import type { Language } from '../utils/translations';
@@ -196,7 +196,6 @@ export function useAppBoot({
       const [
         savedProfiles,
         configPlayer,
-        savedApiKey,
         configAccent,
         configTheme,
         configGlass,
@@ -206,7 +205,6 @@ export function useAppBoot({
       ] = await Promise.all([
         loadAppSetting('cinema_profiles', true),
         loadAppSetting('cinema_default_player'),
-        loadAppSetting('cinema_tmdb_key'),
         loadAppSetting('cinema_accent'),
         loadAppSetting('cinema_theme'),
         loadAppSetting('cinema_glass_intensity'),
@@ -218,8 +216,7 @@ export function useAppBoot({
       let loadedProfiles = Array.isArray(savedProfiles) ? savedProfiles : [];
       setDefaultPlayer(configPlayer || 'internal');
 
-      const configApiKey = (typeof savedApiKey === 'string' && savedApiKey.trim()) || 'd16568dbdb27a29e2f9d854eb101b09b'; // Fallback to constant key
-      setTmdbApiKey(configApiKey);
+      setTmdbApiKey(getTmdbApiKey());
 
       setActiveAccent(configAccent || '#FFFFFF');
       setActiveTheme(configTheme || 'space-black');

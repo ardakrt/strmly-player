@@ -166,10 +166,11 @@ export function cleanMovieName(title: string): string {
 }
 
 export const getTmdbApiKey = () => {
+  const bundledKey = import.meta.env.VITE_TMDB_API_KEY?.trim() || '';
   const storedKey = typeof localStorage !== 'undefined'
     ? localStorage.getItem('cinema_tmdb_key')?.trim()
     : '';
-  return storedKey || import.meta.env.VITE_TMDB_API_KEY || '';
+  return bundledKey || storedKey || '';
 };
 
 export const getTmdbLanguage = () => {

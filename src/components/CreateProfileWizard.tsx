@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Baby, Check, ChevronLeft, Clapperboard, Clock3, Film, Link2, LoaderCircle, Plus, Search, Server, Sparkles, Trophy, Tv, UserRound, X } from 'lucide-react';
 import type { AvatarSearchResult, ContentPreference } from '../types';
 import { useSettings } from '../context/SettingsContext';
+import { getTmdbApiKey } from '../utils/tmdb';
 
 interface LocalSeries {
   id: number;
@@ -96,6 +97,7 @@ export function CreateProfileWizard({
   onSave
 }: CreateProfileWizardProps) {
   const { t, language } = useSettings();
+  const hasTmdbApiKey = Boolean(getTmdbApiKey());
   const [step, setStep] = useState(1);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
@@ -251,13 +253,14 @@ export function CreateProfileWizard({
                           if (!event.target.value.trim()) onAvatarSearchResultsChange([]);
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === 'Enter' && avatarSearchQuery.trim()) onAvatarSearch(avatarSearchQuery);
+                          if (event.key === 'Enter' && hasTmdbApiKey && avatarSearchQuery.trim()) onAvatarSearch(avatarSearchQuery);
                         }}
                         placeholder={language === 'tr' ? 'Dizi ara...' : 'Search series...'}
+                        disabled={!hasTmdbApiKey}
                         className="w-full h-12 pl-11 pr-4 rounded-2xl border border-white/10 bg-white/[0.035] text-xs text-white outline-none placeholder-neutral-600 focus:border-white/30 transition-all"
                       />
                     </div>
-                    <button onClick={() => avatarSearchQuery.trim() && onAvatarSearch(avatarSearchQuery)} disabled={!avatarSearchQuery.trim() || avatarSearchLoading} className="h-12 px-6 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-[10px] font-black transition-all">
+                    <button onClick={() => hasTmdbApiKey && avatarSearchQuery.trim() && onAvatarSearch(avatarSearchQuery)} disabled={!hasTmdbApiKey || !avatarSearchQuery.trim() || avatarSearchLoading} className="h-12 px-6 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-[10px] font-black transition-all">
                       {language === 'tr' ? 'Ara' : 'Search'}
                     </button>
                   </div>
@@ -297,19 +300,31 @@ export function CreateProfileWizard({
                     <div className="flex items-end justify-between gap-4 mb-4">
                       <div>
                         <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{avatarSearchResults.length ? (language === 'tr' ? 'Arama sonuçları' : 'Search results') : (language === 'tr' ? 'Popüler diziler' : 'Popular series')}</span>
-                        <p className="mt-1 text-[10px] text-neutral-600">{language === 'tr' ? 'Oyuncu kadrosunu açmak için bir dizi seç.' : 'Select a series to open cast avatars.'}</p>
+                        <p className="mt-1 text-[10px] text-neutral-600">
+                          {!hasTmdbApiKey
+                            ? (language === 'tr' ? 'Bu surumde TMDB anahtari bulunamadi. Guncel paketi kurunca oyuncu gorselleri otomatik gelir.' : 'This build does not include a TMDB key. Actor images load automatically in a correctly bundled release.')
+                            : (language === 'tr' ? 'Oyuncu kadrosunu acmak icin bir dizi sec.' : 'Select a series to open cast avatars.')}
+                        </p>
                       </div>
                       <span className="text-[9px] font-semibold text-neutral-600">{seriesCatalog.length} {language === 'tr' ? 'dizi' : 'series'}</span>
                     </div>
-                    <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-4 max-h-[390px] overflow-y-auto hide-scrollbar pr-1 pb-1">
-                      {seriesCatalog.map(item => (
-                        <button key={`${item.mediaType}-${item.id}`} onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)} title={item.name} className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-transparent hover:border-white/45 transition-all hover:-translate-y-1 bg-neutral-900">
-                          <img src={item.posterUrl} className="w-full h-full object-cover" alt={item.name} />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/5 to-transparent" />
-                          <span className="absolute inset-x-2 bottom-2 truncate text-[9px] font-black text-white">{item.name}</span>
-                        </button>
-                      ))}
-                    </div>
+                    {!hasTmdbApiKey ? (
+                      <div className="h-[260px] rounded-3xl border border-dashed border-white/10 bg-black/20 flex items-center justify-center px-8 text-center text-xs leading-6 text-neutral-500">
+                        {language === 'tr'
+                          ? 'TMDB API anahtari bu pakete gomulmemis. Release build GitHub Secret ile yeniden alindiginda populer diziler ve oyuncu profil fotograflari otomatik yuklenir.'
+                          : 'This package was built without a TMDB API key. Rebuilding the release with the GitHub Secret will load popular series and actor profile photos automatically.'}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-4 max-h-[390px] overflow-y-auto hide-scrollbar pr-1 pb-1">
+                        {seriesCatalog.map(item => (
+                          <button key={`${item.mediaType}-${item.id}`} onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)} title={item.name} className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-transparent hover:border-white/45 transition-all hover:-translate-y-1 bg-neutral-900">
+                            <img src={item.posterUrl} className="w-full h-full object-cover" alt={item.name} />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/5 to-transparent" />
+                            <span className="absolute inset-x-2 bottom-2 truncate text-[9px] font-black text-white">{item.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

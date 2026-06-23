@@ -192,7 +192,6 @@ export const SettingsPanel = () => {
     language, setLanguage, t,
     activeSettingsTab, setActiveSettingsTab,
     defaultPlayer, setDefaultPlayer,
-    tmdbApiKey, setTmdbApiKey,
     activeTheme, setActiveTheme,
     activeAccent, setActiveAccent,
     glassIntensity, setGlassIntensity,
@@ -229,7 +228,6 @@ export const SettingsPanel = () => {
   const safeRecentlyWatched = Array.isArray(recentlyWatched) ? recentlyWatched : EMPTY_ARRAY;
   const safeGlobalFavorites = Array.isArray(globalFavorites) ? globalFavorites : EMPTY_ARRAY;
 
-  const [showApiKey, setShowApiKey] = useState(false);
   const [categorySearch, setCategorySearch] = useState('');
   const [categorySubTab, setCategorySubTab] = useState<'all' | 'live' | 'series' | 'movie'>('all');
 
@@ -636,30 +634,6 @@ export const SettingsPanel = () => {
                   />
                 </SettingRow>
  
-                <SettingRow 
-                  title={`TMDB API ${language === 'tr' ? 'Anahtarı' : 'Key'}`} 
-                  description={language === 'tr' ? 'Film ve dizilerin poster, özet ve puan bilgileri gibi görsel zenginliklerini çekmek için kullanılır.' : 'Used to fetch visual details like posters, summaries, and ratings for movies and series.'}
-                >
-                  <div className="relative w-full md:w-80">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      value={tmdbApiKey}
-                      placeholder="TMDB API Key v3"
-                      onChange={(e) => {
-                        setTmdbApiKey(e.target.value);
-                        onSaveSetting('cinema_tmdb_key', e.target.value);
-                      }}
-                      className={`${fieldStyle} pr-9 w-full md:w-80`}
-                    />
-                    <button
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white cursor-pointer"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      title={showApiKey ? (language === 'tr' ? 'Gizle' : 'Hide') : (language === 'tr' ? 'Göster' : 'Show')}
-                    >
-                      {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </SettingRow>
               </div>
             </>
           )}
