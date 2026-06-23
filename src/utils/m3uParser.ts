@@ -1,3 +1,5 @@
+import { preprocessPlaylistItems } from './searchHelpers';
+
 export interface PlaylistItem {
   id: string;
   name: string;
@@ -5,6 +7,9 @@ export interface PlaylistItem {
   group: string;
   url: string;
   type: 'live' | 'movie' | 'series';
+  xtreamStreamId?: string;
+  xtreamSeriesId?: string;
+  xtreamEpisodeId?: string;
   currentTime?: number;
   duration?: number;
   progress?: number;
@@ -157,28 +162,51 @@ export function parseM3U(content: string): ParsedPlaylist {
 }
 
 export function parseM3UAsync(content: string | ArrayBuffer): Promise<ParsedPlaylist> {
+  const parseOnMainThread = () => {
+    const text = content instanceof ArrayBuffer
+      ? new TextDecoder('utf-8').decode(content)
+      : content;
+    const result = parseM3U(text);
+    result.items = preprocessPlaylistItems(result.items);
+    return result;
+  };
+
   return new Promise((resolve, reject) => {
-    // Spawns Web Worker from the same directory, compiled by Vite
-    const worker = new Worker(new URL('./m3uParser.worker.ts', import.meta.url), { type: 'module' });
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./m3uParser.worker.ts', import.meta.url), { type: 'module' });
+    } catch {
+      resolve(parseOnMainThread());
+      return;
+    }
     
     worker.onmessage = (e) => {
       if (e.data.success) {
         resolve(e.data.result);
       } else {
-        reject(new Error(e.data.error));
+        try {
+          resolve(parseOnMainThread());
+        } catch {
+          reject(new Error(e.data.error));
+        }
       }
       worker.terminate();
     };
 
-    worker.onerror = (err) => {
-      reject(err);
+    worker.onerror = () => {
+      try {
+        resolve(parseOnMainThread());
+      } catch (err) {
+        reject(err);
+      }
       worker.terminate();
     };
 
-    if (content instanceof ArrayBuffer) {
-      worker.postMessage(content, [content]);
-    } else {
+    try {
       worker.postMessage(content);
+    } catch {
+      worker.terminate();
+      resolve(parseOnMainThread());
     }
   });
 }

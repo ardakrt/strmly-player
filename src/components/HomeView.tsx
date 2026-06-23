@@ -376,6 +376,14 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
             {displayOverview}
           </p>
         </div>
+        {channel.progress !== undefined && channel.progress > 0 && (
+          <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20 z-20">
+            <div
+              className="h-full bg-[var(--accent-color)] transition-all duration-300"
+              style={{ width: `${channel.progress}%` }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -838,13 +846,13 @@ export const HomeView = memo(function HomeView({
               {uniqueRecentlyWatched.map(channel => (
                 <div
                   key={`recent-${channel.id}`}
-                  className="flex-shrink-0 w-[180px] md:w-[220px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035]"
+                  className="flex-shrink-0 w-[200px] md:w-[240px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03]"
                   onClick={() => {
                     handlePlayStream(channel);
                   }}
                   onContextMenu={(event) => openContextMenu(event, channel, true)}
                 >
-                  <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transform group-hover:scale-[1.04] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
+                  <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transition-all duration-300 group-hover:border-white/15 group-hover:shadow-[0_12px_28px_rgba(0,0,0,0.55)]">
                     <ImageWithFallback
                       src={channel.logo}
                       name={channel.name}
@@ -854,17 +862,17 @@ export const HomeView = memo(function HomeView({
                       aspect="landscape"
                     />
 
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
-                    <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
-                      <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                        <Play size={16} fill="#000" className="ml-0.5" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10 pointer-events-none" />
+                    <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-25">
+                      <div className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                        <Play size={15} fill="#000" className="ml-0.5" />
                       </div>
                     </div>
 
                     {channel.progress !== undefined && channel.progress > 0 && (
                       <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20 z-20">
                         <div
-                          className="h-full bg-white transition-all duration-300"
+                          className="h-full bg-[var(--accent-color)] transition-all duration-300"
                           style={{ width: `${channel.progress}%` }}
                         />
                       </div>

@@ -56,6 +56,7 @@ const helpStyle = 'text-xs leading-relaxed text-neutral-400 mt-1 font-light';
 const primaryButton = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent-color)] px-4 text-xs font-black uppercase tracking-wider text-black transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
 const secondaryButton = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.02] px-4 text-xs font-bold uppercase tracking-wider text-neutral-200 transition-all hover:bg-white/[0.06] hover:text-white active:scale-[0.98] disabled:opacity-50 cursor-pointer';
 const dangerButton = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-red-500/15 bg-red-950/15 px-3 text-xs font-bold uppercase tracking-wider text-red-300 transition-all hover:bg-red-900/20 active:scale-[0.98] cursor-pointer';
+const EMPTY_ARRAY: never[] = [];
 
 interface CustomSelectProps {
   value: string;
@@ -219,6 +220,15 @@ export const SettingsPanel = () => {
     onUpdatePlaylistAutoUpdateInterval
   } = useSettings();
 
+  const safePlaylists = Array.isArray(playlists) ? playlists : EMPTY_ARRAY;
+  const safeHiddenCategories = Array.isArray(hiddenCategories) ? hiddenCategories : EMPTY_ARRAY;
+  const safeHiddenSeriesCategories = Array.isArray(hiddenSeriesCategories) ? hiddenSeriesCategories : EMPTY_ARRAY;
+  const safeHiddenMovieCategories = Array.isArray(hiddenMovieCategories) ? hiddenMovieCategories : EMPTY_ARRAY;
+  const safeItems = Array.isArray(items) ? items : EMPTY_ARRAY;
+  const safeCheckerLog = Array.isArray(checkerLog) ? checkerLog : EMPTY_ARRAY;
+  const safeRecentlyWatched = Array.isArray(recentlyWatched) ? recentlyWatched : EMPTY_ARRAY;
+  const safeGlobalFavorites = Array.isArray(globalFavorites) ? globalFavorites : EMPTY_ARRAY;
+
   const [showApiKey, setShowApiKey] = useState(false);
   const [categorySearch, setCategorySearch] = useState('');
   const [categorySubTab, setCategorySubTab] = useState<'all' | 'live' | 'series' | 'movie'>('all');
@@ -275,6 +285,9 @@ export const SettingsPanel = () => {
 
   const [autoPlayNext, setAutoPlayNext] = useState(() => {
     try { return localStorage.getItem('strmly_auto_play_next') === 'true'; } catch { return false; }
+  });
+  const [transcodeMode, setTranscodeMode] = useState(() => {
+    try { return localStorage.getItem('strmly_transcode_mode') || 'copy'; } catch { return 'copy'; }
   });
   const [bufferEnabled, setBufferEnabled] = useState(() => {
     try { return localStorage.getItem('strmly_buffer_enabled') === 'true'; } catch { return false; }
@@ -347,16 +360,16 @@ export const SettingsPanel = () => {
   ];
 
   const activeTab = tabs.find(tab => tab.id === activeSettingsTab) || tabs[0];
-  const categoryTotal = hiddenCategories.length + hiddenSeriesCategories.length + hiddenMovieCategories.length;
+  const categoryTotal = safeHiddenCategories.length + safeHiddenSeriesCategories.length + safeHiddenMovieCategories.length;
 
   const topGroups = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const item of items) {
+    for (const item of safeItems) {
       const group = item.group || (language === 'tr' ? 'Diğer' : 'Other');
       counts[group] = (counts[group] || 0) + 1;
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  }, [items, language]);
+  }, [safeItems, language]);
 
   const saveLocalSetting = (key: string, value: string) => {
     try {
@@ -425,7 +438,7 @@ export const SettingsPanel = () => {
               )}
             </div>
             <div className="mt-1 text-xs font-medium text-neutral-500">
-              {playlist.channelCount || 0} {language === 'tr' ? 'içerik' : 'items'} • {playlist.groupCount || playlist.groups.length} {language === 'tr' ? 'grup' : 'groups'}
+              {playlist.channelCount || 0} {language === 'tr' ? 'içerik' : 'items'} • {playlist.groupCount || playlist.groups?.length || 0} {language === 'tr' ? 'grup' : 'groups'}
             </div>
           </button>
           <div className="flex shrink-0 gap-1.5">
@@ -551,7 +564,7 @@ export const SettingsPanel = () => {
         <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.01] p-1 select-none backdrop-blur-md">
           <div className="px-3 py-1 text-center border-r border-white/5 last:border-r-0">
             <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Liste' : 'Playlists'}</span>
-            <span className="block mt-0.5 text-sm font-black text-white">{playlists.length}</span>
+              <span className="block mt-0.5 text-sm font-black text-white">{safePlaylists.length}</span>
           </div>
           <div className="px-3 py-1 text-center border-r border-white/5 last:border-r-0">
             <span className="block text-[8px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'İçerik' : 'Items'}</span>
@@ -734,14 +747,14 @@ export const SettingsPanel = () => {
                 </div>
               )}
 
-              {playlists.length === 0 ? (
+              {safePlaylists.length === 0 ? (
                 <EmptyState 
                   icon={UploadCloud} 
                   title={t('settings.playlists.noPlaylists')} 
                   description={language === 'tr' ? 'Listenizi M3U URL\'i veya Xtream API ile ekledikten sonra kanallarınız ve kataloglarınız burada listelenecektir.' : 'After adding your list via M3U URL or Xtream API, your channels and catalogs will be listed here.'} 
                 />
               ) : (
-                <div className="grid gap-4 xl:grid-cols-2">{playlists.map(renderPlaylistCard)}</div>
+                <div className="grid gap-4 xl:grid-cols-2">{safePlaylists.map(renderPlaylistCard)}</div>
               )}
             </>
           )}
@@ -770,7 +783,7 @@ export const SettingsPanel = () => {
                   </div>
                   <div className="mt-4">
                     <span className="block text-2xl font-black tracking-tight text-white leading-none">
-                      {hiddenCategories.length}
+                      {safeHiddenCategories.length}
                     </span>
                     <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
                   </div>
@@ -795,7 +808,7 @@ export const SettingsPanel = () => {
                   </div>
                   <div className="mt-4">
                     <span className="block text-2xl font-black tracking-tight text-white leading-none">
-                      {hiddenSeriesCategories.length}
+                      {safeHiddenSeriesCategories.length}
                     </span>
                     <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
                   </div>
@@ -820,7 +833,7 @@ export const SettingsPanel = () => {
                   </div>
                   <div className="mt-4">
                     <span className="block text-2xl font-black tracking-tight text-white leading-none">
-                      {hiddenMovieCategories.length}
+                      {safeHiddenMovieCategories.length}
                     </span>
                     <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
                   </div>
@@ -849,7 +862,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    {language === 'tr' ? 'Canlı TV' : 'Live TV'} ({hiddenCategories.length})
+                    {language === 'tr' ? 'Canlı TV' : 'Live TV'} ({safeHiddenCategories.length})
                   </button>
                   <button
                     onClick={() => setCategorySubTab('series')}
@@ -859,7 +872,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    {language === 'tr' ? 'Diziler' : 'Series'} ({hiddenSeriesCategories.length})
+                    {language === 'tr' ? 'Diziler' : 'Series'} ({safeHiddenSeriesCategories.length})
                   </button>
                   <button
                     onClick={() => setCategorySubTab('movie')}
@@ -869,7 +882,7 @@ export const SettingsPanel = () => {
                         : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
                     }`}
                   >
-                    {language === 'tr' ? 'Filmler' : 'Movies'} ({hiddenMovieCategories.length})
+                    {language === 'tr' ? 'Filmler' : 'Movies'} ({safeHiddenMovieCategories.length})
                   </button>
                 </div>
 
@@ -903,9 +916,9 @@ export const SettingsPanel = () => {
                     }}
                     disabled={
                       (categorySubTab === 'all' && categoryTotal === 0) ||
-                      (categorySubTab === 'live' && hiddenCategories.length === 0) ||
-                      (categorySubTab === 'series' && hiddenSeriesCategories.length === 0) ||
-                      (categorySubTab === 'movie' && hiddenMovieCategories.length === 0)
+                      (categorySubTab === 'live' && safeHiddenCategories.length === 0) ||
+                      (categorySubTab === 'series' && safeHiddenSeriesCategories.length === 0) ||
+                      (categorySubTab === 'movie' && safeHiddenMovieCategories.length === 0)
                     }
                   >
                     <Eye size={13} /> {language === 'tr' ? 'Seçilileri Göster' : 'Show Selected'}
@@ -915,13 +928,13 @@ export const SettingsPanel = () => {
 
               <div className="grid gap-5">
                 {(categorySubTab === 'all' || categorySubTab === 'live') && 
-                  renderHiddenGroup(language === 'tr' ? 'Canlı TV Kategorileri' : 'Live TV Categories', Tv, hiddenCategories, onRestoreCategory, 'text-indigo-400')
+                  renderHiddenGroup(language === 'tr' ? 'Canlı TV Kategorileri' : 'Live TV Categories', Tv, safeHiddenCategories, onRestoreCategory, 'text-indigo-400')
                 }
                 {(categorySubTab === 'all' || categorySubTab === 'series') && 
-                  renderHiddenGroup(language === 'tr' ? 'Dizi Kategorileri' : 'Series Categories', Video, hiddenSeriesCategories, onRestoreSeriesCategory, 'text-pink-400')
+                  renderHiddenGroup(language === 'tr' ? 'Dizi Kategorileri' : 'Series Categories', Video, safeHiddenSeriesCategories, onRestoreSeriesCategory, 'text-pink-400')
                 }
                 {(categorySubTab === 'all' || categorySubTab === 'movie') && 
-                  renderHiddenGroup(language === 'tr' ? 'Film Kategorileri' : 'Movie Categories', Film, hiddenMovieCategories, onRestoreMovieCategory, 'text-amber-400')
+                  renderHiddenGroup(language === 'tr' ? 'Film Kategorileri' : 'Movie Categories', Film, safeHiddenMovieCategories, onRestoreMovieCategory, 'text-amber-400')
                 }
               </div>
             </>
@@ -1244,6 +1257,31 @@ export const SettingsPanel = () => {
                     )}
                   </div>
                 </SettingRow>
+                
+                <SettingRow
+                  title={language === 'tr' ? "Dönüştürme (Transcode) Performansı" : "Transcoding Performance"}
+                  description={language === 'tr' 
+                    ? "Desteklenmeyen ses formatlarına sahip (AC3/DTS vb.) yayınlarda sesin nasıl yeniden kodlanacağını belirler. Hızlı modu CPU tüketmez." 
+                    : "Determines how audio is re-encoded for streams with unsupported audio formats (like AC3/DTS). Fast mode uses almost zero CPU."}
+                >
+                  <CustomSelect
+                    value={transcodeMode}
+                    onChange={(val) => {
+                      setTranscodeMode(val);
+                      saveLocalSetting('strmly_transcode_mode', val);
+                    }}
+                    options={[
+                      {
+                        value: 'copy',
+                        label: language === 'tr' ? 'Hızlı (Sadece Ses Kodlanır, Düşük CPU)' : 'Fast (Transcode Audio Only, Low CPU)'
+                      },
+                      {
+                        value: 'full',
+                        label: language === 'tr' ? 'Uyumlu (Ses ve Video Kodlanır, Yüksek CPU)' : 'Compatible (Transcode Audio & Video, High CPU)'
+                      }
+                    ]}
+                  />
+                </SettingRow>
               </div>
             </>
           )}
@@ -1339,10 +1377,10 @@ export const SettingsPanel = () => {
                         <span className="text-[8px] uppercase font-bold tracking-widest text-neutral-500 ml-1 select-none">Tanılama Terminali</span>
                       </div>
                       <div className="max-h-[180px] min-h-[140px] overflow-y-auto p-3.5 font-mono text-[10px] leading-5 text-neutral-400 bg-neutral-950/20 hide-scrollbar">
-                        {checkerLog.length === 0 ? (
+                        {safeCheckerLog.length === 0 ? (
                           <div className="text-neutral-600 italic select-none">// Test başlatıldığında çıktılar burada görünecektir...</div>
                         ) : (
-                          checkerLog.map((line, index) => {
+                          safeCheckerLog.map((line, index) => {
                             let colorClass = 'text-neutral-400';
                             if (line.includes('✓') || line.includes('EVRİMİÇİ') || line.includes('ONLINE')) colorClass = 'text-emerald-400 font-medium';
                             else if (line.includes('HATA') || line.includes('EVRİMDIŞI') || line.includes('OFFLINE')) colorClass = 'text-rose-400 font-medium';
@@ -1367,8 +1405,8 @@ export const SettingsPanel = () => {
             <>
               <PageHeader title="Veri Yönetimi" description="İzleme geçmişinizi, favorilerinizi ve yerel ayar yedeklerinizi yönetin." />
               <div className="mb-5 grid gap-3.5 sm:grid-cols-3">
-                <StatBox label="İzleme Geçmişi" value={recentlyWatched.length} />
-                <StatBox label="Favorilerim" value={globalFavorites.length} />
+                <StatBox label="İzleme Geçmişi" value={safeRecentlyWatched.length} />
+                <StatBox label="Favorilerim" value={safeGlobalFavorites.length} />
                 <StatBox label="Toplam İçerik" value={itemStats.total} />
               </div>
               <div>

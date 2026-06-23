@@ -1,10 +1,34 @@
 import React from 'react';
-import { Search, Heart, Trash2, Tv, Play } from 'lucide-react';
+import { 
+  Search, Heart, Trash2, Tv, Play, 
+  Trophy, Film, Newspaper, Music, Gamepad, Compass, 
+  Sparkles, Star, Radio 
+} from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { ImageWithFallback } from './ImageWithFallback';
 import { VirtualizedGrid } from './VirtualizedGrid';
 import { MediaCardContextMenu } from './MediaCardContextMenu';
 import { useSettings } from '../context/SettingsContext';
+
+// Helper to map category names to Lucide icons dynamically
+export const getCategoryIcon = (name: string) => {
+  const upper = name.toUpperCase();
+  if (upper.includes('SPOR') || upper.includes('SPORT')) return Trophy;
+  if (upper.includes('SİNEMA') || upper.includes('FİLM') || upper.includes('MOVIE') || upper.includes('CİNEMA') || upper.includes('ACTION') || upper.includes('VOD') || upper.includes('VİZYON') || upper.includes('LİSTE')) return Film;
+  if (upper.includes('HABER') || upper.includes('NEWS') || upper.includes('INFO')) return Newspaper;
+  if (upper.includes('MÜZİK') || upper.includes('MUSIC') || upper.includes('KLİP')) return Music;
+  if (upper.includes('ÇOCUK') || upper.includes('KİD') || upper.includes('GAME') || upper.includes('GAMİNG') || upper.includes('ANİME') || upper.includes('KARTON')) return Gamepad;
+  if (upper.includes('BELGESEL') || upper.includes('DOCUMENTARY') || upper.includes('WİLD') || upper.includes('NAT') || upper.includes('GEOGRAPHIC')) return Compass;
+  if (
+    upper.includes('NETFLIX') || upper.includes('AMAZON') || upper.includes('HBO') || 
+    upper.includes('DISNEY') || upper.includes('TOD') || upper.includes('BEIN') || 
+    upper.includes('EXXEN') || upper.includes('GAIN') || upper.includes('PREMIUM') || 
+    upper.includes('VIP') || upper.includes('ÖZEL') || upper.includes('SEÇKİN') || 
+    upper.includes('PLATINUM')
+  ) return Sparkles;
+  if (upper.includes('FAVORİ') || upper.includes('FAV')) return Star;
+  return Tv;
+};
 
 interface MoviesViewProps {
   selectedGroup: string;
@@ -53,14 +77,15 @@ export const MovieCard = React.memo(({
   isGenericLogo: boolean;
   onContextMenu?: (event: React.MouseEvent, item: PlaylistItem) => void;
 }) => {
+  const { language } = useSettings();
   return (
     <div
-      className="group flex flex-col gap-2.5 cursor-pointer focusable-item"
+      className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
       tabIndex={0}
       onClick={() => onClick(channel)}
       onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
-      <div className="premium-card aspect-[2/3] flex items-center justify-center">
+      <div className="premium-card aspect-[2/3] flex items-center justify-center relative">
         <ImageWithFallback
           src={channel.logo}
           name={channel.name}
@@ -70,9 +95,10 @@ export const MovieCard = React.memo(({
           aspect="portrait"
         />
 
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-          <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
-            <Play size={16} fill="#000" className="ml-0.5" />
+        {/* Hover Glassmorphism Play Button */}
+        <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10 duration-300">
+          <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border border-white/20">
+            <Play size={15} fill="#000" className="ml-0.5" />
           </div>
         </div>
 
@@ -81,20 +107,24 @@ export const MovieCard = React.memo(({
             className={`absolute bottom-2.5 left-2.5 z-20 w-2 h-2 rounded-full border border-black/40 shadow-sm ${
               isOnline === 'online' ? 'bg-emerald-500' : 'bg-red-500'
             }`}
-            title={isOnline === 'online' ? 'Çevrimiçi' : 'Çevrimdışı'}
+            title={isOnline === 'online' ? (language === 'tr' ? 'Çevrimiçi' : 'Online') : (language === 'tr' ? 'Çevrimdışı' : 'Offline')}
           />
         )}
         <button
-          onClick={(e) => onToggleFavorite(channel.id, e)}
-          className="absolute top-2.5 right-2.5 z-20 w-7 h-7 rounded-full bg-black/80 border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110"
-          title="Favorilere Ekle"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(channel.id, e);
+          }}
+          className={`absolute top-2.5 right-2.5 z-20 w-7 h-7 rounded-full bg-black/80 border border-white/10 flex items-center justify-center text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 cursor-pointer ${
+            isFavorite ? 'opacity-100 text-red-500 border-red-500/20' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
         >
-          <Heart size={12} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
+          <Heart size={11} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
         </button>
       </div>
-      <div className="flex flex-col px-1.5">
+      <div className="flex flex-col px-1">
         <span className="text-xs font-bold premium-card-title truncate">{channel.name}</span>
-        <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mt-0.5">{channel.group || 'Genel'}</span>
       </div>
     </div>
   );
@@ -139,7 +169,8 @@ export const MoviesView = React.memo(function MoviesView({
 
   return (
     <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] animate-fade-in pb-12" onContextMenu={() => setContextMenu(null)}>
-      <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg">
+      {/* 1. Left Categories Sidebar */}
+      <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
         <div className="flex items-center justify-between px-2 mb-2">
           <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
           <button
@@ -160,18 +191,79 @@ export const MoviesView = React.memo(function MoviesView({
           />
         </div>
 
+        {/* All Movies Button */}
         <button
           onClick={() => { setActiveMovieCategory('Tümü'); setVisibleCount(100); }}
-          className={`text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${activeMovieCategory === 'Tümü' ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+          className={`flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${
+            activeMovieCategory === 'Tümü'
+              ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
+              : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
+          }`}
         >
-          {language === 'tr' ? 'Tüm Filmler' : 'All Movies'}
+          <Radio size={14} className={activeMovieCategory === 'Tümü' ? 'text-[var(--accent-color)]' : 'text-neutral-500'} />
+          <span>{language === 'tr' ? 'Tüm Filmler' : 'All Movies'}</span>
         </button>
+
+        {/* Favorites Categories Section */}
         {movieFavCatsToShow.length > 0 && (
-          <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-white/5">
+          <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/5">
             <span className="text-[9px] tracking-widest font-extrabold text-red-500/50 uppercase px-2 mb-1 flex items-center gap-1.5"><Heart size={10} /> {t('navbar.favorites')}</span>
-            {movieFavCatsToShow.map(group => (
+            {movieFavCatsToShow.map(group => {
+              const CatIcon = getCategoryIcon(group);
+              const isCatActive = activeMovieCategory === group;
+              return (
+                <div
+                  key={`fav-movie-${group}`}
+                  className={`relative flex items-center group transition-transform ${movieCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${movieCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                  draggable={movieCat.editMode}
+                  onDragStart={(e) => movieCat.handleDragStart(e, group)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => movieCat.handleDrop(e, group)}
+                >
+                  <button
+                    onClick={() => { setActiveMovieCategory(group); setVisibleCount(100); }}
+                    className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${
+                      isCatActive
+                        ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
+                        : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
+                    }`}
+                  >
+                    <CatIcon size={14} className={isCatActive ? 'text-[var(--accent-color)] animate-pulse' : 'text-neutral-500'} />
+                    <span className="truncate">{group}</span>
+                  </button>
+                  {movieCat.editMode && (
+                    <div className="absolute right-2.5 flex items-center gap-1 z-20">
+                      <button
+                        onClick={(e) => movieCat.toggleFavorite(group, e)}
+                        className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
+                        title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
+                      >
+                        <Heart size={11} fill="currentColor" />
+                      </button>
+                      <button
+                        onClick={(e) => movieCat.handleHide(group, e)}
+                        className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
+                        title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Other Categories Section */}
+        <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/5">
+          <span className="text-[9px] tracking-widest font-extrabold text-neutral-600 uppercase px-2 mb-1">{language === 'tr' ? 'Diğerleri' : 'Others'}</span>
+          {otherCategories.slice(0, visibleMovieCategoryLimit).map(group => {
+            const CatIcon = getCategoryIcon(group);
+            const isCatActive = activeMovieCategory === group;
+            return (
               <div
-                key={`fav-movie-${group}`}
+                key={group}
                 className={`relative flex items-center group transition-transform ${movieCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${movieCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 draggable={movieCat.editMode}
                 onDragStart={(e) => movieCat.handleDragStart(e, group)}
@@ -180,22 +272,27 @@ export const MoviesView = React.memo(function MoviesView({
               >
                 <button
                   onClick={() => { setActiveMovieCategory(group); setVisibleCount(100); }}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${activeMovieCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-300 hover:bg-white/10 hover:text-white'}`}
+                  className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${
+                    isCatActive
+                      ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
+                      : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
+                  }`}
                 >
-                  {group}
+                  <CatIcon size={14} className={isCatActive ? 'text-[var(--accent-color)] animate-pulse' : 'text-neutral-500'} />
+                  <span className="truncate">{group}</span>
                 </button>
                 {movieCat.editMode && (
                   <div className="absolute right-2.5 flex items-center gap-1 z-20">
                     <button
                       onClick={(e) => movieCat.toggleFavorite(group, e)}
-                      className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform"
-                      title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
+                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
+                      title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
                     >
-                      <Heart size={11} fill="currentColor" />
+                      <Heart size={11} />
                     </button>
                     <button
                       onClick={(e) => movieCat.handleHide(group, e)}
-                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform"
+                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
                     >
                       <Trash2 size={11} />
@@ -203,61 +300,24 @@ export const MoviesView = React.memo(function MoviesView({
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-white/5">
-          <span className="text-[9px] tracking-widest font-extrabold text-neutral-600 uppercase px-2 mb-1">{language === 'tr' ? 'Diğerleri' : 'Others'}</span>
-          {otherCategories.slice(0, visibleMovieCategoryLimit).map(group => (
-            <div
-              key={group}
-              className={`relative flex items-center group transition-transform ${movieCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${movieCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-              draggable={movieCat.editMode}
-              onDragStart={(e) => movieCat.handleDragStart(e, group)}
-              onDragOver={handleDragOver}
-              onDrop={(e) => movieCat.handleDrop(e, group)}
-            >
-              <button
-                onClick={() => { setActiveMovieCategory(group); setVisibleCount(100); }}
-                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all focusable-item ${movieCat.editMode ? 'pr-16' : 'pr-4'} ${activeMovieCategory === group ? 'bg-[var(--accent-color)] text-black shadow-md' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
-              >
-                {group}
-              </button>
-              {movieCat.editMode && (
-                <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                  <button
-                    onClick={(e) => movieCat.toggleFavorite(group, e)}
-                    className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform"
-                    title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
-                  >
-                    <Heart size={11} />
-                  </button>
-                  <button
-                    onClick={(e) => movieCat.handleHide(group, e)}
-                    className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform"
-                    title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
           {otherCategories.length > visibleMovieCategoryLimit && (
             <button
               onClick={() => setVisibleMovieCategoryLimit(prev => prev + 50)}
-              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item"
+              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item cursor-pointer"
             >
               {language === 'tr' ? 'Daha Fazla Göster' : 'Show More'} (+{otherCategories.length - visibleMovieCategoryLimit})
             </button>
           )}
         </div>
       </div>
+
+      {/* 2. Middle Content Grid */}
       <div className="flex-1 flex flex-col gap-3 h-full">
         <div className="flex-1 overflow-y-auto bg-neutral-950/20 border border-white/5 rounded-[24px] p-2 md:p-4 shadow-inner" onScroll={handleMainScroll}>
           {filteredDisplayItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center p-20 opacity-50">
+            <div className="flex flex-col items-center justify-center text-center p-20 opacity-50 select-none">
               <Tv size={32} className="text-neutral-500 mb-3" />
               <h3 className="text-base font-semibold text-neutral-300">{language === 'tr' ? 'Film Bulunamadı' : 'No Movies Found'}</h3>
             </div>

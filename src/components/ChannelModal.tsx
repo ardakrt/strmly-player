@@ -105,8 +105,8 @@ export const ChannelModal = ({
   }, [tmdbData?.id]);
 
   return (
-    <div className="fixed inset-0 z-[3000] bg-black/90 flex items-center justify-center p-6 select-none animate-fade-in">
-
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 select-none animate-fade-in">
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
       <div className="w-full max-w-4xl bg-neutral-950/65 backdrop-blur-2xl border border-white/[0.08] rounded-[36px] overflow-hidden flex flex-col md:flex-row shadow-[0_32px_80px_rgba(0,0,0,0.85)] relative animate-scale-in z-10">
         <button
           onClick={onClose}

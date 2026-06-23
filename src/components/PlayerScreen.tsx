@@ -37,6 +37,7 @@ export function PlayerScreen({
 
   return (
     <CinematicPlayer
+      bufferedProgress={player.bufferedProgress}
       channel={channel}
       channels={channels}
       onChannelChange={onChannelChange}
@@ -49,6 +50,8 @@ export function PlayerScreen({
       playerMuted={player.playerMuted}
       showControls={player.showControls}
       videoReady={player.videoReady}
+      playbackStatus={player.playbackStatus}
+      playbackMessage={player.playbackMessage}
       playbackSpeed={player.playbackSpeed}
       showSpeedMenu={player.showSpeedMenu}
       audioTracks={player.audioTracks}

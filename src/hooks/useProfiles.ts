@@ -1,9 +1,10 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Profile, AvatarSearchResult, ContentPreference, SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
 import { deletePlaylistFromBrowserStorage, savePlaylistToBrowserStorage } from '../utils/playlistStorage';
 import { resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
 import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS } from '../constants';
+import type { Language } from '../utils/translations';
 
 interface UseProfilesProps {
   tmdbApiKey: string;
@@ -13,6 +14,8 @@ interface UseProfilesProps {
   loadProfileData: (profileId: string) => Promise<void>;
   resetAllProfileData: () => Promise<void>;
   setIsParsing: (val: boolean) => void;
+  loaded: boolean;
+  language: Language;
 }
 
 const getCacheBustedUrl = (url: string): string => {
@@ -37,7 +40,9 @@ export function useProfiles({
   showToast,
   loadProfileData,
   resetAllProfileData,
-  setIsParsing
+  setIsParsing,
+  loaded,
+  language
 }: UseProfilesProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -79,6 +84,131 @@ export function useProfiles({
     detail: ''
   });
 
+  // Fetch local Turkish series for avatar select list
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLocalSeriesList = async () => {
+      if (!tmdbApiKey) {
+        setTrendingAvatars([]);
+        return;
+      }
+
+      // Never leave an avatar pool from a previous request/profile visible.
+      setTrendingAvatars([]);
+      try {
+        const fetchTmdbJson = async (path: string) => {
+          if (window.electronAPI?.fetchTmdb) {
+            return await window.electronAPI.fetchTmdb(path) as any;
+          }
+          const response = await fetch(`https://api.themoviedb.org${path}`);
+          if (!response.ok) throw new Error(`TMDB HTTP ${response.status}`);
+          return await response.json();
+        };
+
+        const tmdbLang = getTmdbLanguage();
+        // Discover prominent Turkish TV shows
+        const pages = await Promise.all([1, 2, 3].map(page => {
+          const discoverPath = `/3/discover/tv?api_key=${tmdbApiKey}&with_origin_country=TR&with_original_language=tr&sort_by=popularity.desc&include_null_first_air_dates=false&language=${tmdbLang}&page=${page}`;
+          return fetchTmdbJson(discoverPath);
+        }));
+        const seenIds = new Set<number>();
+        const results = pages
+          .flatMap(data => Array.isArray(data?.results) ? data.results : [])
+          .filter(item => item?.id && !seenIds.has(item.id) && seenIds.add(item.id));
+
+        const items = results.filter(item => item.poster_path).slice(0, 48);
+
+        // Resolve images in parallel
+        const resolvedList = await Promise.all(
+          items.map(async (item) => {
+            const posterUrl = await resolveTmdbImageSrc(item.poster_path, 'w185');
+            return {
+              id: item.id,
+              name: item.name,
+              posterUrl: posterUrl || ''
+            };
+          })
+        );
+
+        if (cancelled) return;
+        setLocalSeries(resolvedList.filter(item => item.posterUrl));
+
+        // Build quick-avatar row from actors in prominent series
+        const credits = await Promise.all(items.slice(0, 12).map(item => (
+          fetchTmdbJson(`/3/tv/${item.id}/credits?api_key=${tmdbApiKey}&language=${tmdbLang}`).catch(() => ({ cast: [] }))
+        )));
+        const seenProfiles = new Set<string>();
+        const actorPaths = credits
+          .flatMap(data => Array.isArray(data?.cast) ? data.cast : [])
+          .filter(actor => actor?.profile_path && !seenProfiles.has(actor.profile_path) && seenProfiles.add(actor.profile_path))
+          .slice(0, 36)
+          .map(actor => actor.profile_path as string);
+
+        if (actorPaths.length > 0) {
+          const actorImages = await Promise.all(actorPaths.map(path => resolveTmdbImageSrc(path, 'w185')));
+          if (!cancelled) {
+            setTrendingAvatars(actorImages.filter((image): image is string => Boolean(image)));
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching local series:", e);
+      }
+    };
+
+    const timer = loaded ? window.setTimeout(fetchLocalSeriesList, 1400) : undefined;
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [loaded, tmdbApiKey]);
+
+  const handleFetchSeriesCast = async (seriesId: number, seriesName: string, mediaType: 'movie' | 'tv' = 'tv') => {
+    setCastLoading(true);
+    setSelectedSeriesForCast({ id: seriesId, name: seriesName });
+    try {
+      let castList: any[] = [];
+      const creditsPath = `/3/${mediaType}/${seriesId}/credits?api_key=${tmdbApiKey}&language=${getTmdbLanguage()}`;
+
+      if (window.electronAPI && window.electronAPI.fetchTmdb) {
+        const res = await window.electronAPI.fetchTmdb(creditsPath) as any;
+        if (res && Array.isArray(res.cast)) {
+          castList = res.cast;
+        }
+      } else {
+        const res = await fetch(`https://api.themoviedb.org${creditsPath}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.cast)) {
+            castList = data.cast;
+          }
+        }
+      }
+
+      // Filter cast to those who have profile photos
+      const castWithPhotos = castList.filter(item => item.profile_path).slice(0, 18);
+
+      // Resolve image URLs in parallel
+      const resolvedCast = await Promise.all(
+        castWithPhotos.map(async (item) => {
+          const avatarUrl = await resolveTmdbImageSrc(item.profile_path, 'w185');
+          return {
+            name: item.name,
+            avatarUrl: avatarUrl || ''
+          };
+        })
+      );
+
+      setSeriesCast(resolvedCast.filter(item => item.avatarUrl));
+    } catch (e) {
+      console.error("Error fetching cast:", e);
+      showToast(language === 'tr' ? "Oyuncular yüklenirken bir hata oluştu." : "An error occurred while loading actors.");
+    } finally {
+      setCastLoading(false);
+    }
+  };
+
   // Profile selection
   const handleSelectProfile = async (profileId: string) => {
     const transitionStartedAt = Date.now();
@@ -88,12 +218,12 @@ export function useProfiles({
     try {
       await saveAppSetting('cinema_active_profile_id', profileId);
       await loadProfileData(profileId);
-      const remainingAnimationTime = Math.max(0, 1400 - (Date.now() - transitionStartedAt));
+      const remainingAnimationTime = Math.max(0, 450 - (Date.now() - transitionStartedAt));
       if (remainingAnimationTime > 0) {
         await new Promise<void>(resolve => window.setTimeout(resolve, remainingAnimationTime));
       }
       setProfileEntryReady(true);
-      await new Promise<void>(resolve => window.setTimeout(resolve, 420));
+      await new Promise<void>(resolve => window.setTimeout(resolve, 160));
       setActiveProfileId(profileId);
     } catch (error) {
       console.error("Error loading selected profile:", error);
@@ -451,6 +581,7 @@ export function useProfiles({
     handleLogoutProfile,
     handleDeleteProfile,
     handleAvatarSearch,
-    handleSaveProfile
+    handleSaveProfile,
+    handleFetchSeriesCast
   };
 }

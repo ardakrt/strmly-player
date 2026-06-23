@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, X, ChevronDown, Heart } from 'lucide-react';
+import { CheckCircle2, Clock3, Play, X, ChevronDown, Heart } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { EpisodeThumb } from './EpisodeThumb';
 import { cleanMediaTitle } from '../utils/seriesGroupers';
@@ -39,6 +39,12 @@ interface CastMember {
   avatarUrl: string;
 }
 
+interface EpisodeMeta {
+  stillPath?: string;
+  runtime?: number;
+  overview?: string;
+}
+
 export const SeriesModal = ({
   series,
   tmdbData,
@@ -60,14 +66,14 @@ export const SeriesModal = ({
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [episodeStills, setEpisodeStills] = useState<Record<number, string>>({});
+  const [episodeMeta, setEpisodeMeta] = useState<Record<number, EpisodeMeta>>({});
   
   const [cast, setCast] = useState<CastMember[]>([]);
   const [showCastModal, setShowCastModal] = useState(false);
 
   useEffect(() => {
     if (!tmdbShowId) {
-      setEpisodeStills({});
+      setEpisodeMeta({});
       return;
     }
 
@@ -75,23 +81,25 @@ export const SeriesModal = ({
     const apiKey = getTmdbApiKey();
     const path = `/3/tv/${tmdbShowId}/season/${activeSeason}?api_key=${apiKey}&language=${getTmdbLanguage()}`;
 
-    fetchTmdbPath<{ episodes?: { episode_number: number; still_path?: string }[]; error?: string }>(path)
+    fetchTmdbPath<{ episodes?: { episode_number: number; still_path?: string; runtime?: number; overview?: string }[]; error?: string }>(path)
       .then((data) => {
         if (cancelled) return;
-        const stillsMap: Record<number, string> = {};
+        const metaMap: Record<number, EpisodeMeta> = {};
         if (data && Array.isArray(data.episodes)) {
           data.episodes.forEach((ep) => {
-            if (ep.still_path) {
-              stillsMap[ep.episode_number] = ep.still_path;
-            }
+            metaMap[ep.episode_number] = {
+              stillPath: ep.still_path,
+              runtime: ep.runtime,
+              overview: ep.overview
+            };
           });
         }
-        setEpisodeStills(stillsMap);
+        setEpisodeMeta(metaMap);
       })
       .catch((err) => {
         console.error("Failed to fetch season details:", err);
         if (!cancelled) {
-          setEpisodeStills({});
+          setEpisodeMeta({});
         }
       });
 
@@ -194,7 +202,7 @@ export const SeriesModal = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 md:p-8 select-none animate-fade-in">
-      <div className="absolute inset-0 bg-black/90" />
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
       <div className="relative w-full max-w-5xl h-[85vh] max-h-[820px] bg-neutral-950 border border-white/10 rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-[0_32px_80px_rgba(0,0,0,0.85)] z-10 glass-modal-enter">
         <button
           onClick={onClose}
@@ -203,10 +211,10 @@ export const SeriesModal = ({
           <X size={16} />
         </button>
         <div className="w-full md:w-[38%] flex flex-col gap-4 p-5 md:p-6 border-b md:border-b-0 md:border-r border-white/5 bg-black/20 overflow-y-auto shrink-0 select-none hide-scrollbar">
-          <div className="relative w-[150px] md:w-[175px] aspect-[2/3] mx-auto rounded-2xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)] group/poster border border-white/5 shrink-0">
-            {tmdbData?.poster ? (
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)] group/poster border border-white/5 shrink-0 bg-white/[0.02]">
+            {tmdbData?.backdrop || tmdbData?.poster ? (
               <img
-                src={tmdbData.poster}
+                src={tmdbData.backdrop || tmdbData.poster}
                 className="absolute inset-0 w-full h-full object-cover"
                 alt={series.name}
               />
@@ -238,7 +246,7 @@ export const SeriesModal = ({
           <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-[11px] font-bold shrink-0">
             {tmdbData && (
               <>
-                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-emerald-400">{tmdbData.match}</span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-300/20 text-emerald-300">{tmdbData.match}</span>
                 <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">{tmdbData.year}</span>
                 <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">★ {tmdbData.rating.replace('★ ', '')}</span>
               </>
@@ -281,16 +289,16 @@ export const SeriesModal = ({
               </div>
               <div 
                 onClick={() => setShowCastModal(true)}
-                className="flex gap-4 overflow-x-auto pb-1.5 hide-scrollbar select-none cursor-pointer"
+                className="flex gap-3 overflow-x-auto pb-1.5 hide-scrollbar select-none cursor-pointer"
               >
-                {cast.slice(0, 8).map((member, idx) => (
-                  <div key={idx} className="flex flex-col items-center gap-1 shrink-0 w-12 text-center transition-transform hover:scale-105 duration-200">
+                {cast.slice(0, 6).map((member, idx) => (
+                  <div key={idx} className="flex flex-col items-center gap-1.5 shrink-0 w-14 text-center transition-transform hover:-translate-y-0.5 duration-200">
                     <img
                       src={member.avatarUrl}
                       alt={member.name}
-                      className="w-8 h-8 rounded-full object-cover border border-white/10 shadow-inner"
+                      className="w-10 h-10 rounded-full object-cover border border-white/15 shadow-[0_6px_18px_rgba(0,0,0,0.38)]"
                     />
-                    <span className="text-[8px] text-neutral-200 font-bold truncate w-full" title={member.name}>
+                    <span className="text-[8px] text-neutral-200 font-bold truncate w-full leading-tight" title={member.name}>
                       {member.name}
                     </span>
                   </div>
@@ -422,11 +430,18 @@ export const SeriesModal = ({
                 const progress = historyItem?.progress;
                 const isWatched = recentlyWatched.some(x => x.id === ep.item.id);
                 const isTarget = expandedEpisodeId === ep.item.id;
+                const meta = episodeMeta[ep.episodeNumber] || {};
+                const runtimeText = meta.runtime
+                  ? `${meta.runtime} dk`
+                  : (language === 'tr' ? 'HD Akış' : 'HD Stream');
+                const progressText = progress !== undefined && progress > 0
+                  ? `${Math.round(progress)}%`
+                  : null;
 
                 return (
                   <div
                     key={ep.item.id}
-                    className={`rounded-2xl p-3 flex items-center justify-between gap-4 relative group border bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.07] hover:border-white/15 hover:shadow-[0_8px_25px_rgba(0,0,0,0.45)] transition-all duration-300 ${
+                    className={`rounded-2xl p-3 flex items-center justify-between gap-4 relative group border bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.055] hover:border-white/12 hover:shadow-[0_8px_25px_rgba(0,0,0,0.38)] transition-all duration-300 ${
                       isTarget ? 'border-white/20 bg-white/[0.06] shadow-md shadow-white/5' : ''
                     }`}
                   >
@@ -436,7 +451,7 @@ export const SeriesModal = ({
                         seasonNumber={ep.seasonNumber}
                         episodeNumber={ep.episodeNumber}
                         fallbackPoster={tmdbData?.poster}
-                        stillPath={episodeStills[ep.episodeNumber]}
+                        stillPath={meta.stillPath}
                       />
                       <div
                         onClick={() => {
@@ -473,9 +488,24 @@ export const SeriesModal = ({
                       <h4 className="text-xs font-black text-white truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
                         {epSubtitle || (language === 'tr' ? `Bölüm ${ep.episodeNumber}` : `Episode ${ep.episodeNumber}`)}
                       </h4>
-                      <span className="block text-[9px] text-neutral-500 truncate mt-1">
+                      <span className="block text-[9px] text-neutral-500 truncate mt-1 max-w-[92%]">
                         {epTitle}
                       </span>
+                      <div className="flex items-center gap-2 mt-1.5 text-[9px] font-bold text-neutral-500">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock3 size={10} />
+                          {runtimeText}
+                        </span>
+                        {isWatched && (
+                          <span className="inline-flex items-center gap-1 text-emerald-300">
+                            <CheckCircle2 size={10} />
+                            {language === 'tr' ? 'İzlendi' : 'Watched'}
+                          </span>
+                        )}
+                        {progressText && !isWatched && (
+                          <span className="text-white/70">{progressText}</span>
+                        )}
+                      </div>
                     </div>
                     <button
                       onClick={() => {

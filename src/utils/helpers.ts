@@ -63,3 +63,22 @@ export const hexToRgbStr = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
   return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '0, 113, 227';
 };
+
+export const getAccentStylesHelper = (
+  activeAccent: string,
+  glassIntensity: string,
+  neonGlowEnabled: boolean
+) => {
+  const rgb = hexToRgbStr(activeAccent);
+  return {
+    '--accent-color': activeAccent,
+    '--accent-hover': activeAccent,
+    '--accent-glow': `rgba(${rgb}, 0.45)`,
+    '--border-active': activeAccent,
+    '--blur-level': glassIntensity === 'high' ? '28px' : glassIntensity === 'medium' ? '14px' : '0px',
+    '--glass-opacity': glassIntensity === 'high' ? '0.35' : glassIntensity === 'medium' ? '0.55' : '0.96',
+    '--card-glow-shadow': neonGlowEnabled ? `0 8px 30px rgba(${rgb}, 0.25)` : '0 4px 20px rgba(0, 0, 0, 0.3)',
+    '--accent-glow-border': neonGlowEnabled ? `rgba(${rgb}, 0.35)` : 'rgba(255, 255, 255, 0.1)',
+    '--accent-glow-solid': `rgba(${rgb}, 0.15)`
+  } as React.CSSProperties;
+};

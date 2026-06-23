@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <title>Strmly</title>
+    <script type="module" crossorigin src="./assets/index-b9_SOduV.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-QTnfLwEv.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-react-3aVj0Qoh.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-DJXCALo0.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      (function() {
+        try {
+          var scale = localStorage.getItem('strmly_ui_scale');
+          if (scale === 'small') document.documentElement.style.fontSize = '14px';
+          else if (scale === 'large') document.documentElement.style.fontSize = '18.5px';
+          
+          var grain = localStorage.getItem('strmly_background_grain');
+          if (grain === 'true') {
+            var el = document.createElement('div');
+            el.id = 'strmly-grain-overlay';
+            el.className = 'grain-overlay';
+            document.body.appendChild(el);
+          }
+        } catch(e) {}
+      })();
+    </script>
+  </body>
+</html>

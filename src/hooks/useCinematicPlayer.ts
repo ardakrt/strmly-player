@@ -11,6 +11,30 @@ interface UseCinematicPlayerProps {
 
 const PLAYER_VOLUME_KEY = 'cinema_player_volume';
 const PLAYER_MUTED_KEY = 'cinema_player_muted';
+type PlaybackStatus = 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
+
+function getPlaybackLabel(item: PlaylistItem | null): string {
+  if (item?.type === 'live') return 'Canli yayin';
+  if (item?.type === 'movie') return 'Film';
+  return 'Dizi bolumu';
+}
+
+function getLoadingMessage(item: PlaylistItem | null): string {
+  return `${getPlaybackLabel(item)} hazirlaniyor...`;
+}
+
+function getTranscodingMessage(item: PlaylistItem | null): string {
+  return `${getPlaybackLabel(item)} icin uyumluluk modu deneniyor...`;
+}
+
+function getRecoveringMessage(item: PlaylistItem | null): string {
+  return `${getPlaybackLabel(item)} akisi kurtariliyor...`;
+}
+
+function getPlaybackFailureMessage(item: PlaylistItem | null, reason?: string): string {
+  const reasonText = reason ? ` (${reason})` : '';
+  return `${getPlaybackLabel(item)} acilamadi${reasonText}. Kaynak gecici olarak kapali, codec desteklenmiyor veya sunucu yanit vermiyor olabilir. Baska bir kaynak deneyin ya da harici oynatici ile acmayi deneyin.`;
+}
 
 function getSavedPlayerVolume(): number {
   const saved = Number(localStorage.getItem(PLAYER_VOLUME_KEY));
@@ -36,10 +60,25 @@ export function useCinematicPlayer({
   const seekRequestIdRef = useRef(0);
   const subtitleObjectUrlsRef = useRef<string[]>([]);
   const subtitleRef = useRef<HTMLTrackElement>(null);
+  const seekTimeoutRef = useRef<any>(null);
+  const pendingSeekTimeRef = useRef<number | null>(null);
+  const startupTimeoutRef = useRef<any>(null);
+  const recoveryAttemptRef = useRef(0);
+  const hlsNetworkRecoveriesRef = useRef(0);
+  const hlsMediaRecoveriesRef = useRef(0);
+  const lastBufferedUpdateRef = useRef(0);
 
   // States/refs to reload the stream if paused for a long time (TCP/Token timeout recovery)
   const pausedTimeRef = useRef<number | null>(null);
   const resumeTimeRef = useRef<number | null>(null);
+
+  const getTranscodeMode = () => {
+    try {
+      return localStorage.getItem('strmly_transcode_mode') || 'copy';
+    } catch {
+      return 'copy';
+    }
+  };
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -47,8 +86,11 @@ export function useCinematicPlayer({
   const [playerVolume, setPlayerVolume] = useState(getSavedPlayerVolume);
   const [playerMuted, setPlayerMuted] = useState(getSavedPlayerMuted);
   const [ffmpegFallbackActive, setFfmpegFallbackActive] = useState(false);
+  const [bufferedProgress, setBufferedProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [videoReady, setVideoReady] = useState(false);
+  const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>('loading');
+  const [playbackMessage, setPlaybackMessage] = useState('');
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -143,11 +185,9 @@ export function useCinematicPlayer({
     }
   };
 
-  const handlePlayerSeek = async (newTime: number) => {
+  const executeSeek = async (targetTime: number) => {
     if (!videoRef.current || !selectedChannel) return;
-    const targetTime = Math.max(0, durationRef.current > 0
-      ? Math.min(newTime, Math.max(0, durationRef.current - 0.25))
-      : newTime);
+    setBufferedProgress(0);
 
     if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
       const requestId = ++seekRequestIdRef.current;
@@ -156,12 +196,12 @@ export function useCinematicPlayer({
         const result = await window.electronAPI.startFfmpegProxy(
           selectedChannel.url,
           targetTime,
-          activeAudioStreamIdRef.current
+          activeAudioStreamIdRef.current,
+          getTranscodeMode()
         );
         if (requestId !== seekRequestIdRef.current) return;
         if (result.success && result.url && videoRef.current) {
           seekOffsetRef.current = targetTime;
-          setCurrentTime(targetTime);
           videoRef.current.src = result.url;
           videoRef.current.muted = playerMutedRef.current;
           videoRef.current.volume = playerVolumeRef.current;
@@ -175,12 +215,38 @@ export function useCinematicPlayer({
     }
   };
 
+  const handlePlayerSeek = (newTime: number, isRelative = false) => {
+    if (!videoRef.current || !selectedChannel) return;
+
+    let targetTime = newTime;
+    if (isRelative && pendingSeekTimeRef.current !== null) {
+      const delta = newTime - currentTime;
+      targetTime = pendingSeekTimeRef.current + delta;
+    }
+
+    targetTime = Math.max(0, durationRef.current > 0
+      ? Math.min(targetTime, Math.max(0, durationRef.current - 0.25))
+      : targetTime);
+
+    pendingSeekTimeRef.current = targetTime;
+    setCurrentTime(targetTime);
+
+    if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+
+    seekTimeoutRef.current = setTimeout(() => {
+      const finalTargetTime = pendingSeekTimeRef.current;
+      if (finalTargetTime === null) return;
+      pendingSeekTimeRef.current = null;
+      executeSeek(finalTargetTime);
+    }, 150);
+  };
+
   const handleTimelineSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!videoRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const pos = (e.clientX - rect.left) / rect.width;
     const newTime = pos * duration;
-    handlePlayerSeek(newTime);
+    handlePlayerSeek(newTime, false);
   };
 
   const handlePlayerVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -273,7 +339,7 @@ export function useCinematicPlayer({
         showToast("Ses dili değiştiriliyor (Transcode)...");
         const currentPos = video.currentTime;
         try {
-          const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, seekOffsetRef.current + currentPos, streamId);
+          const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, seekOffsetRef.current + currentPos, streamId, getTranscodeMode());
           if (result.success && result.url) {
             seekOffsetRef.current = seekOffsetRef.current + currentPos;
             isTranscodingRef.current = true;
@@ -347,10 +413,13 @@ export function useCinematicPlayer({
     if (!selectedChannel || !videoRef.current) return;
     setIsPlaying(true);
     setCurrentTime(0);
+    setBufferedProgress(0);
     setDuration(selectedChannel.duration && selectedChannel.duration > 0 ? selectedChannel.duration : 0);
     setAudioTracks([]);
     setActiveAudioTrack(0);
     setVideoReady(false);
+    setPlaybackStatus('loading');
+    setPlaybackMessage(getLoadingMessage(selectedChannel));
 
     const video = videoRef.current;
     video.playbackRate = playbackSpeedRef.current;
@@ -359,6 +428,10 @@ export function useCinematicPlayer({
     activeAudioStreamIdRef.current = undefined;
     seekRequestIdRef.current = 0;
     seekOffsetRef.current = 0;
+    recoveryAttemptRef.current = 0;
+    hlsNetworkRecoveriesRef.current = 0;
+    hlsMediaRecoveriesRef.current = 0;
+    lastBufferedUpdateRef.current = 0;
 
     // Restore the user's last volume and mute preference.
     video.muted = playerMutedRef.current;
@@ -366,14 +439,51 @@ export function useCinematicPlayer({
 
     let active = true;
 
-    const startFfmpegFallback = async (forceStartTime?: number) => {
-      if (!active || !window.electronAPI?.startFfmpegProxy) return;
+    const clearStartupTimeout = () => {
+      if (startupTimeoutRef.current) {
+        clearTimeout(startupTimeoutRef.current);
+        startupTimeoutRef.current = null;
+      }
+    };
+
+    const failPlayback = (reason?: string) => {
+      if (!active) return;
+      clearStartupTimeout();
+      const message = getPlaybackFailureMessage(selectedChannel, reason);
+      setPlaybackStatus('error');
+      setPlaybackMessage(message);
+      setVideoReady(false);
+      showToast(message);
+    };
+
+    const armStartupTimeout = () => {
+      clearStartupTimeout();
+      startupTimeoutRef.current = window.setTimeout(() => {
+        if (!active || videoReady || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+        if (!isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
+          startFfmpegFallback(undefined, 'Ilk kare gecikti');
+        } else {
+          failPlayback('Sunucu zamaninda yanit vermedi');
+        }
+      }, 12000);
+    };
+
+    const startFfmpegFallback = async (forceStartTime?: number, reason?: string) => {
+      if (!active) return;
+      if (!window.electronAPI?.startFfmpegProxy) {
+        failPlayback('FFmpeg uyumluluk modu kullanilamiyor');
+        return;
+      }
       const currentPos = forceStartTime !== undefined ? forceStartTime : video.currentTime;
       console.warn(`[AutoTranscode] Transcoding triggered. Starting from second: ${currentPos}`);
       isTranscodingRef.current = true;
       setFfmpegFallbackActive(true);
+      setPlaybackStatus('transcoding');
+      setPlaybackMessage(reason ? `${getTranscodingMessage(selectedChannel)} ${reason}` : getTranscodingMessage(selectedChannel));
+      setBufferedProgress(0);
+      armStartupTimeout();
       try {
-        const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos);
+        const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, undefined, getTranscodeMode());
         if (!active) return;
         if (result.success && result.url) {
           if (hlsInstanceRef.current) {
@@ -389,20 +499,27 @@ export function useCinematicPlayer({
         } else {
           isTranscodingRef.current = false;
           setFfmpegFallbackActive(false);
+          failPlayback(result.error || 'Uyumluluk modu baslatilamadi');
         }
       } catch (err) {
         console.error('[AutoTranscode] Fallback error:', err);
         isTranscodingRef.current = false;
         setFfmpegFallbackActive(false);
+        failPlayback('Uyumluluk modu hata verdi');
       }
     };
 
     const onVideoError = () => {
-      if (isTranscodingRef.current) return;
       const err = video.error;
       console.warn('Video error:', err?.code, err?.message);
+      if (isTranscodingRef.current) {
+        failPlayback(err?.message || 'Video cozulurken hata olustu');
+        return;
+      }
       if (err?.code === 4 || err?.code === 3) {
-        startFfmpegFallback();
+        startFfmpegFallback(undefined, 'Yerel oynatma basarisiz oldu');
+      } else {
+        failPlayback(err?.message || 'Oynatma hatasi');
       }
     };
 
@@ -442,8 +559,13 @@ export function useCinematicPlayer({
     };
 
     const onPlaying = () => {
+      clearStall();
+      clearStartupTimeout();
       forceUnmute();
       setVideoReady(true);
+      setPlaybackStatus('playing');
+      setPlaybackMessage('');
+      recoveryAttemptRef.current = 0;
       if (isTranscodingRef.current) {
         void probeTranscodedMetadata();
       }
@@ -525,6 +647,38 @@ export function useCinematicPlayer({
 
     let lastSavedTime = selectedChannel.currentTime || 0;
     let lastSavedStateTime = -1;
+
+    const updateBufferedProgress = (force = false) => {
+      if (!video) return;
+      const bufferedNow = Date.now();
+      if (!force && bufferedNow - lastBufferedUpdateRef.current < 500) return;
+      lastBufferedUpdateRef.current = bufferedNow;
+      const total = isTranscodingRef.current && durationRef.current > 0 ? durationRef.current : (video.duration || 0);
+      if (video.buffered.length > 0 && total > 0) {
+        const currentPos = video.currentTime;
+        let activeRangeEnd = 0;
+        for (let i = 0; i < video.buffered.length; i++) {
+          const start = video.buffered.start(i);
+          const end = video.buffered.end(i);
+          if (currentPos >= start && currentPos <= end) {
+            activeRangeEnd = end;
+            break;
+          }
+        }
+        if (activeRangeEnd === 0 && video.buffered.length > 0) {
+          const lastEnd = video.buffered.end(video.buffered.length - 1);
+          if (lastEnd >= currentPos) {
+            activeRangeEnd = lastEnd;
+          }
+        }
+        const absoluteBufferedTime = seekOffsetRef.current + activeRangeEnd;
+        const pct = (absoluteBufferedTime / total) * 100;
+        setBufferedProgress(Math.min(100, Math.max(0, pct)));
+      } else {
+        setBufferedProgress(0);
+      }
+    };
+
     const timeUpdate = () => {
       const now = seekOffsetRef.current + video.currentTime;
       if (Math.floor(now) !== Math.floor(lastSavedStateTime)) {
@@ -534,13 +688,14 @@ export function useCinematicPlayer({
       if (video.currentTime > 0.1) {
         setVideoReady(prev => prev ? prev : true);
       }
-      if (Math.abs(now - lastSavedTime) >= 5) {
+      if (Math.abs(now - lastSavedTime) >= 10) {
         lastSavedTime = now;
         const total = isTranscodingRef.current && durationRef.current > 0 ? durationRef.current : (video.duration || 0);
         if (total > 0) {
           saveWatchProgress(selectedChannel, now, total);
         }
       }
+      updateBufferedProgress();
     };
 
     const durationChange = () => {
@@ -551,17 +706,58 @@ export function useCinematicPlayer({
     };
 
     const onPlayEvent = () => {
+      clearStall();
       forceUnmute();
       setIsPlaying(true);
       pausedTimeRef.current = null;
     };
 
     const onPauseEvent = () => {
+      clearStall();
       setIsPlaying(false);
       pausedTimeRef.current = Date.now();
       const total = isTranscodingRef.current && durationRef.current > 0 ? durationRef.current : (video.duration || 0);
       if (total > 0) {
         saveWatchProgress(selectedChannel, seekOffsetRef.current + video.currentTime, total);
+      }
+    };
+
+    let stallTimeout: any = null;
+
+    const onWaiting = () => {
+      if (stallTimeout) clearTimeout(stallTimeout);
+      setPlaybackStatus('recovering');
+      setPlaybackMessage(getRecoveringMessage(selectedChannel));
+      stallTimeout = setTimeout(() => {
+        if (!active || !video || !selectedChannel) return;
+        console.warn("[Player] Stall detected! Attempting recovery...");
+        
+        const currentPos = video.currentTime;
+        recoveryAttemptRef.current += 1;
+        if (isTranscodingRef.current) {
+          if (recoveryAttemptRef.current > 2) {
+            failPlayback('Akis kurtarilamadi');
+            return;
+          }
+          startFfmpegFallback(seekOffsetRef.current + currentPos, 'Akis takildi');
+        } else {
+          const playUrl = selectedChannel.url;
+          loadPlayerSource(playUrl, false);
+          
+          const restoreTime = () => {
+            video.currentTime = currentPos;
+            video.play().then(forceUnmute).catch(() => {});
+          };
+          video.addEventListener('loadedmetadata', restoreTime, { once: true });
+        }
+        showToast("Yayin akisi kurtariliyor...");
+      }, 12000);
+    };
+
+    const clearStall = () => {
+      if (stallTimeout) {
+        clearTimeout(stallTimeout);
+        stallTimeout = null;
       }
     };
 
@@ -574,6 +770,10 @@ export function useCinematicPlayer({
     video.addEventListener('timeupdate', timeUpdate);
     video.addEventListener('durationchange', durationChange);
     video.addEventListener('pause', onPauseEvent);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('seeking', clearStall);
+    const onProgress = () => updateBufferedProgress(true);
+    video.addEventListener('progress', onProgress);
 
     const loadPlayerSource = async (urlToPlay: string, transcodeActive: boolean) => {
       if (!active) return;
@@ -584,7 +784,9 @@ export function useCinematicPlayer({
         if (!HlsPlayer.isSupported()) {
           video.src = urlToPlay;
           forceUnmute();
-          await video.play().then(forceUnmute).catch(() => { });
+          await video.play().then(forceUnmute).catch(() => {
+            if (!transcodeActive) startFfmpegFallback(undefined, 'HLS yerel oynatma baslamadi');
+          });
           return;
         }
 
@@ -642,33 +844,60 @@ export function useCinematicPlayer({
           console.warn('HLS error:', data.type, data.details);
           if (data.fatal) {
             if (data.type === 'networkError') {
-              hls.startLoad();
+              hlsNetworkRecoveriesRef.current += 1;
+              if (hlsNetworkRecoveriesRef.current <= 2) {
+                setPlaybackStatus('recovering');
+                setPlaybackMessage(getRecoveringMessage(selectedChannel));
+                hls.startLoad();
+              } else if (!transcodeActive) {
+                startFfmpegFallback(undefined, 'HLS ag hatasi');
+              } else {
+                failPlayback('HLS ag hatasi');
+              }
             } else if (data.type === 'mediaError') {
+              hlsMediaRecoveriesRef.current += 1;
               try {
-                hls.recoverMediaError();
+                if (hlsMediaRecoveriesRef.current <= 1) {
+                  setPlaybackStatus('recovering');
+                  setPlaybackMessage(getRecoveringMessage(selectedChannel));
+                  hls.recoverMediaError();
+                } else if (!transcodeActive) {
+                  startFfmpegFallback(undefined, 'HLS medya hatasi');
+                } else {
+                  failPlayback('HLS medya hatasi');
+                }
               } catch {
                 if (!transcodeActive) {
-                  startFfmpegFallback();
+                  startFfmpegFallback(undefined, 'HLS medya kurtarma basarisiz');
+                } else {
+                  failPlayback('HLS medya kurtarma basarisiz');
                 }
               }
+            } else if (!transcodeActive) {
+              startFfmpegFallback(undefined, 'HLS oynatma hatasi');
+            } else {
+              failPlayback('HLS oynatma hatasi');
             }
           }
         });
       } else {
         video.src = urlToPlay;
         forceUnmute();
-        video.play().then(forceUnmute).catch(() => { });
+        video.play().then(forceUnmute).catch(() => {
+          if (!transcodeActive) startFfmpegFallback(undefined, 'Yerel oynatma baslamadi');
+          else failPlayback('Uyumluluk modu baslamadi');
+        });
       }
     };
 
     const init = async () => {
       const playUrl = selectedChannel.url;
+      armStartupTimeout();
 
       const isMkv = playUrl.toLowerCase().includes('.mkv') || playUrl.toLowerCase().split('?')[0].endsWith('.mkv');
       if (isMkv && window.electronAPI?.startFfmpegProxy) {
-        console.log(`[AutoTranscode] Direct MKV stream detected, starting transcode immediately.`);
         const startTime = resumeTimeRef.current !== null ? resumeTimeRef.current : (selectedChannel.currentTime || 0);
-        startFfmpegFallback(startTime);
+        startFfmpegFallback(startTime, 'MKV uyumluluk modu');
       } else {
         // Start playing naturally and instantly first!
         await loadPlayerSource(playUrl, false);
@@ -699,7 +928,6 @@ export function useCinematicPlayer({
           });
 
           if (!active || isTranscodingRef.current) return;
-          console.log(`[AutoTranscode] Probing audio codecs in background for: ${selectedChannel.name}`);
           try {
             transcodeMetadataProbeStarted = true;
             const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
@@ -731,8 +959,6 @@ export function useCinematicPlayer({
               }
 
               if (shouldTranscode) {
-                console.log(`[AutoTranscode] Transcoding triggered in background. Switching source.`);
-                
                 // Find actual stream ID of the selected track
                 const initialTrackId = res.audioStreams && res.audioStreams.length > 0
                   ? (res.audioStreams.findIndex((t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'))
@@ -744,7 +970,10 @@ export function useCinematicPlayer({
                 activeAudioStreamIdRef.current = streamId;
 
                 const currentPos = video.currentTime;
-                const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId);
+                setPlaybackStatus('transcoding');
+                setPlaybackMessage(getTranscodingMessage(selectedChannel));
+                armStartupTimeout();
+                const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId, getTranscodeMode());
                 if (!active) return;
                 if (transcodeRes.success && transcodeRes.url) {
                   if (hlsInstanceRef.current) {
@@ -756,6 +985,8 @@ export function useCinematicPlayer({
                   setFfmpegFallbackActive(true);
                   video.src = transcodeRes.url;
                   video.play().then(forceUnmute).catch(() => { });
+                } else {
+                  failPlayback(transcodeRes.error || 'Ses codec uyumluluk modu baslatilamadi');
                 }
               }
             }
@@ -766,12 +997,21 @@ export function useCinematicPlayer({
       }
     };
 
-    init();
+    init().catch((error) => {
+      console.error('[Player] Init failed:', error);
+      if (!isTranscodingRef.current) {
+        startFfmpegFallback(undefined, 'Ilk oynatma basarisiz oldu');
+      } else {
+        failPlayback('Oynatici baslatilamadi');
+      }
+    });
 
     return () => {
       active = false;
       isTranscodingRef.current = false;
+      clearStartupTimeout();
       clearInterval(unmuteInterval);
+      clearStall();
       video.removeEventListener('error', onVideoError);
       video.removeEventListener('play', onPlayEvent);
       video.removeEventListener('playing', onPlaying);
@@ -781,6 +1021,9 @@ export function useCinematicPlayer({
       video.removeEventListener('timeupdate', timeUpdate);
       video.removeEventListener('durationchange', durationChange);
       video.removeEventListener('pause', onPauseEvent);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('seeking', clearStall);
+      video.removeEventListener('progress', onProgress);
 
       if ((video as any).audioTracks) {
         (video as any).audioTracks.removeEventListener('addtrack', handleNativeTracks);
@@ -817,6 +1060,8 @@ export function useCinematicPlayer({
     ffmpegFallbackActive,
     showControls,
     videoReady,
+    playbackStatus,
+    playbackMessage,
     playbackSpeed,
     showSpeedMenu,
     audioTracks,
@@ -825,6 +1070,7 @@ export function useCinematicPlayer({
     activeSubtitle,
     showSubtitleMenu,
     isFullscreen,
+    bufferedProgress,
     
     setIsPlaying,
     setCurrentTime,

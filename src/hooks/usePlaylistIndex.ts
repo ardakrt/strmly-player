@@ -1,12 +1,6 @@
 import { useMemo } from 'react';
 import type { PlaylistItem } from '../utils/m3uParser';
-import { isHdChannel } from '../utils/searchHelpers';
-
-const excludedCatalogMarkers = ['seçizle', 'seç izle', 'secizle', 'sec izle', 'seç-izle', 'sec-izle'];
-
-const isExcludedCatalogItem = (name: string, group: string) => (
-  excludedCatalogMarkers.some(marker => name.includes(marker) || group.includes(marker))
-);
+import { getItemGroupLower, isExcludedCatalogItem, isHdChannel } from '../utils/searchHelpers';
 
 export function usePlaylistIndex(items: PlaylistItem[]) {
   return useMemo(() => {
@@ -24,8 +18,7 @@ export function usePlaylistIndex(items: PlaylistItem[]) {
 
     for (const item of items) {
       const group = item.group || 'Genel';
-      const nameLower = item.nameLower || item.name.toLocaleLowerCase('tr-TR');
-      const groupLower = item.groupLower || group.toLocaleLowerCase('tr-TR');
+      const groupLower = getItemGroupLower(item);
       const isNationalSd = groupLower.includes('ulusal') && !isHdChannel(item.name);
 
       if (!isNationalSd) {
@@ -43,11 +36,11 @@ export function usePlaylistIndex(items: PlaylistItem[]) {
         if (groupItems) groupItems.push(item);
         else liveGroupMap.set(group, [item]);
       } else if (item.type === 'series') {
-        if (isExcludedCatalogItem(nameLower, groupLower)) continue;
+        if (isExcludedCatalogItem(item)) continue;
         seriesSet.add(group);
         series.push(item);
       } else if (item.type === 'movie') {
-        if (isExcludedCatalogItem(nameLower, groupLower)) continue;
+        if (isExcludedCatalogItem(item)) continue;
         movieSet.add(group);
         movie.push(item);
         if (!isNationalSd) {

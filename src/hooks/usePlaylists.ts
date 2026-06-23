@@ -8,6 +8,9 @@ import {
   loadPlaylistFromBrowserStorage,
   savePlaylistToBrowserStorage
 } from '../utils/playlistStorage';
+import { cleanMovieName } from '../utils/tmdb';
+import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
+import type { Language } from '../utils/translations';
 
 const AUTO_UPDATE_INTERVALS = [6, 12, 24, 168] as const;
 
@@ -30,6 +33,7 @@ interface UsePlaylistsProps {
   setSelectedGroup: (group: string) => void;
   isParsing: boolean;
   setIsParsing: (val: boolean) => void;
+  language: Language;
 }
 
 export function usePlaylists({
@@ -38,7 +42,8 @@ export function usePlaylists({
   showToast,
   setSelectedGroup,
   isParsing,
-  setIsParsing
+  setIsParsing,
+  language
 }: UsePlaylistsProps) {
   const [playlists, setPlaylists] = useState<SavedPlaylist[]>([]);
   const [activePlaylistId, setActivePlaylistId] = useState<string>('');
@@ -125,7 +130,6 @@ export function usePlaylists({
         fetchUrl = `${playlist.xtreamUrl}/get.php?username=${playlist.xtreamUser}&password=${playlist.xtreamPass}&type=m3u_plus&output=m3u8`;
       }
 
-      console.log(`[Auto-Update] Fetch started for: ${playlist.name}`);
       const res = await fetch(getCacheBustedUrl(fetchUrl), {
         cache: 'no-store',
         headers: {
@@ -489,6 +493,119 @@ export function usePlaylists({
     }
   };
 
+  interface XtreamSeriesEpisode {
+    id?: string | number;
+    episode_num?: string | number;
+    title?: string;
+    container_extension?: string;
+    info?: {
+      movie_image?: string;
+      duration_secs?: string | number;
+    };
+  }
+
+  interface XtreamSeriesInfoResponse {
+    info?: {
+      name?: string;
+      cover?: string;
+      movie_image?: string;
+    };
+    episodes?: Record<string, XtreamSeriesEpisode[]>;
+  }
+
+  const getXtreamSeriesId = (item: PlaylistItem | null) => {
+    if (!item) return null;
+    const match = item.id.match(/^xt-series-(\d+)$/);
+    return match ? match[1] : null;
+  };
+
+  const buildXtreamSeriesGroup = async (sourceItem: PlaylistItem | null, fallbackSeries?: GroupedSeries): Promise<GroupedSeries | null> => {
+    const seriesId = getXtreamSeriesId(sourceItem);
+    const activePlaylist = playlists.find(playlist => playlist.id === activePlaylistId);
+    if (!sourceItem || !seriesId || !activePlaylist?.xtreamUrl || !activePlaylist.xtreamUser || !activePlaylist.xtreamPass) {
+      return null;
+    }
+
+    const baseUrl = activePlaylist.xtreamUrl.replace(/\/$/, '');
+    const username = encodeURIComponent(activePlaylist.xtreamUser);
+    const password = encodeURIComponent(activePlaylist.xtreamPass);
+    const apiUrl = `${baseUrl}/player_api.php?username=${username}&password=${password}&action=get_series_info&series_id=${encodeURIComponent(seriesId)}`;
+
+    try {
+      const response = await fetch(apiUrl, {
+        cache: 'no-store',
+        headers: {
+          'User-Agent': '9XtreamPlayer LibVLC/3.0.22-rc1'
+        }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json() as XtreamSeriesInfoResponse;
+      if (!data.episodes || typeof data.episodes !== 'object') {
+        return null;
+      }
+
+      const seasonsMap: Record<number, SeriesEpisode[]> = {};
+      let episodesCount = 0;
+      const seriesTitle = cleanMovieName(data.info?.name || fallbackSeries?.name || sourceItem.name);
+      const logo = data.info?.cover || data.info?.movie_image || fallbackSeries?.logo || sourceItem.logo || '';
+
+      Object.entries(data.episodes).forEach(([seasonKey, seasonEpisodes]) => {
+        const seasonNumber = Number(seasonKey) || 1;
+        if (!Array.isArray(seasonEpisodes)) return;
+        if (!seasonsMap[seasonNumber]) seasonsMap[seasonNumber] = [];
+
+        seasonEpisodes.forEach((episode, index) => {
+          const episodeId = episode.id !== undefined ? String(episode.id) : '';
+          if (!episodeId) return;
+          const episodeNumber = Number(episode.episode_num) || index + 1;
+          const extension = episode.container_extension || 'mp4';
+          const episodeTitle = episode.title?.trim();
+          const streamUrl = `${baseUrl}/series/${username}/${password}/${encodeURIComponent(episodeId)}.${extension}`;
+          const item: PlaylistItem = {
+            id: `xt-episode-${seriesId}-${episodeId}`,
+            name: episodeTitle
+              ? `${seriesTitle} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')} - ${episodeTitle}`
+              : `${seriesTitle} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`,
+            logo: episode.info?.movie_image || logo,
+            group: sourceItem.group || fallbackSeries?.group || 'Genel',
+            url: streamUrl,
+            type: 'series',
+            xtreamSeriesId: seriesId,
+            xtreamEpisodeId: episodeId
+          };
+
+          seasonsMap[seasonNumber].push({
+            episodeNumber,
+            seasonNumber,
+            item
+          });
+          episodesCount++;
+        });
+      });
+
+      Object.values(seasonsMap).forEach(episodes => {
+        episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+      });
+
+      if (episodesCount === 0) return null;
+
+      return {
+        id: fallbackSeries?.id || `series-${sourceItem.id}`,
+        name: seriesTitle,
+        logo,
+        group: sourceItem.group || fallbackSeries?.group || 'Genel',
+        type: 'series',
+        seasons: seasonsMap,
+        episodesCount
+      };
+    } catch (error) {
+      console.error('Failed to fetch Xtream series info:', error);
+      showToast(language === 'tr' ? 'Dizi bölümleri alınamadı.' : 'Could not load series episodes.');
+      return null;
+    }
+  };
+
   return {
     playlists, setPlaylists,
     activePlaylistId, setActivePlaylistId,
@@ -512,6 +629,8 @@ export function usePlaylists({
     updatePlaylistAutoUpdateInterval,
     loadPlaylistData,
     savePlaylistData,
-    autoUpdatePlaylist
+    autoUpdatePlaylist,
+    getXtreamSeriesId,
+    buildXtreamSeriesGroup
   };
 }

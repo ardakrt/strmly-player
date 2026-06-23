@@ -10,6 +10,7 @@ export default defineConfig({
   ],
   base: './',
   build: {
+    chunkSizeWarningLimit: 550,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -31,7 +32,7 @@ export default defineConfig({
   },
   server: {
     watch: {
-      ignored: ['**/profiles/**']
+      ignored: (path) => path.includes('profiles')
     }
   }
 })

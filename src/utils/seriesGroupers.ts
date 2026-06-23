@@ -15,6 +15,8 @@ export interface GroupedSeries {
   seasons: Record<number, SeriesEpisode[]>;
   episodesCount: number;
   score?: number;
+  nameLower?: string;
+  groupLower?: string;
 }
 
 export interface ParsedEpisodeInfo {

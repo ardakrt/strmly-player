@@ -15,7 +15,7 @@ declare global {
       deletePlaylistItems: (id: string) => Promise<{ success: boolean; error?: string }>;
       fetchTmdb?: (path: string) => Promise<TmdbSearchResponse>;
       fetchTmdbImage?: (path: string, size?: string) => Promise<{ dataUrl?: string; localUrl?: string; error?: string }>;
-      startFfmpegProxy?: (url: string, startTime?: number, audioStreamId?: number) => Promise<{ success: boolean; port?: number; url?: string; error?: string }>;
+      startFfmpegProxy?: (url: string, startTime?: number, audioStreamId?: number, transcodeMode?: string) => Promise<{ success: boolean; port?: number; url?: string; error?: string }>;
       stopFfmpegProxy?: () => Promise<{ success: boolean }>;
       checkFfmpeg?: () => Promise<{ available: boolean; path: string | null }>;
       probeAudioCodec?: (url: string) => Promise<{ success: boolean; codec?: string; duration?: number; allCodecs?: string[]; audioStreams?: { id: number; streamId: number; name: string; lang: string; codec: string }[]; error?: string }>;

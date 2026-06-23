@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize2, Minimize2, PictureInPicture, Plus, Settings, ChevronRight, ChevronLeft, X, Gauge, Subtitles, SkipForward, SkipBack, Scan } from 'lucide-react';
+import { AlertCircle, ArrowLeft, LoaderCircle, Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize2, Minimize2, PictureInPicture, Plus, Settings, ChevronRight, ChevronLeft, X, Gauge, Subtitles, SkipForward, SkipBack, Scan } from 'lucide-react';
 import { SPEED_OPTIONS } from '../constants';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
@@ -16,6 +16,8 @@ interface CinematicPlayerProps {
   playerMuted: boolean;
   showControls: boolean;
   videoReady: boolean;
+  playbackStatus: 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
+  playbackMessage: string;
   playbackSpeed: number;
   showSpeedMenu: boolean;
   audioTracks: { id: number; name: string; lang: string }[];
@@ -24,6 +26,7 @@ interface CinematicPlayerProps {
   activeSubtitle: number;
   showSubtitleMenu: boolean;
   isFullscreen: boolean;
+  bufferedProgress?: number;
   accentStyles: React.CSSProperties;
   onClose: () => void;
   onTogglePlay: () => void;
@@ -36,7 +39,7 @@ interface CinematicPlayerProps {
   onPiP: () => void;
   onToggleFullscreen: () => void;
   onTimelineSeek: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onSeek: (time: number) => void;
+  onSeek: (time: number, isRelative?: boolean) => void;
   onHideControls: () => void;
   onShowSpeedMenu: (show: boolean) => void;
   onShowSubtitleMenu: (show: boolean) => void;
@@ -54,11 +57,12 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     videoRef, playerContainerRef,
     isPlaying, currentTime, duration,
     playerVolume, playerMuted,
-    showControls, videoReady,
+    showControls, videoReady, playbackStatus, playbackMessage,
     playbackSpeed,
     audioTracks, activeAudioTrack,
     subtitleTracks, activeSubtitle,
     isFullscreen, accentStyles,
+    bufferedProgress = 0,
     onClose, onTogglePlay, onToggleMute, onVolumeChange,
     onSpeedChange, onAudioTrackChange, onSubtitleChange,
     onSubtitleUpload, onPiP, onToggleFullscreen,
@@ -70,6 +74,13 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   } = props;
 
   const isLive = channel.type === 'live';
+  const contentLabel = channel.type === 'live'
+    ? (language === 'tr' ? 'Canlı yayın' : 'Live TV')
+    : channel.type === 'movie'
+      ? (language === 'tr' ? 'Film' : 'Movie')
+      : (language === 'tr' ? 'Dizi bölümü' : 'Episode');
+  const isPlaybackError = playbackStatus === 'error';
+  const shouldShowPlaybackOverlay = isPlaybackError || !videoReady || playbackMessage;
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [currentSubmenu, setCurrentSubmenu] = useState<'main' | 'speed' | 'subtitles' | 'scale' | 'audio'>('main');
@@ -173,19 +184,41 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     return null;
   }, [currentEpisodeIndex, sortedSiblings]);
 
-  // Auto-play next episode trigger when video reaches duration
+  // Early autoplay trigger at 20 seconds remaining (for long videos)
   useEffect(() => {
     if (
       channel.type === 'series' &&
       nextEpisode &&
-      duration > 0 &&
+      duration > 35 &&
       autoPlayNext &&
       !isAutoplayCancelled &&
-      duration - currentTime <= 0.5
+      duration - currentTime <= 20
     ) {
       onChannelChange(nextEpisode);
     }
-  }, [currentTime, duration, nextEpisode, autoPlayNext, isAutoplayCancelled, channel, onChannelChange]);
+  }, [currentTime, duration, channel, nextEpisode, autoPlayNext, isAutoplayCancelled, onChannelChange]);
+
+  // Fallback autoplay trigger when jenerik ends naturally (essential for short videos or if seeking near end)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleEnded = () => {
+      if (
+        channel.type === 'series' &&
+        nextEpisode &&
+        autoPlayNext &&
+        !isAutoplayCancelled
+      ) {
+        onChannelChange(nextEpisode);
+      }
+    };
+
+    video.addEventListener('ended', handleEnded);
+    return () => {
+      video.removeEventListener('ended', handleEnded);
+    };
+  }, [channel, nextEpisode, autoPlayNext, isAutoplayCancelled, onChannelChange, videoRef]);
 
   const updateDragPosition = useCallback((e: MouseEvent | React.MouseEvent) => {
     if (!timelineRef.current || duration <= 0) return;
@@ -264,11 +297,11 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   }, [showSettingsMenu]);
 
   const handleSkipBackward = useCallback(() => {
-    onSeek(Math.max(0, currentTime - 10));
+    onSeek(Math.max(0, currentTime - 10), true);
   }, [onSeek, currentTime]);
 
   const handleSkipForward = useCallback(() => {
-    onSeek(Math.min(duration, currentTime + 10));
+    onSeek(Math.min(duration, currentTime + 10), true);
   }, [onSeek, duration, currentTime]);
 
   useEffect(() => {
@@ -400,7 +433,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             />
           ))}
         </video>
-        {channel.type === 'series' && nextEpisode && duration > 0 && (duration - currentTime <= 10) && !isAutoplayCancelled && (
+        {channel.type === 'series' && nextEpisode && duration > 35 && (duration - currentTime <= 35) && (duration - currentTime > 20) && !isAutoplayCancelled && (
           <div
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-28 right-8 z-30 bg-neutral-950/90 border border-white/10 backdrop-blur-2xl p-5 rounded-2xl shadow-2xl flex flex-col gap-3 min-w-[280px] max-w-[90%] animate-scale-in"
@@ -410,7 +443,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               <span className="text-xs font-bold text-white line-clamp-1">{nextEpisode.name}</span>
               <span className="text-[10px] text-neutral-400">
                 {autoPlayNext
-                  ? (language === 'tr' ? `${Math.max(0, Math.ceil(duration - currentTime))} saniye içinde başlıyor...` : `Starting in ${Math.max(0, Math.ceil(duration - currentTime))} seconds...`)
+                  ? (language === 'tr' ? `${Math.max(0, Math.ceil(duration - currentTime - 20))} saniye içinde başlıyor...` : `Starting in ${Math.max(0, Math.ceil(duration - currentTime - 20))} seconds...`)
                   : (language === 'tr' ? 'Sonraki bölüm hazır' : 'Next episode is ready')}
               </span>
             </div>
@@ -447,10 +480,38 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             onHideControls();
           }}
         />
-        {!videoReady && (
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-2xl flex flex-col items-center justify-center gap-4 z-30 animate-fade-in">
-            <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-            <span className="text-xs text-white/60 font-medium tracking-wide">{t('common.loading')}</span>
+        {shouldShowPlaybackOverlay && (
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-2xl flex flex-col items-center justify-center gap-4 z-30 animate-fade-in px-6 text-center">
+            {isPlaybackError ? (
+              <AlertCircle size={38} className="text-red-300" />
+            ) : (
+              <LoaderCircle size={38} className="text-white/80 animate-spin" />
+            )}
+            <div className="flex max-w-md flex-col items-center gap-2">
+              <span className={`text-sm font-bold tracking-wide ${isPlaybackError ? 'text-red-100' : 'text-white/85'}`}>
+                {isPlaybackError
+                  ? (language === 'tr' ? `${contentLabel} açılamadı` : `${contentLabel} could not be opened`)
+                  : (playbackStatus === 'transcoding'
+                    ? (language === 'tr' ? 'Uyumluluk modu deneniyor' : 'Trying compatibility mode')
+                    : playbackStatus === 'recovering'
+                      ? (language === 'tr' ? 'Akış kurtarılıyor' : 'Recovering stream')
+                      : t('common.loading'))}
+              </span>
+              <span className="text-xs leading-5 text-white/55">
+                {playbackMessage || (language === 'tr' ? `${contentLabel} hazırlanıyor...` : `${contentLabel} is loading...`)}
+              </span>
+            </div>
+            {isPlaybackError && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="mt-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-white/20 active:scale-95"
+              >
+                {language === 'tr' ? 'Geri dön' : 'Go Back'}
+              </button>
+            )}
           </div>
         )}
         <div
@@ -652,7 +713,13 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         {formatTime(isDraggingTimeline && dragTime !== null ? dragTime : hoverTime)}
                       </div>
                     )}
-                    <div className="w-full h-1.5 rounded-full bg-white/20 relative group-hover/timeline:h-2 transition-all">
+                    <div className="w-full h-1.5 rounded-full bg-white/10 relative group-hover/timeline:h-2 transition-all">
+                      {bufferedProgress > 0 && duration > 0 && (
+                        <div
+                          className="absolute left-0 top-0 h-full rounded-full bg-white/20 transition-all duration-300"
+                          style={{ width: `${Math.min(100, bufferedProgress)}%` }}
+                        />
+                      )}
                       <div
                         className="absolute left-0 top-0 h-full rounded-full bg-white"
                         style={{ width: `${duration ? ((isDraggingTimeline && dragTime !== null ? dragTime : currentTime) / duration) * 100 : 0}%` }}

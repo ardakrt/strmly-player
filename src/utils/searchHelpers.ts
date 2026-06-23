@@ -1,6 +1,61 @@
 import type { PlaylistItem } from './m3uParser';
 import { cleanMediaTitle } from './seriesGroupers';
 
+export interface SearchableMediaItem {
+  name: string;
+  group?: string;
+  nameLower?: string;
+  groupLower?: string;
+  clNameLower?: string;
+}
+
+const excludedCatalogMarkers = ['seÃ§izle', 'seÃ§ izle', 'secizle', 'sec izle', 'seÃ§-izle', 'sec-izle'];
+const unavailableMarkers = ['bakim', 'test', 'yedek', 'bakimda'];
+const adultMarkers = ['adult', 'xxx'];
+
+export function getItemNameLower(item: SearchableMediaItem): string {
+  return item.nameLower || item.name.toLocaleLowerCase('tr-TR');
+}
+
+export function getItemGroupLower(item: SearchableMediaItem, fallback = 'Genel'): string {
+  return item.groupLower || (item.group || fallback).toLocaleLowerCase('tr-TR');
+}
+
+export function getItemCleanNameLower(item: SearchableMediaItem): string {
+  return item.clNameLower || cleanMediaTitle(item.name).toLocaleLowerCase('tr-TR');
+}
+
+export function itemMatchesQuery(item: SearchableMediaItem, query: string, fallbackGroup = 'Genel'): boolean {
+  const q = query.trim().toLocaleLowerCase('tr-TR');
+  if (!q) return true;
+  return getItemNameLower(item).includes(q) || getItemGroupLower(item, fallbackGroup).includes(q);
+}
+
+export function getItemSearchScore(item: SearchableMediaItem, query: string, fallbackGroup = 'Genel'): number {
+  const cleanNameLower = getItemCleanNameLower(item);
+  return getSearchScore(
+    item.name,
+    item.group || fallbackGroup,
+    query,
+    cleanNameLower,
+    getItemNameLower(item),
+    getItemGroupLower(item, fallbackGroup),
+    cleanNameLower
+  );
+}
+
+export function isExcludedCatalogItem(item: SearchableMediaItem): boolean {
+  const nameLower = getItemNameLower(item);
+  const groupLower = getItemGroupLower(item, '');
+  return excludedCatalogMarkers.some(marker => nameLower.includes(marker) || groupLower.includes(marker));
+}
+
+export function isUnavailableCatalogItem(item: SearchableMediaItem, includeAdult = false): boolean {
+  const text = `${getItemNameLower(item)} ${getItemGroupLower(item, '')}`;
+  const markers = includeAdult ? unavailableMarkers.concat(adultMarkers) : unavailableMarkers;
+  return markers.some(marker => text.includes(marker));
+}
+
 // Helper to calculate search relevance score
 export function getSearchScore(
   name: string,

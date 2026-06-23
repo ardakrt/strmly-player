@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePlaylistItems: (id) => ipcRenderer.invoke('delete-playlist-items', { id }),
   fetchTmdb: (path) => ipcRenderer.invoke('fetch-tmdb', { path }),
   fetchTmdbImage: (path, size) => ipcRenderer.invoke('fetch-tmdb-image', { path, size }),
-  startFfmpegProxy: (url, startTime, audioStreamId) => ipcRenderer.invoke('start-ffmpeg-proxy', { url, startTime, audioStreamId }),
+  startFfmpegProxy: (url, startTime, audioStreamId, transcodeMode) => ipcRenderer.invoke('start-ffmpeg-proxy', { url, startTime, audioStreamId, transcodeMode }),
   stopFfmpegProxy: () => ipcRenderer.invoke('stop-ffmpeg-proxy'),
   checkFfmpeg: () => ipcRenderer.invoke('check-ffmpeg'),
   probeAudioCodec: (url) => ipcRenderer.invoke('probe-audio-codec', { url }),
