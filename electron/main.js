@@ -603,9 +603,9 @@ async function resolveHostIp(hostname) {
   if (resolvedHostIps[hostname]) return resolvedHostIps[hostname];
   
   const providers = [
-    `https://8.8.8.8/resolve?name=${hostname}&type=A`,
-    `https://1.1.1.1/dns-query?name=${hostname}&type=A`,
-    `https://9.9.9.9/dns-query?name=${hostname}&type=A`
+    `https://dns.google/resolve?name=${hostname}&type=A`,
+    `https://cloudflare-dns.com/dns-query?name=${hostname}&type=A`,
+    `https://dns.quad9.net/dns-query?name=${hostname}&type=A`
   ];
 
   const fetchWithTimeout = async (url, ms = 1500) => {
