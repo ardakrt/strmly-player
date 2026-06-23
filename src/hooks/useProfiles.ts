@@ -3,7 +3,7 @@ import type { Profile, AvatarSearchResult, ContentPreference, SavedPlaylist, Pla
 import { parseM3UAsync } from '../utils/m3uParser';
 import { deletePlaylistFromBrowserStorage, savePlaylistToBrowserStorage } from '../utils/playlistStorage';
 import { resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
-import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS } from '../constants';
+import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS, DEFAULT_AVATARS } from '../constants';
 import type { Language } from '../utils/translations';
 
 interface UseProfilesProps {
@@ -357,7 +357,7 @@ export function useProfiles({
       const newProfile: Profile = {
         id: profId,
         name: profileFormName.trim(),
-        avatarUrl: profileFormAvatar,
+        avatarUrl: profileFormAvatar || DEFAULT_AVATARS[0],
         autoUpdateIntervalHours: profileAutoUpdateIntervalHours,
         contentPreferences: profileContentPreferences
       };

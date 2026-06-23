@@ -101,7 +101,7 @@ export function CreateProfileWizard({
   const [step, setStep] = useState(1);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
-  const identityReady = name.trim().length > 0 && avatar.length > 0;
+  const identityReady = name.trim().length > 0;
   const connectionReady = playlistType === 'none'
     || (playlistType === 'm3u' && m3uUrl.trim().length > 0)
     || (playlistType === 'xtream' && xtreamUrl.trim().length > 0 && xtreamUser.trim().length > 0 && xtreamPass.trim().length > 0);
@@ -335,7 +335,7 @@ export function CreateProfileWizard({
                     {avatar ? renderAvatar(avatar, 'w-full h-full') : <div className="w-full h-full flex items-center justify-center"><UserRound size={46} className="text-neutral-600" /></div>}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 h-14 flex items-center justify-center gap-2 text-[10px] font-black text-white opacity-80 group-hover:opacity-100">
-                      <Search size={14} /> {avatar ? (language === 'tr' ? 'Resmi değiştir' : 'Change avatar') : (language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar')}
+                      <Search size={14} /> {avatar ? (language === 'tr' ? 'Resmi değiştir' : 'Change avatar') : (language === 'tr' ? 'İsteğe bağlı' : 'Optional')}
                     </div>
                   </button>
                   <span className="mt-5 max-w-full truncate text-lg font-black text-white">{name.trim() || t('profiles.profileName')}</span>
@@ -375,7 +375,7 @@ export function CreateProfileWizard({
                       );
                     })}
                   </div>
-                  <p className="mt-4 text-[10px] leading-relaxed text-neutral-600">{language === 'tr' ? 'Profil resmi seçmek veya değiştirmek için soldaki görsele dokun.' : 'Tap the image on the left to select or change profile avatar.'}</p>
+                  <p className="mt-4 text-[10px] leading-relaxed text-neutral-600">{language === 'tr' ? 'Profil resmi isteğe bağlı. Seçmezsen otomatik bir renkli avatar atanır.' : 'Profile avatar is optional. A colorful avatar is assigned automatically if you skip it.'}</p>
                 </div>
               </div>
             ))}
