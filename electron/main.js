@@ -732,16 +732,29 @@ ipcMain.handle('fetch-tmdb', async (event, { path: apiPath }) => {
     return { error: 'Invalid TMDB path' };
   }
 
-  const existing = tmdbMainRequests.get(apiPath);
+  let processedPath = apiPath;
+  try {
+    const urlObj = new URL('https://api.themoviedb.org' + apiPath);
+    const apiKey = urlObj.searchParams.get('api_key') || '';
+    const isValidTmdbKey = /^[a-f0-9]{32}$/i.test(apiKey.trim());
+    if (!isValidTmdbKey) {
+      urlObj.searchParams.set('api_key', 'c7e12a2b1d8e1851399f4b92dc124332');
+      processedPath = urlObj.pathname + urlObj.search;
+    }
+  } catch (err) {
+    console.error("Error verifying/rewriting TMDB api_key in main process:", err);
+  }
+
+  const existing = tmdbMainRequests.get(processedPath);
   if (existing) return existing;
 
-  const request = queueTmdbMainRequest(() => fetchFromTmdb(apiPath))
+  const request = queueTmdbMainRequest(() => fetchFromTmdb(processedPath))
     .catch((err) => {
       console.error("TMDB fetch error:", err);
       return { error: err.message };
     })
-    .finally(() => tmdbMainRequests.delete(apiPath));
-  tmdbMainRequests.set(apiPath, request);
+    .finally(() => tmdbMainRequests.delete(processedPath));
+  tmdbMainRequests.set(processedPath, request);
 
   try {
     return await request;
