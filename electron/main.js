@@ -225,6 +225,13 @@ function createWindow() {
   });
 }
 
+function normalizeDriveLetter(filePath) {
+  if (process.platform === 'win32' && filePath && filePath.length >= 2 && filePath[1] === ':') {
+    return filePath[0].toUpperCase() + filePath.substring(1);
+  }
+  return filePath;
+}
+
 app.whenReady().then(async () => {
   // Register custom protocol handle for app-file:// scheme
   const { pathToFileURL } = require('url');
@@ -242,8 +249,13 @@ app.whenReady().then(async () => {
         return new Response('File not found', { status: 404 });
       }
 
-      const cacheRoot = await fs.promises.realpath(getTmdbCacheDir());
-      const realFilePath = await fs.promises.realpath(filePath);
+      const cacheDir = getTmdbCacheDir();
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      }
+
+      const cacheRoot = normalizeDriveLetter(await fs.promises.realpath(cacheDir));
+      const realFilePath = normalizeDriveLetter(await fs.promises.realpath(filePath));
       const relativePath = path.relative(cacheRoot, realFilePath);
       if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         console.error(`[App-File Handler] Blocked access outside TMDB cache: ${realFilePath}`);

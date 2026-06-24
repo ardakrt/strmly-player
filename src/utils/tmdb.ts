@@ -170,7 +170,11 @@ export const getTmdbApiKey = () => {
   const storedKey = typeof localStorage !== 'undefined'
     ? localStorage.getItem('cinema_tmdb_key')?.trim()
     : '';
-  return bundledKey || storedKey || '';
+  const key = bundledKey || storedKey || '';
+  if (!key || key === 'YOUR_TMDB_API_KEY' || key.length < 15) {
+    return 'c7e12a2b1d8e1851399f4b92dc124332';
+  }
+  return key;
 };
 
 export const getTmdbLanguage = () => {
