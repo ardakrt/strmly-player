@@ -165,16 +165,18 @@ export function cleanMovieName(title: string): string {
   return cleanMediaTitle(title);
 }
 
+const isValidTmdbKey = (key: string) => /^[a-f0-9]{32}$/i.test(key);
+
 export const getTmdbApiKey = () => {
   const bundledKey = import.meta.env.VITE_TMDB_API_KEY?.trim() || '';
-  const storedKey = typeof localStorage !== 'undefined'
+  const storedKey = (typeof localStorage !== 'undefined'
     ? localStorage.getItem('cinema_tmdb_key')?.trim()
-    : '';
-  const key = bundledKey || storedKey || '';
-  if (!key || key === 'YOUR_TMDB_API_KEY' || key.length < 15) {
-    return 'c7e12a2b1d8e1851399f4b92dc124332';
-  }
-  return key;
+    : '') || '';
+  
+  if (isValidTmdbKey(bundledKey)) return bundledKey;
+  if (isValidTmdbKey(storedKey)) return storedKey;
+  
+  return 'c7e12a2b1d8e1851399f4b92dc124332';
 };
 
 export const getTmdbLanguage = () => {

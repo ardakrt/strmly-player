@@ -511,6 +511,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .premium-card {
   position: relative;
   width: 100%;
+  aspect-ratio: 2 / 3;
   border-radius: 16px; /* rounded-2xl */
   overflow: hidden;
   background-color: rgba(255, 255, 255, 0.02);
