@@ -635,9 +635,8 @@ export const HomeView = memo(function HomeView({
   const playlistHeroBackdrop = featuredTmdbData?.backdrop;
   const playlistHeroPoster = featuredTmdbData?.poster || currentHeroItem?.logo;
   const fallbackHeroImage = fallbackHeroItem?.img;
-  const heroBackdropImage = isPlaylistHero ? playlistHeroBackdrop : fallbackHeroImage;
+  const heroBackdropImage = isPlaylistHero ? (playlistHeroBackdrop || playlistHeroPoster) : fallbackHeroImage;
   const heroAmbientImage = heroBackdropImage || (isPlaylistHero ? playlistHeroPoster : fallbackHeroImage);
-  const heroPosterFallback = isPlaylistHero && !playlistHeroBackdrop ? playlistHeroPoster : null;
   const heroTitle = isPlaylistHero
     ? (currentHeroItem?.type === 'series'
       ? parseSeriesEpisodeInfo(currentHeroItem.name).cleanTitle
@@ -689,22 +688,6 @@ export const HomeView = memo(function HomeView({
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           ) : null}
-          {heroPosterFallback && (
-            <>
-              <img
-                key={`blur-${heroPosterFallback}`}
-                src={heroPosterFallback}
-                alt=""
-                className="absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-2xl home-hero-image"
-              />
-              <img
-                key={`poster-${heroPosterFallback}`}
-                src={heroPosterFallback}
-                alt=""
-                className="absolute right-[10%] top-1/2 h-[82%] max-h-[560px] -translate-y-1/2 rounded-[24px] border border-white/10 object-cover shadow-[0_30px_80px_rgba(0,0,0,0.65)] animate-fade-in"
-              />
-            </>
-          )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#050507] via-neutral-950/25 to-black/25 z-10 pointer-events-none" />
           <div className="home-hero-left-scrim absolute inset-0 z-10 pointer-events-none" />
           <div className="home-hero-color-grade absolute inset-0 z-[11] pointer-events-none" />

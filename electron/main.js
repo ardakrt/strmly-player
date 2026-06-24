@@ -741,7 +741,7 @@ ipcMain.handle('fetch-tmdb', async (event, { path: apiPath }) => {
 
 ipcMain.handle('fetch-tmdb-image', async (event, { path: imagePath, size = 'w500' }) => {
   try {
-    const allowedSizes = new Set(['w92', 'w154', 'w185', 'w342', 'w500', 'w780', 'original']);
+    const allowedSizes = new Set(['w92', 'w154', 'w185', 'w300', 'w342', 'w500', 'w780', 'original']);
     if (!imagePath || typeof imagePath !== 'string' || !imagePath.startsWith('/')) {
       return { error: 'Invalid TMDB image path' };
     }
@@ -898,7 +898,6 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       '-loglevel', 'warning',
       '-fflags', '+nobuffer+genpts+discardcorrupt+fastseek',
       '-flags', '+low_delay',
-      '-avioflags', 'direct',
       '-user_agent', '9XtreamPlayer LibVLC/3.0.22-rc1',
       '-reconnect', '1',
       '-reconnect_at_eof', '1',

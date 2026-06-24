@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type Hls from 'hls.js';
 import type { PlaylistItem } from '../utils/m3uParser';
-
+import { useSettings } from '../context/SettingsContext';
 
 interface UseCinematicPlayerProps {
   selectedChannel: PlaylistItem | null;
@@ -13,27 +13,168 @@ const PLAYER_VOLUME_KEY = 'cinema_player_volume';
 const PLAYER_MUTED_KEY = 'cinema_player_muted';
 type PlaybackStatus = 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
 
-function getPlaybackLabel(item: PlaylistItem | null): string {
-  if (item?.type === 'live') return 'Canli yayin';
+function translateReason(reason: string, language: 'tr' | 'en'): string {
+  const dictionary: Record<string, { tr: string; en: string }> = {
+    'Yerel oynatma basarisiz oldu': {
+      tr: 'Yerel oynatma başarısız oldu',
+      en: 'Native playback failed'
+    },
+    'HLS medya kurtarma basarisiz': {
+      tr: 'HLS medya kurtarma başarısız',
+      en: 'HLS media recovery failed'
+    },
+    'Ilk oynatma basarisiz oldu': {
+      tr: 'İlk oynatma başarısız oldu',
+      en: 'First playback failed'
+    },
+    'HLS yerel oynatma baslamadi': {
+      tr: 'HLS yerel oynatma başlamadı',
+      en: 'HLS native playback did not start'
+    },
+    'Yerel oynatma baslamadi': {
+      tr: 'Yerel oynatma başlamadı',
+      en: 'Native playback did not start'
+    },
+    'Uyumluluk modu baslamadi': {
+      tr: 'Uyumluluk modu başlamadı',
+      en: 'Compatibility mode did not start'
+    },
+    'Akis kurtarilamadi': {
+      tr: 'Akış kurtarılamadı',
+      en: 'Stream could not be recovered'
+    },
+    'Akis takildi': {
+      tr: 'Akış takıldı',
+      en: 'Stream stalled'
+    },
+    'Seek sonrasi akis takildi': {
+      tr: 'Seek sonrası akış takıldı',
+      en: 'Stream stalled after seek'
+    },
+    'Uyumluluk modu baslatilamadi': {
+      tr: 'Uyumluluk modu başlatılamadı',
+      en: 'Compatibility mode could not be started'
+    },
+    'Ses codec uyumluluk modu baslatilamadi': {
+      tr: 'Ses codec uyumluluk modu başlatılamadı',
+      en: 'Audio codec compatibility mode could not be started'
+    },
+    'Oynatici baslatilamadi': {
+      tr: 'Oynatıcı başlatılamadı',
+      en: 'Player could not be started'
+    },
+    'Ilk kare gecikti': {
+      tr: 'İlk kare gecikti',
+      en: 'First frame delayed'
+    },
+    'Sunucu zamaninda yanit vermedi': {
+      tr: 'Sunucu zamanında yanıt vermedi',
+      en: 'Server did not respond in time'
+    },
+    'FFmpeg uyumluluk modu kullanilamiyor': {
+      tr: 'FFmpeg uyumluluk modu kullanılamıyor',
+      en: 'FFmpeg compatibility mode unavailable'
+    },
+    'Uyumluluk modu hata verdi': {
+      tr: 'Uyumluluk modu hata verdi',
+      en: 'Compatibility mode failed'
+    },
+    'Video cozulurken hata olustu': {
+      tr: 'Video çözülürken hata oluştu',
+      en: 'Error decoding video'
+    },
+    'Oynatma hatasi': {
+      tr: 'Oynatma hatası',
+      en: 'Playback error'
+    },
+    'Video bu noktadan devam edemedi': {
+      tr: 'Video bu noktadan devam edemedi',
+      en: 'Video could not continue from this point'
+    },
+    'HLS ag hatasi': {
+      tr: 'HLS ağ hatası',
+      en: 'HLS network error'
+    },
+    'HLS medya hatasi': {
+      tr: 'HLS medya hatası',
+      en: 'HLS media error'
+    },
+    'HLS oynatma hatasi': {
+      tr: 'HLS oynatma hatası',
+      en: 'HLS playback error'
+    },
+    'Video ileri sariliyor...': {
+      tr: 'Video ileri sarılıyor...',
+      en: 'Seeking video forward...'
+    },
+    'Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.': {
+      tr: 'Video ileri sarılamadı. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.',
+      en: 'Could not seek forward. The source might not support seeking from this point.'
+    },
+    'Video ileri sarilirken hata olustu.': {
+      tr: 'Video ileri sarılırken hata oluştu.',
+      en: 'An error occurred while seeking forward.'
+    },
+    'Yayin akisi kurtariliyor...': {
+      tr: 'Yayın akışı kurtarılıyor...',
+      en: 'Recovering stream...'
+    },
+    'Ses dili değiştiriliyor (Transcode)...': {
+      tr: 'Ses dili değiştiriliyor (Transcode)...',
+      en: 'Changing audio language (Transcode)...'
+    },
+    'Altyazı yüklendi.': {
+      tr: 'Altyazı yüklendi.',
+      en: 'Subtitle loaded.'
+    },
+    'Resim içinde resim bu cihazda desteklenmiyor olabilir.': {
+      tr: 'Resim içinde resim bu cihazda desteklenmiyor olabilir.',
+      en: 'Picture-in-picture might not be supported on this device.'
+    }
+  };
+
+  return dictionary[reason]?.[language] || dictionary[reason]?.tr || reason;
+}
+
+function getPlaybackLabel(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
+  if (language === 'en') {
+    if (item?.type === 'live') return 'Live stream';
+    if (item?.type === 'movie') return 'Movie';
+    return 'Series episode';
+  }
+  if (item?.type === 'live') return 'Canlı yayın';
   if (item?.type === 'movie') return 'Film';
-  return 'Dizi bolumu';
+  return 'Dizi bölümü';
 }
 
-function getLoadingMessage(item: PlaylistItem | null): string {
-  return `${getPlaybackLabel(item)} hazirlaniyor...`;
+function getLoadingMessage(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
+  if (language === 'en') {
+    return `Preparing ${getPlaybackLabel(item, language).toLowerCase()}...`;
+  }
+  return `${getPlaybackLabel(item, language)} hazırlanıyor...`;
 }
 
-function getTranscodingMessage(item: PlaylistItem | null): string {
-  return `${getPlaybackLabel(item)} icin uyumluluk modu deneniyor...`;
+function getTranscodingMessage(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
+  if (language === 'en') {
+    return `Trying compatibility mode for ${getPlaybackLabel(item, language).toLowerCase()}...`;
+  }
+  return `${getPlaybackLabel(item, language)} için uyumluluk modu deneniyor...`;
 }
 
-function getRecoveringMessage(item: PlaylistItem | null): string {
-  return `${getPlaybackLabel(item)} akisi kurtariliyor...`;
+function getRecoveringMessage(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
+  if (language === 'en') {
+    return `Recovering ${getPlaybackLabel(item, language).toLowerCase()} stream...`;
+  }
+  return `${getPlaybackLabel(item, language)} akışı kurtarılıyor...`;
 }
 
-function getPlaybackFailureMessage(item: PlaylistItem | null, reason?: string): string {
-  const reasonText = reason ? ` (${reason})` : '';
-  return `${getPlaybackLabel(item)} acilamadi${reasonText}. Kaynak gecici olarak kapali, codec desteklenmiyor veya sunucu yanit vermiyor olabilir. Baska bir kaynak deneyin ya da harici oynatici ile acmayi deneyin.`;
+function getPlaybackFailureMessage(item: PlaylistItem | null, reason?: string, language: 'tr' | 'en' = 'tr'): string {
+  const translatedReason = reason ? translateReason(reason, language) : '';
+  const reasonText = translatedReason ? ` (${translatedReason})` : '';
+  if (language === 'en') {
+    return `${getPlaybackLabel(item, language)} could not be opened${reasonText}. The source might be temporarily offline, codec unsupported, or the server is not responding. Try another source or open with an external player.`;
+  }
+  return `${getPlaybackLabel(item, language)} açılamadı${reasonText}. Kaynak geçici olarak kapalı, codec desteklenmiyor veya sunucu yanıt vermiyor olabilir. Başka bir kaynak deneyin ya da harici oynatıcı ile açmayı deneyin.`;
 }
 
 function getSavedPlayerVolume(): number {
@@ -50,6 +191,7 @@ export function useCinematicPlayer({
   saveWatchProgress,
   showToast
 }: UseCinematicPlayerProps) {
+  const { language } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const hlsInstanceRef = useRef<Hls | null>(null);
@@ -195,7 +337,7 @@ export function useCinematicPlayer({
 
     if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
       const requestId = ++seekRequestIdRef.current;
-      showToast("Video ileri sarılıyor...");
+      showToast(translateReason("Video ileri sarılıyor...", language));
       try {
         const result = await window.electronAPI.startFfmpegProxy(
           selectedChannel.url,
@@ -211,18 +353,18 @@ export function useCinematicPlayer({
           videoRef.current.volume = playerVolumeRef.current;
           videoRef.current.play().then(forceUnmute).catch(() => { });
         } else {
-          showToast("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.");
+          showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
         }
       } catch (e) {
         console.error("Transcoded seek error:", e);
-        showToast("Video ileri sarilirken hata olustu.");
+        showToast(translateReason("Video ileri sarilirken hata olustu.", language));
       }
     } else {
       try {
         videoRef.current.currentTime = targetTime;
       } catch (error) {
         console.warn("Native seek failed:", error);
-        showToast("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.");
+        showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
       }
     }
   };
@@ -350,7 +492,7 @@ export function useCinematicPlayer({
         const streamId = (trackInfo as any)?.streamId;
         activeAudioStreamIdRef.current = streamId;
         
-        showToast("Ses dili değiştiriliyor (Transcode)...");
+        showToast(translateReason("Ses dili değiştiriliyor (Transcode)...", language));
         const currentPos = video.currentTime;
         try {
           const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, seekOffsetRef.current + currentPos, streamId, getTranscodeMode());
@@ -391,7 +533,7 @@ export function useCinematicPlayer({
       return updated;
     });
 
-    showToast("Altyazı yüklendi.");
+    showToast(translateReason("Altyazı yüklendi.", language));
     setShowSubtitleMenu(false);
   };
 
@@ -405,7 +547,7 @@ export function useCinematicPlayer({
       }
     } catch (e) {
       console.error("PiP error:", e);
-      showToast("Resim içinde resim bu cihazda desteklenmiyor olabilir.");
+      showToast(translateReason("Resim içinde resim bu cihazda desteklenmiyor olabilir.", language));
     }
   };
 
@@ -433,7 +575,7 @@ export function useCinematicPlayer({
     setActiveAudioTrack(0);
     setVideoReady(false);
     setPlaybackStatus('loading');
-    setPlaybackMessage(getLoadingMessage(selectedChannel));
+    setPlaybackMessage(getLoadingMessage(selectedChannel, language));
 
     const video = videoRef.current;
     video.playbackRate = playbackSpeedRef.current;
@@ -465,7 +607,7 @@ export function useCinematicPlayer({
     const failPlayback = (reason?: string) => {
       if (!active) return;
       clearStartupTimeout();
-      const message = getPlaybackFailureMessage(selectedChannel, reason);
+      const message = getPlaybackFailureMessage(selectedChannel, reason, language);
       setPlaybackStatus('error');
       setPlaybackMessage(message);
       setVideoReady(false);
@@ -495,7 +637,8 @@ export function useCinematicPlayer({
       isTranscodingRef.current = true;
       setFfmpegFallbackActive(true);
       setPlaybackStatus('transcoding');
-      setPlaybackMessage(reason ? `${getTranscodingMessage(selectedChannel)} ${reason}` : getTranscodingMessage(selectedChannel));
+      const msg = getTranscodingMessage(selectedChannel, language);
+      setPlaybackMessage(reason ? `${msg} ${translateReason(reason, language)}` : msg);
       setBufferedProgress(0);
       armStartupTimeout();
       try {
@@ -607,7 +750,11 @@ export function useCinematicPlayer({
             // Explicitly play to prevent the browser from stalling the video due to an interrupted loading/play promise
             video.play().then(forceUnmute).catch(() => { });
           }
-          showToast(`Kaldığınız yerden devam ediliyor: ${formatPlayerTime(targetTime)}`);
+          showToast(
+            language === 'en'
+              ? `Resumed playback from: ${formatPlayerTime(targetTime)}`
+              : `Kaldığınız yerden devam ediliyor: ${formatPlayerTime(targetTime)}`
+          );
         }
       }
     };
@@ -751,7 +898,7 @@ export function useCinematicPlayer({
         console.warn("[Player] Stall detected! Attempting recovery...");
         
         setPlaybackStatus('recovering');
-        setPlaybackMessage(getRecoveringMessage(selectedChannel));
+        setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
 
         const currentPos = lastRequestedSeekRef.current !== null && waitStartedAt < seekGraceUntilRef.current
           ? lastRequestedSeekRef.current - seekOffsetRef.current
@@ -779,7 +926,7 @@ export function useCinematicPlayer({
           };
           video.addEventListener('loadedmetadata', restoreTime, { once: true });
         }
-        showToast("Yayin akisi kurtariliyor...");
+        showToast(translateReason("Yayin akisi kurtariliyor...", language));
       }, stallDelay);
     };
 
@@ -924,105 +1071,104 @@ export function useCinematicPlayer({
       const playUrl = selectedChannel.url;
       armStartupTimeout();
 
-      const isMkv = playUrl.toLowerCase().includes('.mkv') || playUrl.toLowerCase().split('?')[0].endsWith('.mkv');
-      if (isMkv && window.electronAPI?.startFfmpegProxy) {
-        const startTime = resumeTimeRef.current !== null ? resumeTimeRef.current : (selectedChannel.currentTime || 0);
-        startFfmpegFallback(startTime, 'MKV uyumluluk modu');
-      } else {
-        // Start playing naturally and instantly first!
-        await loadPlayerSource(playUrl, false);
+      // Start playing naturally and instantly first!
+      await loadPlayerSource(playUrl, false);
 
-        // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams in the background
-        if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
-          // ffprobe opens a second connection to the same VOD URL. Starting it
-          // alongside the video competes for the first bytes and delays the
-          // first frame on many IPTV servers, so wait until playback begins.
-          await new Promise<void>((resolve) => {
-            if (!active || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-              resolve();
-              return;
-            }
-
-            let settled = false;
-            const finish = () => {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timeoutId);
-              video.removeEventListener('playing', finish);
-              video.removeEventListener('error', finish);
-              resolve();
-            };
-            const timeoutId = window.setTimeout(finish, 5000);
-            video.addEventListener('playing', finish, { once: true });
-            video.addEventListener('error', finish, { once: true });
-          });
-
-          if (!active || isTranscodingRef.current) return;
-          try {
-            transcodeMetadataProbeStarted = true;
-            const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
-            if (!active) return;
-
-            if (res.success) {
-              if (res.duration && res.duration > 0) {
-                setDuration(res.duration);
-              }
-
-              if (res.audioStreams && res.audioStreams.length > 0) {
-                setAudioTracks(res.audioStreams);
-                
-                // Automatically select Turkish track if present, otherwise first track
-                const trTrack = res.audioStreams.findIndex(
-                  (t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'
-                );
-                const selectedTrack = trTrack >= 0 ? trTrack : 0;
-                setActiveAudioTrack(selectedTrack);
-              }
-
-              let shouldTranscode = false;
-              if (res.codec) {
-                const codec = res.codec.toLowerCase();
-                const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp'];
-                if (unsupportedCodecs.includes(codec)) {
-                  shouldTranscode = true;
-                }
-              }
-
-              if (shouldTranscode) {
-                // Find actual stream ID of the selected track
-                const initialTrackId = res.audioStreams && res.audioStreams.length > 0
-                  ? (res.audioStreams.findIndex((t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'))
-                  : -1;
-                const selectedTrackIndex = initialTrackId >= 0 ? initialTrackId : 0;
-                const streamId = res.audioStreams && res.audioStreams.length > selectedTrackIndex
-                  ? res.audioStreams[selectedTrackIndex].streamId
-                  : undefined;
-                activeAudioStreamIdRef.current = streamId;
-
-                const currentPos = video.currentTime;
-                setPlaybackStatus('transcoding');
-                setPlaybackMessage(getTranscodingMessage(selectedChannel));
-                armStartupTimeout();
-                const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId, getTranscodeMode());
-                if (!active) return;
-                if (transcodeRes.success && transcodeRes.url) {
-                  if (hlsInstanceRef.current) {
-                    hlsInstanceRef.current.destroy();
-                    hlsInstanceRef.current = null;
-                  }
-                  seekOffsetRef.current = currentPos;
-                  isTranscodingRef.current = true;
-                  setFfmpegFallbackActive(true);
-                  video.src = transcodeRes.url;
-                  video.play().then(forceUnmute).catch(() => { });
-                } else {
-                  failPlayback(transcodeRes.error || 'Ses codec uyumluluk modu baslatilamadi');
-                }
-              }
-            }
-          } catch (e) {
-            console.error('[AutoTranscode] Error during background codec probing:', e);
+      // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams in the background
+      if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
+        // ffprobe opens a second connection to the same VOD URL. Starting it
+        // alongside the video competes for the first bytes and delays the
+        // first frame on many IPTV servers, so wait until playback begins.
+        await new Promise<void>((resolve) => {
+          if (!active || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+            resolve();
+            return;
           }
+
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            video.removeEventListener('playing', finish);
+            video.removeEventListener('error', finish);
+            resolve();
+          };
+          const timeoutId = window.setTimeout(finish, 5000);
+          video.addEventListener('playing', finish, { once: true });
+          video.addEventListener('error', finish, { once: true });
+        });
+
+        if (!active || isTranscodingRef.current) return;
+        try {
+          transcodeMetadataProbeStarted = true;
+          const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
+          if (!active) return;
+
+          if (res.success) {
+            if (res.duration && res.duration > 0) {
+              setDuration(res.duration);
+            }
+
+            if (res.audioStreams && res.audioStreams.length > 0) {
+              setAudioTracks(res.audioStreams);
+              
+              // Automatically select Turkish track if present, otherwise first track
+              const trTrack = res.audioStreams.findIndex(
+                (t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'
+              );
+              const selectedTrack = trTrack >= 0 ? trTrack : 0;
+              setActiveAudioTrack(selectedTrack);
+            }
+
+            let shouldTranscode = false;
+            if (res.codec) {
+              const codec = res.codec.toLowerCase();
+              const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp'];
+              if (unsupportedCodecs.includes(codec)) {
+                shouldTranscode = true;
+              }
+            }
+
+            if (shouldTranscode) {
+              // Find actual stream ID of the selected track
+              const initialTrackId = res.audioStreams && res.audioStreams.length > 0
+                ? (res.audioStreams.findIndex((t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'))
+                : -1;
+              const selectedTrackIndex = initialTrackId >= 0 ? initialTrackId : 0;
+              const streamId = res.audioStreams && res.audioStreams.length > selectedTrackIndex
+                ? res.audioStreams[selectedTrackIndex].streamId
+                : undefined;
+              activeAudioStreamIdRef.current = streamId;
+
+              const currentPos = video.currentTime;
+              setPlaybackStatus('transcoding');
+              setPlaybackMessage(getTranscodingMessage(selectedChannel, language));
+              armStartupTimeout();
+              const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId, getTranscodeMode());
+              if (!active) return;
+              if (transcodeRes.success && transcodeRes.url) {
+                if (hlsInstanceRef.current) {
+                  hlsInstanceRef.current.destroy();
+                  hlsInstanceRef.current = null;
+                }
+                seekOffsetRef.current = currentPos;
+                isTranscodingRef.current = true;
+                setFfmpegFallbackActive(true);
+                if (!video.isConnected || !active) return;
+                video.src = transcodeRes.url;
+                video.muted = playerMutedRef.current;
+                video.volume = playerVolumeRef.current;
+                video.play().catch(() => { });
+              } else {
+                isTranscodingRef.current = false;
+                setFfmpegFallbackActive(false);
+                failPlayback(transcodeRes.error || 'Uyumluluk modu baslatilamadi');
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[AutoTranscode] Error during background codec probing:', e);
         }
       }
     };
