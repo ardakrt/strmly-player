@@ -336,11 +336,6 @@ export function useProfiles({
       showToast("Lütfen bir profil ismi girin.");
       return;
     }
-    if (!profileFormAvatar) {
-      showToast("Lütfen bir profil resmi seçin.");
-      return;
-    }
-
     profileSaveInProgressRef.current = true;
     setProfileSetupStatus({
       active: true,
