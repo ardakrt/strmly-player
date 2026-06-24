@@ -1071,37 +1071,14 @@ export function useCinematicPlayer({
       const playUrl = selectedChannel.url;
       armStartupTimeout();
 
-      // Start playing naturally and instantly first!
-      await loadPlayerSource(playUrl, false);
+      let shouldTranscode = false;
+      let streamId: number | undefined = undefined;
 
-      // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams in the background
+      // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams BEFORE playback starts
       if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
-        // ffprobe opens a second connection to the same VOD URL. Starting it
-        // alongside the video competes for the first bytes and delays the
-        // first frame on many IPTV servers, so wait until playback begins.
-        await new Promise<void>((resolve) => {
-          if (!active || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-            resolve();
-            return;
-          }
-
-          let settled = false;
-          const finish = () => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timeoutId);
-            video.removeEventListener('playing', finish);
-            video.removeEventListener('error', finish);
-            resolve();
-          };
-          const timeoutId = window.setTimeout(finish, 5000);
-          video.addEventListener('playing', finish, { once: true });
-          video.addEventListener('error', finish, { once: true });
-        });
-
-        if (!active || isTranscodingRef.current) return;
+        setPlaybackStatus('loading');
+        setPlaybackMessage(language === 'tr' ? 'Ses formatı kontrol ediliyor...' : 'Checking audio format...');
         try {
-          transcodeMetadataProbeStarted = true;
           const res = await window.electronAPI.probeAudioCodec(selectedChannel.url);
           if (!active) return;
 
@@ -1112,16 +1089,16 @@ export function useCinematicPlayer({
 
             if (res.audioStreams && res.audioStreams.length > 0) {
               setAudioTracks(res.audioStreams);
-              
               // Automatically select Turkish track if present, otherwise first track
               const trTrack = res.audioStreams.findIndex(
                 (t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'
               );
               const selectedTrack = trTrack >= 0 ? trTrack : 0;
               setActiveAudioTrack(selectedTrack);
+              streamId = res.audioStreams[selectedTrack]?.streamId;
+              activeAudioStreamIdRef.current = streamId;
             }
 
-            let shouldTranscode = false;
             if (res.codec) {
               const codec = res.codec.toLowerCase();
               const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp'];
@@ -1129,47 +1106,30 @@ export function useCinematicPlayer({
                 shouldTranscode = true;
               }
             }
-
-            if (shouldTranscode) {
-              // Find actual stream ID of the selected track
-              const initialTrackId = res.audioStreams && res.audioStreams.length > 0
-                ? (res.audioStreams.findIndex((t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'))
-                : -1;
-              const selectedTrackIndex = initialTrackId >= 0 ? initialTrackId : 0;
-              const streamId = res.audioStreams && res.audioStreams.length > selectedTrackIndex
-                ? res.audioStreams[selectedTrackIndex].streamId
-                : undefined;
-              activeAudioStreamIdRef.current = streamId;
-
-              const currentPos = video.currentTime;
-              setPlaybackStatus('transcoding');
-              setPlaybackMessage(getTranscodingMessage(selectedChannel, language));
-              armStartupTimeout();
-              const transcodeRes = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, streamId, getTranscodeMode());
-              if (!active) return;
-              if (transcodeRes.success && transcodeRes.url) {
-                if (hlsInstanceRef.current) {
-                  hlsInstanceRef.current.destroy();
-                  hlsInstanceRef.current = null;
-                }
-                seekOffsetRef.current = currentPos;
-                isTranscodingRef.current = true;
-                setFfmpegFallbackActive(true);
-                if (!video.isConnected || !active) return;
-                video.src = transcodeRes.url;
-                video.muted = playerMutedRef.current;
-                video.volume = playerVolumeRef.current;
-                video.play().catch(() => { });
-              } else {
-                isTranscodingRef.current = false;
-                setFfmpegFallbackActive(false);
-                failPlayback(transcodeRes.error || 'Uyumluluk modu baslatilamadi');
-              }
-            }
           }
         } catch (e) {
           console.error('[AutoTranscode] Error during background codec probing:', e);
         }
+      }
+
+      if (shouldTranscode) {
+        setPlaybackStatus('transcoding');
+        setPlaybackMessage(getTranscodingMessage(selectedChannel, language));
+        armStartupTimeout();
+        const transcodeRes = await window.electronAPI!.startFfmpegProxy!(selectedChannel.url, 0, streamId, getTranscodeMode());
+        if (!active) return;
+        if (transcodeRes.success && transcodeRes.url) {
+          seekOffsetRef.current = 0;
+          isTranscodingRef.current = true;
+          setFfmpegFallbackActive(true);
+          await loadPlayerSource(transcodeRes.url, true);
+        } else {
+          isTranscodingRef.current = false;
+          setFfmpegFallbackActive(false);
+          failPlayback(transcodeRes.error || 'Uyumluluk modu baslatilamadi');
+        }
+      } else {
+        await loadPlayerSource(playUrl, false);
       }
     };
 
