@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
   BarChart3,
@@ -232,11 +232,12 @@ export const SettingsPanel = () => {
   const [categorySubTab, setCategorySubTab] = useState<'all' | 'live' | 'series' | 'movie'>('all');
 
   const [updateState, setUpdateState] = useState<{
-    status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloaded' | 'error';
+    status: 'idle' | 'checking' | 'available' | 'downloading' | 'not-available' | 'downloaded' | 'error';
     message: string;
     version?: string;
     progress?: number;
   }>({ status: 'idle', message: '' });
+  const hasAutoCheckedUpdatesRef = useRef(false);
 
   useEffect(() => {
     if (!window.electronAPI || !window.electronAPI.onUpdateStatus || !window.electronAPI.onUpdateProgress) return;
@@ -246,13 +247,15 @@ export const SettingsPanel = () => {
         ...prev,
         status: data.status,
         message: data.message,
-        version: data.version || prev.version
+        version: data.version || prev.version,
+        progress: data.status === 'downloading' ? (prev.progress ?? 0) : data.status === 'downloaded' ? 100 : undefined
       }));
     });
 
     const unsubProgress = window.electronAPI.onUpdateProgress((data: any) => {
       setUpdateState(prev => ({
         ...prev,
+        status: 'downloading',
         progress: data.percent
       }));
     });
@@ -263,12 +266,29 @@ export const SettingsPanel = () => {
     };
   }, []);
 
-  const handleCheckUpdates = async () => {
+  const handleCheckUpdates = useCallback(async () => {
     if (window.electronAPI && window.electronAPI.checkForUpdates) {
       setUpdateState({ status: 'checking', message: language === 'tr' ? 'Güncellemeler denetleniyor...' : 'Checking for updates...' });
       const res = await window.electronAPI.checkForUpdates();
       if (res && !res.success) {
         setUpdateState({ status: 'error', message: language === 'tr' ? `Güncelleme denetleme başarısız: ${res.error}` : `Update check failed: ${res.error}` });
+      }
+    } else {
+      setUpdateState({ status: 'error', message: language === 'tr' ? 'Electron API bulunamadı.' : 'Electron API not found.' });
+    }
+  }, [language]);
+
+  const handleDownloadUpdate = async () => {
+    if (window.electronAPI && window.electronAPI.downloadUpdate) {
+      setUpdateState(prev => ({
+        ...prev,
+        status: 'downloading',
+        message: language === 'tr' ? 'Güncelleme indiriliyor...' : 'Downloading update...',
+        progress: 0
+      }));
+      const res = await window.electronAPI.downloadUpdate();
+      if (res && !res.success) {
+        setUpdateState({ status: 'error', message: language === 'tr' ? `Güncelleme indirilemedi: ${res.error}` : `Update download failed: ${res.error}` });
       }
     } else {
       setUpdateState({ status: 'error', message: language === 'tr' ? 'Electron API bulunamadı.' : 'Electron API not found.' });
@@ -358,6 +378,13 @@ export const SettingsPanel = () => {
   ];
 
   const activeTab = tabs.find(tab => tab.id === activeSettingsTab) || tabs[0];
+
+  useEffect(() => {
+    if (activeTab.id !== 'about' || hasAutoCheckedUpdatesRef.current) return;
+    hasAutoCheckedUpdatesRef.current = true;
+    void handleCheckUpdates();
+  }, [activeTab.id, handleCheckUpdates]);
+
   const categoryTotal = safeHiddenCategories.length + safeHiddenSeriesCategories.length + safeHiddenMovieCategories.length;
 
   const topGroups = useMemo(() => {
@@ -1419,7 +1446,7 @@ export const SettingsPanel = () => {
 
                 <div className="mt-8 grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t border-white/5 pt-6">
                   <div className="rounded-xl border border-white/5 bg-white/[0.005] p-3">
-                    <div className="text-base font-black text-white">1.4.0</div>
+                    <div className="text-base font-black text-white">1.5.7</div>
                     <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">Versiyon</div>
                   </div>
                   <div className="rounded-xl border border-white/5 bg-white/[0.005] p-3">
@@ -1456,12 +1483,21 @@ export const SettingsPanel = () => {
                     <div className="w-6 h-6 rounded-full border-2 border-white/20 border-t-white animate-spin mt-1" />
                   )}
 
-                  {updateState.status === 'available' && updateState.progress !== undefined && (
+                  {updateState.status === 'available' && (
+                    <button
+                      onClick={handleDownloadUpdate}
+                      className="px-6 py-2.5 bg-white hover:bg-neutral-200 text-black font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
+                    >
+                      Güncellemeyi İndir
+                    </button>
+                  )}
+
+                  {updateState.status === 'downloading' && (
                     <div className="w-full max-w-xs flex flex-col gap-2 mt-1">
                       <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-[var(--accent-color)] h-full transition-all duration-300" style={{ width: `${updateState.progress}%` }} />
+                        <div className="bg-[var(--accent-color)] h-full transition-all duration-300" style={{ width: `${updateState.progress ?? 0}%` }} />
                       </div>
-                      <span className="text-[10px] text-neutral-500 font-extrabold text-right">% {updateState.progress} İndiriliyor</span>
+                      <span className="text-[10px] text-neutral-500 font-extrabold text-right">% {updateState.progress ?? 0} İndiriliyor</span>
                     </div>
                   )}
 

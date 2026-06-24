@@ -123,7 +123,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
 
     let cancelled = false;
     const endpoint = channel.type === 'series' ? 'tv' : 'movie';
-    const cacheKey = `vod-meta-${channel.type}-${cleanTitle}`;
+    const cacheKey = `vod-meta-v2-${channel.type}-${cleanTitle}`;
 
     const loadMetadata = async () => {
       if (globalVodMetadataMap.has(cacheKey)) {
@@ -298,7 +298,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   }
   displayDuration = translateDuration(displayDuration, language);
 
-  const posterSrc = metadata.posterUrl || channel.logo;
+  const posterSrc = metadata.posterUrl;
 
   const handleCardClick = () => {
     const flatItem = getFlatItem(channel);

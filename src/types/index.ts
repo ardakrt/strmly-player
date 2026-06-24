@@ -20,6 +20,7 @@ declare global {
       checkFfmpeg?: () => Promise<{ available: boolean; path: string | null }>;
       probeAudioCodec?: (url: string) => Promise<{ success: boolean; codec?: string; duration?: number; allCodecs?: string[]; audioStreams?: { id: number; streamId: number; name: string; lang: string; codec: string }[]; error?: string }>;
       checkForUpdates?: () => Promise<{ success: boolean; error?: string }>;
+      downloadUpdate?: () => Promise<{ success: boolean; error?: string }>;
       installUpdate?: () => Promise<{ success: boolean; error?: string }>;
       onUpdateStatus?: (callback: (data: { status: any; message: string; version?: string }) => void) => () => void;
       onUpdateProgress?: (callback: (data: { percent: number; speed: string }) => void) => () => void;

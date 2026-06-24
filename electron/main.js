@@ -1164,6 +1164,7 @@ function getAutoUpdater() {
 
   const { autoUpdater } = require('electron-updater');
   autoUpdater.logger = console;
+  autoUpdater.autoDownload = false;
 
   autoUpdater.on('checking-for-update', () => {
     sendUpdateStatus('update-status', { status: 'checking', message: 'Güncellemeler denetleniyor...' });
@@ -1173,7 +1174,7 @@ function getAutoUpdater() {
     sendUpdateStatus('update-status', { 
       status: 'available', 
       version: info.version, 
-      message: `Yeni sürüm bulundu (v${info.version}). Güncelleme indiriliyor...` 
+      message: `Yeni sürüm bulundu (v${info.version}). İndirmek için onay verin.` 
     });
   });
 
@@ -1220,6 +1221,17 @@ ipcMain.handle('check-for-updates', async () => {
   }
 });
 
+ipcMain.handle('download-update', async () => {
+  try {
+    sendUpdateStatus('update-status', { status: 'downloading', message: 'Güncelleme indiriliyor...' });
+    await getAutoUpdater().downloadUpdate();
+    return { success: true };
+  } catch (err) {
+    console.error('Download update failed:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('install-update', async () => {
   try {
     getAutoUpdater().quitAndInstall();
@@ -1228,13 +1240,4 @@ ipcMain.handle('install-update', async () => {
     console.error('Install update failed:', err);
     return { success: false, error: err.message };
   }
-});
-
-// Automatically check for updates on startup after 5 seconds
-app.whenReady().then(() => {
-  setTimeout(() => {
-    getAutoUpdater().checkForUpdatesAndNotify().catch(err => {
-      console.error('Failed to run startup update check:', err);
-    });
-  }, 5000);
 });

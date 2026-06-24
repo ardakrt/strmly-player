@@ -67,6 +67,8 @@ export function useCinematicPlayer({
   const hlsNetworkRecoveriesRef = useRef(0);
   const hlsMediaRecoveriesRef = useRef(0);
   const lastBufferedUpdateRef = useRef(0);
+  const seekGraceUntilRef = useRef(0);
+  const lastRequestedSeekRef = useRef<number | null>(null);
 
   // States/refs to reload the stream if paused for a long time (TCP/Token timeout recovery)
   const pausedTimeRef = useRef<number | null>(null);
@@ -188,6 +190,8 @@ export function useCinematicPlayer({
   const executeSeek = async (targetTime: number) => {
     if (!videoRef.current || !selectedChannel) return;
     setBufferedProgress(0);
+    seekGraceUntilRef.current = Date.now() + 20000;
+    lastRequestedSeekRef.current = targetTime;
 
     if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
       const requestId = ++seekRequestIdRef.current;
@@ -206,12 +210,20 @@ export function useCinematicPlayer({
           videoRef.current.muted = playerMutedRef.current;
           videoRef.current.volume = playerVolumeRef.current;
           videoRef.current.play().then(forceUnmute).catch(() => { });
+        } else {
+          showToast("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.");
         }
       } catch (e) {
         console.error("Transcoded seek error:", e);
+        showToast("Video ileri sarilirken hata olustu.");
       }
     } else {
-      videoRef.current.currentTime = targetTime;
+      try {
+        videoRef.current.currentTime = targetTime;
+      } catch (error) {
+        console.warn("Native seek failed:", error);
+        showToast("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.");
+      }
     }
   };
 
@@ -229,6 +241,8 @@ export function useCinematicPlayer({
       : targetTime);
 
     pendingSeekTimeRef.current = targetTime;
+    lastRequestedSeekRef.current = targetTime;
+    seekGraceUntilRef.current = Date.now() + 20000;
     setCurrentTime(targetTime);
 
     if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
@@ -428,6 +442,8 @@ export function useCinematicPlayer({
     activeAudioStreamIdRef.current = undefined;
     seekRequestIdRef.current = 0;
     seekOffsetRef.current = 0;
+    seekGraceUntilRef.current = 0;
+    lastRequestedSeekRef.current = null;
     recoveryAttemptRef.current = 0;
     hlsNetworkRecoveriesRef.current = 0;
     hlsMediaRecoveriesRef.current = 0;
@@ -726,13 +742,20 @@ export function useCinematicPlayer({
 
     const onWaiting = () => {
       if (stallTimeout) clearTimeout(stallTimeout);
-      setPlaybackStatus('recovering');
-      setPlaybackMessage(getRecoveringMessage(selectedChannel));
+      const waitStartedAt = Date.now();
+      const stallDelay = selectedChannel.type === 'live' ? 12000 : 22000;
       stallTimeout = setTimeout(() => {
         if (!active || !video || !selectedChannel) return;
+        if (video.seeking || Date.now() < seekGraceUntilRef.current) return;
+        if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
         console.warn("[Player] Stall detected! Attempting recovery...");
         
-        const currentPos = video.currentTime;
+        setPlaybackStatus('recovering');
+        setPlaybackMessage(getRecoveringMessage(selectedChannel));
+
+        const currentPos = lastRequestedSeekRef.current !== null && waitStartedAt < seekGraceUntilRef.current
+          ? lastRequestedSeekRef.current - seekOffsetRef.current
+          : video.currentTime;
         recoveryAttemptRef.current += 1;
         if (isTranscodingRef.current) {
           if (recoveryAttemptRef.current > 2) {
@@ -740,6 +763,12 @@ export function useCinematicPlayer({
             return;
           }
           startFfmpegFallback(seekOffsetRef.current + currentPos, 'Akis takildi');
+        } else if (selectedChannel.type !== 'live' && window.electronAPI?.startFfmpegProxy) {
+          if (recoveryAttemptRef.current > 1) {
+            failPlayback('Video bu noktadan devam edemedi');
+            return;
+          }
+          startFfmpegFallback(Math.max(0, seekOffsetRef.current + currentPos), 'Seek sonrasi akis takildi');
         } else {
           const playUrl = selectedChannel.url;
           loadPlayerSource(playUrl, false);
@@ -751,7 +780,7 @@ export function useCinematicPlayer({
           video.addEventListener('loadedmetadata', restoreTime, { once: true });
         }
         showToast("Yayin akisi kurtariliyor...");
-      }, 12000);
+      }, stallDelay);
     };
 
     const clearStall = () => {
@@ -772,6 +801,7 @@ export function useCinematicPlayer({
     video.addEventListener('pause', onPauseEvent);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('seeking', clearStall);
+    video.addEventListener('seeked', clearStall);
     const onProgress = () => updateBufferedProgress(true);
     video.addEventListener('progress', onProgress);
 
@@ -1023,6 +1053,7 @@ export function useCinematicPlayer({
       video.removeEventListener('pause', onPauseEvent);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('seeking', clearStall);
+      video.removeEventListener('seeked', clearStall);
       video.removeEventListener('progress', onProgress);
 
       if ((video as any).audioTracks) {

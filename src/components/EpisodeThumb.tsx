@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, memo } from 'react';
+import { Play } from 'lucide-react';
+import { getFallbackGradient } from '../utils/helpers';
 import { tmdbCache, getTmdbApiKey, fetchTmdbPath, resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
 import type { EpisodeThumbProps } from '../types';
 
 // Global memory cache - asla sıfırlanmaz
 const episodeStillCache: Record<string, string> = {};
 
-export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, fallbackPoster, stillPath }: EpisodeThumbProps) => {
+export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, stillPath }: EpisodeThumbProps) => {
   const cacheKey = useMemo(() => {
     return tmdbShowId ? `${tmdbShowId}-${seasonNumber}-${episodeNumber}` : '';
   }, [tmdbShowId, seasonNumber, episodeNumber]);
@@ -119,28 +121,32 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, fal
     };
   }, [tmdbShowId, seasonNumber, episodeNumber, cacheKey, stillPath]);
 
-  const effectiveSrc = stillSrc || fallbackPoster;
-
   return (
     <div className="relative w-full h-full bg-neutral-900">
-      {effectiveSrc && (
+      {stillSrc && (
         <img
-          src={effectiveSrc}
+          src={stillSrc}
           alt=""
           className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setLoaded(true)}
           onError={() => { if (stillSrc) { setStillSrc(null); setLoaded(false); } }}
         />
       )}
-      {(!effectiveSrc || !loaded) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-white/[0.02] to-white/[0.06]">
-          <span className="text-white/20 font-black text-base tracking-tight select-none">
-            {String(episodeNumber).padStart(2, '0')}
-          </span>
+      {(!stillSrc || !loaded) && (
+        <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${getFallbackGradient(`${tmdbShowId}-${seasonNumber}-${episodeNumber}`)}`}>
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="relative flex flex-col items-center gap-1 text-white/75">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/10">
+              <Play size={10} fill="currentColor" className="ml-0.5" />
+            </div>
+            <span className="text-[10px] font-black tracking-wider select-none">
+              S{String(seasonNumber).padStart(2, '0')}E{String(episodeNumber).padStart(2, '0')}
+            </span>
+          </div>
         </div>
       )}
-      {tried && !stillSrc && fallbackPoster && (
-        <div className="absolute inset-0 bg-black/30" />
+      {tried && !stillSrc && (
+        <div className="absolute inset-0 bg-black/10" />
       )}
     </div>
   );

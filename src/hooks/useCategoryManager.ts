@@ -213,6 +213,7 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
     // State (for JSX rendering)
     editMode,
     draggedCategory,
+    hidden,
     // Setters
     setEditMode,
     // Actions

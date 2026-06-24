@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkFfmpeg: () => ipcRenderer.invoke('check-ffmpeg'),
   probeAudioCodec: (url) => ipcRenderer.invoke('probe-audio-codec', { url }),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   onUpdateStatus: (callback) => {
     const subscription = (event, data) => callback(data);

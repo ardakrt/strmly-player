@@ -248,9 +248,11 @@ export const scoreTmdbResult = (result: TmdbSearchResult, cleanTitle: string) =>
 
 export const selectBestTmdbResult = (results: TmdbSearchResult[] | undefined, cleanTitle: string) => {
   if (!results?.length) return null;
-  return [...results]
+  const bestResult = [...results]
     .filter(result => getTmdbNames(result).length > 0)
     .sort((a, b) => scoreTmdbResult(b, cleanTitle) - scoreTmdbResult(a, cleanTitle))[0] || null;
+  if (!bestResult) return null;
+  return scoreTmdbResult(bestResult, cleanTitle) >= 68 ? bestResult : null;
 };
 
 export const buildTmdbSearchPath = (endpoint: TmdbEndpoint, apiKey: string, cleanTitle: string) => {
