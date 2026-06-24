@@ -980,16 +980,13 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       '-b:a', '128k',
       '-ar', '48000',
       '-ac', '2',
-      '-af', 'aresample=async=1000:first_pts=0:min_hard_comp=0.100000',
+      '-af', 'aresample=async=1',
       '-avoid_negative_ts', 'make_zero',
-      '-max_interleave_delta', '0',
       '-max_muxing_queue_size', '2048',
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       '-frag_duration', '200000',
       '-flush_packets', '1',
-      '-muxdelay', '0',
-      '-muxpreload', '0',
       'pipe:1'
     );
 
