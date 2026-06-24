@@ -980,7 +980,7 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       '-b:a', '128k',
       '-ar', '48000',
       '-ac', '2',
-      '-af', 'aresample=async=1',
+      '-af', 'aresample=async=1:min_comp=0.01:min_hard_comp=0.02',
       '-avoid_negative_ts', 'make_zero',
       '-max_muxing_queue_size', '2048',
       '-f', 'mp4',
