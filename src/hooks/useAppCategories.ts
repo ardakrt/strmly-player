@@ -5,9 +5,7 @@ import { useCategoryManager } from './useCategoryManager';
 
 interface UseAppCategoriesProps {
   playlists: SavedPlaylist[];
-  activeProfileId: string | null;
   saveAppSetting: (key: string, value: any) => Promise<void>;
-  resetPreferences: () => void;
   uniqueLiveCategories: string[];
   uniqueSeriesCategories: string[];
   uniqueMovieCategories: string[];
@@ -39,9 +37,7 @@ interface UseAppCategoriesProps {
 
 export function useAppCategories({
   playlists,
-  activeProfileId,
   saveAppSetting,
-  resetPreferences,
   uniqueLiveCategories,
   uniqueSeriesCategories,
   uniqueMovieCategories,
@@ -92,23 +88,17 @@ export function useAppCategories({
     setVisibleMovieCategoryLimit(40);
   }, [selectedGroup, categorySearchQuery]);
 
-  // Reset category configurations if there are no playlists loaded
+  // Keep active category selections valid when the active playlist is removed
+  // or still loading. Do not clear persisted hidden/favorite category settings
+  // here; profile boot briefly reports zero playlists before profile data is
+  // loaded, and saving empty arrays would erase the user's category edits.
   useEffect(() => {
     if (playlists.length === 0) {
-      resetPreferences();
-      if (activeProfileId) {
-        saveAppSetting('favorite_categories', []);
-        saveAppSetting('custom_category_order', []);
-        saveAppSetting('hidden_categories', []);
-        saveAppSetting('favorite_series_categories', []);
-        saveAppSetting('custom_series_category_order', []);
-        saveAppSetting('hidden_series_categories', []);
-        saveAppSetting('favorite_movie_categories', []);
-        saveAppSetting('custom_movie_category_order', []);
-        saveAppSetting('hidden_movie_categories', []);
-      }
+      setActiveLiveCategory('Tümü');
+      setActiveSeriesCategory('Tümü');
+      setActiveMovieCategory('Tümü');
     }
-  }, [playlists.length, saveAppSetting, resetPreferences, activeProfileId]);
+  }, [playlists.length]);
 
   const liveCat = useCategoryManager({
     domain: 'live',

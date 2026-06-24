@@ -25,7 +25,7 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, fal
     if (!tmdbShowId || !cacheKey) { setTried(true); return; }
 
     // Memory cache'de varsa direkt kullan
-    if (episodeStillCache[cacheKey]) {
+    if (episodeStillCache[cacheKey] && stillPath === undefined) {
       setStillSrc(episodeStillCache[cacheKey]);
       setLoaded(true);
       setTried(true);
@@ -35,24 +35,8 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, fal
     let cancelled = false;
 
     const fetchStill = async () => {
-      // IndexedDB cache kontrol
-      try {
-        const cachedResolved = await tmdbCache.get(`resolved-still-${cacheKey}`);
-        if (cachedResolved !== null && cachedResolved !== undefined) {
-          episodeStillCache[cacheKey] = cachedResolved;
-          if (!cancelled) {
-            setStillSrc(cachedResolved || null);
-            setTried(true);
-          }
-          return;
-        }
-      } catch (e) {
-        console.error("IndexedDB resolved-still read error:", e);
-      }
-
-      if (cancelled) return;
-
-      // If we have stillPath from props, resolve it immediately and avoid the individual fetch
+      // If we have stillPath from season details, prefer it over any previous
+      // negative cache from an earlier per-episode lookup.
       if (stillPath !== undefined) {
         try {
           const url = stillPath ? await resolveTmdbImageSrc(stillPath, 'w300') : null;
@@ -77,6 +61,23 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, fal
           console.warn("Failed to resolve stillPath:", err);
         }
       }
+
+      // IndexedDB cache kontrol
+      try {
+        const cachedResolved = await tmdbCache.get(`resolved-still-${cacheKey}`);
+        if (cachedResolved !== null && cachedResolved !== undefined) {
+          episodeStillCache[cacheKey] = cachedResolved;
+          if (!cancelled) {
+            setStillSrc(cachedResolved || null);
+            setTried(true);
+          }
+          return;
+        }
+      } catch (e) {
+        console.error("IndexedDB resolved-still read error:", e);
+      }
+
+      if (cancelled) return;
 
       // TMDB API'den çek
       const apiKey = getTmdbApiKey();

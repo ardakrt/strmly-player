@@ -85,7 +85,7 @@ const translateDuration = (durationStr: string, language: 'tr' | 'en'): string =
     .replace(/DK/g, 'M');
 };
 
-function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, requireTmdbPoster = false, onContextMenu }: VodPosterCardProps) {
+function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, onContextMenu }: VodPosterCardProps) {
   const { language } = useSettings();
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -258,10 +258,6 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
     );
   }
 
-  if (requireTmdbPoster && !metadata.posterUrl) {
-    return null;
-  }
-
   const displayTitle = channel.type === 'series'
     ? parseSeriesEpisodeInfo(channel.name).cleanTitle
     : cleanMediaTitle(channel.name);
@@ -302,7 +298,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   }
   displayDuration = translateDuration(displayDuration, language);
 
-  const posterSrc = metadata.posterUrl || (requireTmdbPoster ? null : channel.logo);
+  const posterSrc = metadata.posterUrl || channel.logo;
 
   const handleCardClick = () => {
     const flatItem = getFlatItem(channel);

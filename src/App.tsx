@@ -218,13 +218,6 @@ export default function App() {
 
   const itemBuckets = playlistIndex.itemBuckets;
 
-
-
-
-  const { reset: resetPreferences } = preferences;
-
-
-
   const [allGroupedSeries, setAllGroupedSeries] = useState<GroupedSeries[]>([]);
 
   useEffect(() => {
@@ -264,9 +257,7 @@ export default function App() {
     setVisibleMovieCategoryLimit
   } = useAppCategories({
     playlists,
-    activeProfileId,
     saveAppSetting,
-    resetPreferences,
     uniqueLiveCategories,
     uniqueSeriesCategories,
     uniqueMovieCategories,
