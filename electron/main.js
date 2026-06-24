@@ -732,34 +732,41 @@ ipcMain.handle('fetch-tmdb', async (event, { path: apiPath }) => {
     return { error: 'Invalid TMDB path' };
   }
 
-  let processedPath = apiPath;
-  try {
-    const urlObj = new URL('https://api.themoviedb.org' + apiPath);
-    const apiKey = urlObj.searchParams.get('api_key') || '';
-    const isValidTmdbKey = /^[a-f0-9]{32}$/i.test(apiKey.trim());
-    if (!isValidTmdbKey) {
-      urlObj.searchParams.set('api_key', 'c7e12a2b1d8e1851399f4b92dc124332');
-      processedPath = urlObj.pathname + urlObj.search;
-    }
-  } catch (err) {
-    console.error("Error verifying/rewriting TMDB api_key in main process:", err);
-  }
+  // Helper function to query the request queue / cache map
+  const executeFetch = async (pathToCheck) => {
+    const existing = tmdbMainRequests.get(pathToCheck);
+    if (existing) return existing;
 
-  const existing = tmdbMainRequests.get(processedPath);
-  if (existing) return existing;
-
-  const request = queueTmdbMainRequest(() => fetchFromTmdb(processedPath))
-    .catch((err) => {
-      console.error("TMDB fetch error:", err);
-      return { error: err.message };
-    })
-    .finally(() => tmdbMainRequests.delete(processedPath));
-  tmdbMainRequests.set(processedPath, request);
-
-  try {
+    const request = queueTmdbMainRequest(() => fetchFromTmdb(pathToCheck))
+      .finally(() => tmdbMainRequests.delete(pathToCheck));
+    tmdbMainRequests.set(pathToCheck, request);
     return await request;
+  };
+
+  try {
+    // 1. Try with the requested path (containing frontend/user's API key)
+    const result = await executeFetch(apiPath);
+    return result;
   } catch (err) {
-    console.error("TMDB fetch error:", err);
+    const errMsg = err.message || '';
+    // 2. If it fails with 401 (Unauthorized) or 403 (Forbidden), auto-retry with default key
+    if (errMsg.includes('status 401') || errMsg.includes('status 403')) {
+      console.warn(`TMDB fetch failed (401/403) for path: ${apiPath}. Retrying with working default key...`);
+      try {
+        const urlObj = new URL('https://api.themoviedb.org' + apiPath);
+        urlObj.searchParams.set('api_key', 'c7e12a2b1d8e1851399f4b92dc124332');
+        const fallbackPath = urlObj.pathname + urlObj.search;
+
+        const fallbackResult = await executeFetch(fallbackPath);
+        console.log(`TMDB fallback retry succeeded for path: ${fallbackPath}`);
+        return fallbackResult;
+      } catch (fallbackErr) {
+        console.error(`TMDB fallback retry also failed for path ${apiPath}:`, fallbackErr);
+        return { error: fallbackErr.message };
+      }
+    }
+
+    console.error(`TMDB fetch error for path ${apiPath}:`, err);
     return { error: err.message };
   }
 });
