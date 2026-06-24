@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play, Film, Tv, Search, ArrowLeft, ChevronRight, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Film, Tv, Search, X, ChevronRight, Layers } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
@@ -26,10 +26,6 @@ interface SpotlightSearchProps {
 export function SpotlightSearch({
   showSpotlight,
   setShowSpotlight,
-  spotlightActiveStep,
-  setSpotlightActiveStep,
-  focusedButtonIndex,
-  setFocusedButtonIndex,
   spotlightScope,
   setSpotlightScope,
   spotlightSearchInput,
@@ -41,225 +37,298 @@ export function SpotlightSearch({
   handleOpenSeriesModalDirect
 }: SpotlightSearchProps) {
   const { language } = useSettings();
+  const [focusedResultIndex, setFocusedResultIndex] = useState(0);
+  const resultsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset focused result when search query or category scope changes
+  useEffect(() => {
+    setFocusedResultIndex(0);
+  }, [spotlightSearchInput, spotlightScope]);
+
   if (!showSpotlight) return null;
+
+  const scopesList: { id: 'all' | 'series' | 'movie' | 'live'; label: string; icon: any }[] = [
+    { id: 'all', label: language === 'tr' ? 'Tümü' : 'All', icon: Layers },
+    { id: 'series', label: language === 'tr' ? 'Diziler' : 'Series', icon: Play },
+    { id: 'movie', label: language === 'tr' ? 'Filmler' : 'Movies', icon: Film },
+    { id: 'live', label: language === 'tr' ? 'Canlı TV' : 'Live TV', icon: Tv }
+  ];
+
+  const handleSelectResult = (match: any) => {
+    if (!match) return;
+    const { type, item } = match;
+    setShowSpotlight(false);
+    if (type === 'live') {
+      handlePlayStream(item as PlaylistItem);
+    } else if (type === 'movie') {
+      handleOpenDetails(item as PlaylistItem);
+    } else if (type === 'series') {
+      handleOpenSeriesModalDirect(item as GroupedSeries);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (spotlightSearchResults.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedResultIndex(prev => {
+        const next = Math.min(prev + 1, spotlightSearchResults.length - 1);
+        scrollIntoView(next);
+        return next;
+      });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedResultIndex(prev => {
+        const next = Math.max(prev - 1, 0);
+        scrollIntoView(next);
+        return next;
+      });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const currentMatch = spotlightSearchResults[focusedResultIndex];
+      if (currentMatch) {
+        handleSelectResult(currentMatch);
+      }
+    }
+  };
+
+  const scrollIntoView = (index: number) => {
+    const container = resultsContainerRef.current;
+    if (!container) return;
+    const items = container.querySelectorAll('.result-item');
+    const targetItem = items[index] as HTMLElement;
+    if (!targetItem) return;
+
+    const containerTop = container.scrollTop;
+    const containerBottom = containerTop + container.clientHeight;
+    const elemTop = targetItem.offsetTop;
+    const elemBottom = elemTop + targetItem.clientHeight;
+
+    if (elemTop < containerTop) {
+      container.scrollTop = elemTop;
+    } else if (elemBottom > containerBottom) {
+      container.scrollTop = elemBottom - container.clientHeight;
+    }
+  };
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-start justify-center pt-[12vh] px-4 animate-fade-in"
+      className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-start justify-center pt-[10vh] px-4 animate-fade-in"
       onClick={() => setShowSpotlight(false)}
     >
       <div
-        className="relative w-full max-w-md bg-neutral-950/90 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl p-5 flex flex-col gap-4 overflow-hidden glass-slide-up max-h-[70vh]"
+        className="relative w-full max-w-2xl bg-neutral-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden glass-slide-up max-h-[75vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {spotlightActiveStep === 'select_scope' ? (
-          <div className="flex flex-col gap-2.5 py-1">
-            <div className="flex items-center justify-between px-1 mb-2 shrink-0">
-              <span className="text-[9px] tracking-widest font-black text-neutral-500 uppercase">
-                {language === 'tr' ? 'Kategori Seçin' : 'Select Category'}
-              </span>
-              <div className="flex items-center gap-1.5 select-none">
-                <span className="text-[8px] font-bold text-neutral-500 bg-white/5 border border-white/5 px-2 py-0.5 rounded">{language === 'tr' ? 'Yön Tuşları & Enter' : 'Arrow Keys & Enter'}</span>
+        {/* Search input container */}
+        <div className="relative flex items-center p-4 border-b border-white/5 shrink-0 gap-3">
+          <Search size={18} className="text-[var(--accent-color)] shrink-0 ml-1" />
+          <input
+            ref={spotlightInputRef}
+            type="text"
+            placeholder={
+              spotlightScope === 'all'
+                ? (language === 'tr' ? 'Film, dizi veya canlı TV kanalı ara...' : 'Search movies, series or live channels...')
+                : spotlightScope === 'live'
+                  ? (language === 'tr' ? 'Canlı TV kanalı ara...' : 'Search live TV channels...')
+                  : spotlightScope === 'movie'
+                    ? (language === 'tr' ? 'Sinema filmi ara...' : 'Search movies...')
+                    : (language === 'tr' ? 'Televizyon dizisi ara...' : 'Search TV series...')
+            }
+            value={spotlightSearchInput}
+            onChange={(e) => setSpotlightSearchInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent text-sm text-white outline-none placeholder-neutral-500 font-medium py-1"
+          />
+          {spotlightSearchInput && (
+            <button
+              onClick={() => setSpotlightSearchInput('')}
+              className="p-1 rounded-lg hover:bg-white/5 text-neutral-400 hover:text-white transition-all shrink-0 cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          )}
+          <div className="hidden sm:flex items-center gap-1 shrink-0 ml-2 select-none">
+            <span className="text-[9px] font-black text-neutral-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded shadow-sm tracking-wider">ESC</span>
+          </div>
+        </div>
+
+        {/* Scope Tabs */}
+        <div className="flex items-center gap-1.5 px-4 py-2 bg-neutral-900/40 border-b border-white/5 shrink-0 overflow-x-auto hide-scrollbar">
+          {scopesList.map((scope) => {
+            const Icon = scope.icon;
+            const isActive = spotlightScope === scope.id;
+            return (
+              <button
+                key={scope.id}
+                onClick={() => setSpotlightScope(scope.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer shrink-0 border ${
+                  isActive
+                    ? 'bg-[var(--accent-color)]/15 border-[var(--accent-color)]/30 text-[var(--accent-color)] shadow-sm'
+                    : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <Icon size={12} />
+                <span>{scope.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search Results Area */}
+        <div
+          ref={resultsContainerRef}
+          className="flex-1 overflow-y-auto hide-scrollbar p-3 max-h-[50vh] flex flex-col gap-1 pr-1.5"
+        >
+          {!spotlightSearchInput.trim() ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center select-none opacity-60">
+              <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4 text-[var(--accent-color)] shadow-inner">
+                <Search size={22} />
               </div>
+              <h4 className="text-xs font-bold text-neutral-200 uppercase tracking-widest">
+                {language === 'tr' ? 'Aramaya Başlayın' : 'Start Searching'}
+              </h4>
+              <p className="text-[11px] text-neutral-500 max-w-xs mt-2 leading-relaxed">
+                {language === 'tr'
+                  ? `Aradığınız içeriği hızlıca bulmak için yazmaya başlayın.`
+                  : `Start typing to search and discover items instantly.`}
+              </p>
             </div>
-            {[
-              { id: 'series', label: language === 'tr' ? 'Dizi Ara' : 'Search Series', desc: language === 'tr' ? 'Diziler ve bölümler arasında arama yapın.' : 'Search among TV series and episodes.', icon: Play },
-              { id: 'movie', label: language === 'tr' ? 'Film Ara' : 'Search Movies', desc: language === 'tr' ? 'Sinema filmleri ve VOD içerikleri arayın.' : 'Search cinema movies and VOD content.', icon: Film },
-              { id: 'live', label: language === 'tr' ? 'Canlı Kanal Ara' : 'Search Live Channels', desc: language === 'tr' ? 'Canlı TV kanalları ve yayınları arayın.' : 'Search live TV channels and broadcasts.', icon: Tv }
-            ].map((btn, idx) => {
-              const Icon = btn.icon;
-              const isFocused = focusedButtonIndex === idx;
+          ) : spotlightSearchResults.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center select-none opacity-60">
+              <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4 text-neutral-400">
+                <X size={22} />
+              </div>
+              <h4 className="text-xs font-bold text-neutral-200 uppercase tracking-widest">
+                {language === 'tr' ? 'Sonuç Bulunamadı' : 'No Results Found'}
+              </h4>
+              <p className="text-[11px] text-neutral-500 max-w-xs mt-2 leading-relaxed">
+                {language === 'tr'
+                  ? 'Aradığınız kelimeye uygun içerik bulunamadı. Lütfen kelimeleri kontrol edin.'
+                  : 'No content found matching your query. Please double-check spelling.'}
+              </p>
+            </div>
+          ) : (
+            spotlightSearchResults.slice(0, 50).map((match, idx) => {
+              const type = match.type;
+              const item = match.item;
+
+              const isLive = type === 'live';
+              const isMovie = type === 'movie';
+              const isSeries = type === 'series';
+
+              let logoSrc: string;
+              let titleName: string;
+              let subtext: string;
+
+              if (isSeries) {
+                const series = item as GroupedSeries;
+                logoSrc = series.logo || '';
+                titleName = series.name;
+                const seasonsCount = Object.keys(series.seasons).length;
+                subtext = language === 'tr'
+                  ? `${seasonsCount} Sezon • ${series.episodesCount} Bölüm`
+                  : `${seasonsCount} Season${seasonsCount > 1 ? 's' : ''} • ${series.episodesCount} Episode${series.episodesCount > 1 ? 's' : ''}`;
+              } else {
+                const plItem = item as PlaylistItem;
+                logoSrc = plItem.logo || '';
+                titleName = plItem.name;
+                subtext = plItem.group || (language === 'tr' ? 'GENEL' : 'GENERAL');
+              }
+
+              const isFocused = focusedResultIndex === idx;
+
               return (
                 <div
-                  key={btn.id}
-                  onMouseEnter={() => setFocusedButtonIndex(idx)}
-                  onClick={() => {
-                    setSpotlightScope(btn.id as any);
-                    setSpotlightActiveStep('searching');
-                  }}
-                  className={`relative w-full text-left p-3 rounded-xl border flex items-center justify-between transition-all duration-200 cursor-pointer ${isFocused
-                      ? 'bg-white/[0.06] border-white/10 shadow-[0_4px_16px_rgba(0,0,0,0.3)]'
-                      : 'bg-white/[0.01] border-transparent hover:bg-white/[0.03]'
-                    }`}
+                  key={`${type}-${item.id}`}
+                  onClick={() => handleSelectResult(match)}
+                  onMouseEnter={() => setFocusedResultIndex(idx)}
+                  className={`result-item group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-150 border ${
+                    isFocused
+                      ? 'bg-white/[0.06] border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.25)]'
+                      : 'bg-transparent border-transparent hover:bg-white/[0.02]'
+                  }`}
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-all ${isFocused
-                        ? 'bg-[var(--accent-color)]/10 border-[var(--accent-color)]/25 text-[var(--accent-color)]'
-                        : 'bg-white/[0.03] border-white/5 text-neutral-500'
-                      }`}>
-                      <Icon size={14} fill={isFocused && btn.id !== 'all' ? 'currentColor' : 'none'} />
+                    {/* Item Thumbnail */}
+                    <div className={`relative rounded-lg overflow-hidden bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 shadow-md ${
+                      isLive ? 'w-10 h-10 p-1' : 'w-8 h-11'
+                    }`}>
+                      <ImageWithFallback
+                        src={logoSrc}
+                        name={titleName}
+                        group={subtext}
+                        size="sm"
+                        itemType={type}
+                      />
                     </div>
+                    {/* Item Text */}
                     <div className="flex flex-col min-w-0">
-                      <span className={`text-xs font-bold transition-colors ${isFocused ? 'text-white' : 'text-neutral-300'}`}>
-                        {btn.label}
+                      <span className={`text-xs font-bold transition-colors truncate ${
+                        isFocused ? 'text-white' : 'text-neutral-300'
+                      }`}>
+                        {titleName}
                       </span>
-                      <span className={`text-[10px] mt-0.5 truncate transition-colors ${isFocused ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                        {btn.desc}
+                      <span className={`text-[10px] font-semibold transition-colors mt-0.5 truncate uppercase tracking-wider ${
+                        isFocused ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}>
+                        {subtext}
                       </span>
                     </div>
                   </div>
-                  <div className="shrink-0 flex items-center pl-2">
+
+                  {/* Actions / Badges */}
+                  <div className="shrink-0 flex items-center gap-2 pl-2 select-none">
                     {isFocused ? (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[8px] font-bold text-neutral-400 select-none uppercase tracking-wider">
-                        <span>{language === 'tr' ? 'SEÇ' : 'SELECT'}</span>
-                        <span className="text-[9px] opacity-60">↵</span>
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--accent-color)]/15 border border-[var(--accent-color)]/30 text-[8px] font-black text-[var(--accent-color)] uppercase tracking-widest">
+                        <span>{language === 'tr' ? 'Oynat/Aç' : 'Play/Open'}</span>
+                        <span className="text-[10px] font-medium leading-none mb-0.5">↵</span>
                       </div>
                     ) : (
-                      <ChevronRight size={12} className="text-neutral-700" />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <>
-            <div className="relative flex items-center shrink-0 gap-2.5">
-              <button
-                onClick={() => setSpotlightActiveStep('select_scope')}
-                className="w-9 h-9 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 flex items-center justify-center text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm shrink-0"
-                title={language === 'tr' ? 'Geri Dön' : 'Go Back'}
-              >
-                <ArrowLeft size={13} />
-              </button>
-
-              <div className="relative flex-1 flex items-center">
-                <Search size={14} className="absolute left-3.5 text-[var(--accent-color)]" />
-                <input
-                  ref={spotlightInputRef}
-                  type="text"
-                  placeholder={
-                    spotlightScope === 'live'
-                      ? (language === 'tr' ? 'Canlı TV kanalı ara...' : 'Search live TV channels...')
-                      : spotlightScope === 'movie'
-                        ? (language === 'tr' ? 'Sinema filmi ara...' : 'Search movies...')
-                        : (language === 'tr' ? 'Televizyon dizisi ara...' : 'Search TV series...')
-                  }
-                  value={spotlightSearchInput}
-                  onChange={(e) => setSpotlightSearchInput(e.target.value)}
-                  className="w-full pl-10 pr-16 py-2.5 bg-white/[0.03] border border-white/5 focus:border-white/[0.08] rounded-xl text-xs text-white outline-none placeholder-neutral-500 transition-all font-medium"
-                />
-                <div className="absolute right-3.5 flex items-center gap-1.5 select-none">
-                  <span className="text-[8px] font-extrabold text-neutral-400 bg-white/5 border border-white/15 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                    {spotlightScope === 'live' ? (language === 'tr' ? 'CANLI' : 'LIVE') : spotlightScope === 'movie' ? (language === 'tr' ? 'FİLM' : 'MOVIE') : (language === 'tr' ? 'DİZİ' : 'SERIES')}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto hide-scrollbar max-h-[50vh] flex flex-col gap-1.5 pr-1 mt-2">
-              {!spotlightSearchInput.trim() ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center select-none opacity-50">
-                  <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                    <Search size={20} className="text-neutral-400" />
-                  </div>
-                  <h4 className="text-xs font-bold text-neutral-300 uppercase tracking-wider">{language === 'tr' ? 'Aramaya Başlayın' : 'Start Searching'}</h4>
-                  <p className="text-[11px] text-neutral-500 max-w-xs mt-1.5 leading-relaxed">
-                    {language === 'tr'
-                      ? `Aradığınız ${spotlightScope === 'live' ? 'kanalı' : spotlightScope === 'movie' ? 'filmi' : 'diziyi'} bulmak için klavyeden yazmaya başlayın.`
-                      : `Start typing to find the ${spotlightScope === 'live' ? 'channel' : spotlightScope === 'movie' ? 'movie' : 'series'} you're looking for.`}
-                  </p>
-                </div>
-              ) : spotlightSearchResults.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center select-none opacity-50">
-                  <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                    <X size={20} className="text-neutral-400" />
-                  </div>
-                  <h4 className="text-xs font-bold text-neutral-300 uppercase tracking-wider">{language === 'tr' ? 'Sonuç Bulunamadı' : 'No Results Found'}</h4>
-                  <p className="text-[11px] text-neutral-500 max-w-xs mt-1.5 leading-relaxed">
-                    {language === 'tr'
-                      ? 'Aradığınız kelimeye uygun içerik bulunamadı. Lütfen kelimelerin doğruluğunu kontrol edin.'
-                      : 'No content found matching your query. Please double-check spelling.'}
-                  </p>
-                </div>
-              ) : (
-                spotlightSearchResults.slice(0, 50).map(match => {
-                  const type = match.type;
-                  const item = match.item;
-
-                  const isLive = type === 'live';
-                  const isMovie = type === 'movie';
-                  const isSeries = type === 'series';
-
-                  let logoSrc: string;
-                  let titleName: string;
-                  let subtext: string;
-
-                  if (isSeries) {
-                    const series = item as GroupedSeries;
-                    logoSrc = series.logo || '';
-                    titleName = series.name;
-                    const seasonsCount = Object.keys(series.seasons).length;
-                    subtext = language === 'tr'
-                      ? `${seasonsCount} Sezon • ${series.episodesCount} Bölüm`
-                      : `${seasonsCount} Season${seasonsCount > 1 ? 's' : ''} • ${series.episodesCount} Episode${series.episodesCount > 1 ? 's' : ''}`;
-                  } else {
-                    const plItem = item as PlaylistItem;
-                    logoSrc = plItem.logo || '';
-                    titleName = plItem.name;
-                    subtext = plItem.group || (language === 'tr' ? 'GENEL' : 'GENERAL');
-                  }
-
-                  const handleSelectResult = () => {
-                    setShowSpotlight(false);
-                    if (isLive) {
-                      handlePlayStream(item as PlaylistItem);
-                    } else if (isMovie) {
-                      handleOpenDetails(item as PlaylistItem);
-                    } else if (isSeries) {
-                      handleOpenSeriesModalDirect(item as GroupedSeries);
-                    }
-                  };
-
-                  return (
-                    <div
-                      key={`${type}-${item.id}`}
-                      onClick={handleSelectResult}
-                      className="group flex items-center justify-between p-2.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-transparent hover:border-white/5 cursor-pointer transition-all duration-200"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div className={`relative rounded-xl overflow-hidden bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 shadow-md ${isLive ? 'w-10 h-10 p-1' : 'w-8.5 h-12'
-                          }`}>
-                          <ImageWithFallback
-                            src={logoSrc}
-                            name={titleName}
-                            group={subtext}
-                            size="sm"
-                            itemType={type}
-                          />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-xs font-bold text-neutral-200 group-hover:text-white transition-colors truncate">
-                            {titleName}
-                          </span>
-                          <span className="text-[10px] font-semibold text-neutral-500 group-hover:text-neutral-400 transition-colors mt-0.5 truncate uppercase tracking-wider">
-                            {subtext}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="shrink-0 pl-2">
+                      <>
                         {isLive && (
                           <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[8px] font-black uppercase tracking-widest">
                             {language === 'tr' ? 'CANLI' : 'LIVE'}
                           </span>
                         )}
                         {isMovie && (
-                          <span className="px-2 py-0.5 rounded-full bg-neutral-100/10 text-neutral-300 border border-white/10 text-[8px] font-black uppercase tracking-widest">
+                          <span className="px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[8px] font-black uppercase tracking-widest">
                             {language === 'tr' ? 'SİNEMA' : 'MOVIE'}
                           </span>
                         )}
                         {isSeries && (
-                          <span className="px-2 py-0.5 rounded-full bg-[var(--accent-color)]/10 text-[var(--accent-color)] border border-[var(--accent-color)]/20 text-[8px] font-black uppercase tracking-widest">
-                            {language === 'tr' ? 'DİZİLER' : 'SERIES'}
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[8px] font-black uppercase tracking-widest">
+                            {language === 'tr' ? 'DİZİ' : 'SERIES'}
                           </span>
                         )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </>
-        )}
+                        <ChevronRight size={12} className="text-neutral-700 group-hover:text-neutral-500 transition-colors ml-1" />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Command Palette Footer */}
+        <div className="px-4 py-2 border-t border-white/5 bg-neutral-950 flex items-center justify-between text-[9px] font-semibold text-neutral-500 shrink-0 select-none">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1">
+              <kbd className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-black text-neutral-400">↑↓</kbd>
+              <span>{language === 'tr' ? 'Gezin' : 'Navigate'}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-black text-neutral-400">Enter</kbd>
+              <span>{language === 'tr' ? 'Oynat/Aç' : 'Play/Open'}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <kbd className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-black text-neutral-400">ESC</kbd>
+            <span>{language === 'tr' ? 'Kapat' : 'Close'}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

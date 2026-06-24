@@ -22,6 +22,8 @@ declare global {
       checkForUpdates?: () => Promise<{ success: boolean; error?: string }>;
       downloadUpdate?: () => Promise<{ success: boolean; error?: string }>;
       installUpdate?: () => Promise<{ success: boolean; error?: string }>;
+      relaunchApp?: () => Promise<void>;
+      getAppVersion?: () => Promise<string>;
       onUpdateStatus?: (callback: (data: { status: any; message: string; version?: string }) => void) => () => void;
       onUpdateProgress?: (callback: (data: { percent: number; speed: string }) => void) => () => void;
     };

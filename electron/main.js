@@ -5,10 +5,26 @@ const fs = require('fs');
 const http = require('http');
 const { migrateProfileData } = require('./migration');
 
-// Keep hardware acceleration enabled by default for smooth scrolling/video.
-// Set STRMLY_DISABLE_HW_ACCELERATION=1 only when diagnosing GPU-specific blank windows.
-if (process.env.STRMLY_DISABLE_HW_ACCELERATION === '1') {
+// Check config for hardware acceleration setting
+let disableHW = process.env.STRMLY_DISABLE_HW_ACCELERATION === '1';
+try {
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  const profilesDir = isDev ? path.join(app.getAppPath(), 'profiles') : path.join(app.getPath('userData'), 'profiles');
+  const configPath = path.join(profilesDir, 'iptv-player-config.json');
+  if (fs.existsSync(configPath)) {
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.disableHardwareAcceleration === true) {
+      disableHW = true;
+    }
+  }
+} catch (e) {
+  // Ignore config read error at startup
+}
+
+if (disableHW) {
   app.disableHardwareAcceleration();
+  console.log('GPU Hardware Acceleration has been disabled via settings/environment.');
 }
 
 // Setup local file logger
@@ -844,7 +860,7 @@ function stopFfmpegProxy() {
   proxyPort = 0;
 }
 
-ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStreamId, transcodeMode }) => {
+ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStreamId, transcodeMode = 'full' }) => {
   if (!getFfmpegPath()) {
     return { success: false, error: 'FFmpeg bulunamadı.' };
   }
@@ -928,7 +944,7 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
     // but some IPTV/VOD files with bad timestamps play better in full transcode mode.
     const args = [
       '-loglevel', 'warning',
-      '-fflags', '+nobuffer+genpts+discardcorrupt+fastseek',
+      '-fflags', '+nobuffer+genpts+discardcorrupt',
       '-flags', '+low_delay',
       '-user_agent', '9XtreamPlayer LibVLC/3.0.22-rc1',
       '-reconnect', '1',
@@ -1035,6 +1051,15 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
 ipcMain.handle('stop-ffmpeg-proxy', async () => {
   stopFfmpegProxy();
   return { success: true };
+});
+
+ipcMain.handle('relaunch-app', async () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+ipcMain.handle('get-app-version', async () => {
+  return app.getVersion();
 });
 
 ipcMain.handle('probe-audio-codec', async (event, { url }) => {

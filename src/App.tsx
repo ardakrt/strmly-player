@@ -27,7 +27,7 @@ import { useDiagnostics } from './hooks/useDiagnostics';
 
 import { Navbar } from './components/Navbar';
 import { SpotlightSearch } from './components/SpotlightSearch';
-import { Heart, Play, Tv } from 'lucide-react';
+import { Heart, Play, Tv, Info, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { ProfileScreenWrapper } from './components/ProfileScreenWrapper';
 import { AppModals } from './components/AppModals';
 
@@ -40,10 +40,76 @@ const FavoritesView = lazy(() => import('./components/FavoritesView').then(m => 
 const DiagnosticsView = lazy(() => import('./components/DiagnosticsView').then(m => ({ default: m.DiagnosticsView })));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const PlayerScreen = lazy(() => import('./components/PlayerScreen').then(m => ({ default: m.PlayerScreen })));
+
+const getToastDetails = (message: string) => {
+  const msgLower = message.toLowerCase();
+  
+  if (
+    msgLower.includes('yükleniyor') || 
+    msgLower.includes('güncelleniyor') || 
+    msgLower.includes('indiriliyor') || 
+    msgLower.includes('bağlanılıyor') || 
+    msgLower.includes('çözümleniyor') ||
+    msgLower.includes('loading') ||
+    msgLower.includes('updating') ||
+    msgLower.includes('downloading') ||
+    msgLower.includes('connecting')
+  ) {
+    return {
+      icon: <Loader2 size={14} className="text-blue-400 animate-spin shrink-0" />,
+      colorClass: 'border-blue-500/20 shadow-[0_4px_16px_rgba(59,130,246,0.12)]',
+    };
+  }
+  
+  if (
+    msgLower.includes('hata') || 
+    msgLower.includes('başarısız') || 
+    msgLower.includes('bulunamadı') || 
+    msgLower.includes('olamadı') || 
+    msgLower.includes('error') || 
+    msgLower.includes('failed') ||
+    msgLower.includes('yanlış') ||
+    msgLower.includes('invalid')
+  ) {
+    return {
+      icon: <AlertCircle size={14} className="text-red-400 shrink-0" />,
+      colorClass: 'border-red-500/20 shadow-[0_4px_16px_rgba(239,68,68,0.12)]',
+    };
+  }
+  
+  if (
+    msgLower.includes('başarılı') || 
+    msgLower.includes('eklendi') || 
+    msgLower.includes('güncellendi') || 
+    msgLower.includes('yüklendi') || 
+    msgLower.includes('kaydedildi') || 
+    msgLower.includes('başlatıldı') || 
+    msgLower.includes('temizlendi') ||
+    msgLower.includes('kaldırıldı') ||
+    msgLower.includes('success') ||
+    msgLower.includes('imported') ||
+    msgLower.includes('complete') ||
+    msgLower.includes('cleared') ||
+    msgLower.includes('added') ||
+    msgLower.includes('removed') ||
+    msgLower.includes('aktarıldı')
+  ) {
+    return {
+      icon: <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />,
+      colorClass: 'border-emerald-500/20 shadow-[0_4px_16px_rgba(16,185,129,0.12)]',
+    };
+  }
+  
+  return {
+    icon: <Info size={14} className="text-[var(--accent-color)] shrink-0" />,
+    colorClass: 'border-white/12 shadow-[0_4px_16px_rgba(255,255,255,0.08)]',
+  };
+};
+
 export default function App() {
   const appSettings = useAppSettings();
   const {
-    toast, showToast, isParsing, setIsParsing, sortOption, setSortOption,
+    toast, showToast, hideToast, isParsing, setIsParsing, sortOption, setSortOption,
     qualityFilter, setQualityFilter, defaultPlayer, setDefaultPlayer,
     tmdbApiKey, setTmdbApiKey, activeAccent, setActiveAccent, activeTheme,
     setActiveTheme, glassIntensity, neonGlowEnabled, language,
@@ -193,6 +259,56 @@ export default function App() {
   } = useSpotlightSearch({
     searchInputRef
   });
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastExit, setToastExit] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (toast.show) {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (toastExitTimerRef.current) clearTimeout(toastExitTimerRef.current);
+      
+      setToastMessage(toast.message);
+      setToastExit(false);
+      setToastVisible(true);
+      
+      toastTimerRef.current = setTimeout(() => {
+        setToastVisible(false);
+        setToastExit(true);
+        toastExitTimerRef.current = setTimeout(() => {
+          setToastMessage('');
+          setToastExit(false);
+          hideToast();
+        }, 500);
+      }, 5000);
+    }
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (toastExitTimerRef.current) clearTimeout(toastExitTimerRef.current);
+    };
+  }, [toast.show, toast.message, hideToast]);
+
+  const handleToastMouseEnter = () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  };
+
+  const handleToastMouseLeave = () => {
+    if (!toastVisible || toastExit) return;
+    toastTimerRef.current = setTimeout(() => {
+      setToastVisible(false);
+      setToastExit(true);
+      toastExitTimerRef.current = setTimeout(() => {
+        setToastMessage('');
+        setToastExit(false);
+        hideToast();
+      }, 500);
+    }, 5000);
+  };
 
   // Debounce search input to prevent lagging on every keystroke (Instant for Ana Sayfa)
   useEffect(() => {
@@ -654,12 +770,25 @@ export default function App() {
         </div>
       )}
 
-      {toast.show && (
-        <div className="fixed bottom-8 right-8 z-[5000] px-4.5 py-3 rounded-2xl bg-neutral-900/80 backdrop-blur-md border border-white/10 flex items-center gap-3 shadow-2xl animate-slide-up select-none">
-          <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-ping" />
-          <span className="text-xs font-semibold tracking-wide text-neutral-200">{toast.message}</span>
-        </div>
-      )}
+      {toastMessage && (() => {
+        const { icon, colorClass } = getToastDetails(toastMessage);
+        return (
+          <div
+            className={`dynamic-island-toast select-none ${
+              scrolled ? 'scrolled' : ''
+            } ${
+              toastVisible ? 'visible' : ''
+            } ${toastExit ? 'exit' : ''} ${colorClass}`}
+            onMouseEnter={handleToastMouseEnter}
+            onMouseLeave={handleToastMouseLeave}
+          >
+            <div className="dynamic-island-content">
+              {icon}
+              <span className="text-[12px] font-semibold tracking-wide text-neutral-100">{toastMessage}</span>
+            </div>
+          </div>
+        );
+      })()}
 
       <Navbar
         loaded={loaded}

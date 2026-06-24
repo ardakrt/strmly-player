@@ -772,3 +772,160 @@ div.focusable-item:focus-visible .premium-card {
   box-shadow: 0 0 0 2px var(--accent-color, #ffffff), 0 12px 28px rgba(0, 0, 0, 0.65) !important;
 }
 
+/* Dynamic Island Toast Notification */
+.dynamic-island-toast {
+  position: fixed;
+  top: 60px; /* Positions top edge exactly inside the navbar bottom (64px) at resting (translateY(2px)) */
+  left: 50%;
+  transform: translateX(-50%) translateY(-25px) scaleX(0.2) scaleY(0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 55; /* In front of the navbar (z-50) to cover the bottom border at overlap and merge seamlessly */
+  
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  /* Matching the exact glass/gradient style of the navbar */
+  background: linear-gradient(110deg,
+      color-mix(in srgb, var(--accent-color, #ffffff) 8%, transparent),
+      rgba(255, 255, 255, 0.055) 36%,
+      rgba(255, 255, 255, 0.025) 68%,
+      color-mix(in srgb, var(--accent-color, #ffffff) 5%, transparent)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.8) contrast(1.04) !important;
+  backdrop-filter: blur(22px) saturate(1.8) contrast(1.04) !important;
+  
+  padding: 10px 24px;
+  border-radius: 9999px;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.14),
+              inset 0 -1px 0 rgba(255, 255, 255, 0.035);
+  
+  max-width: 90vw;
+  width: max-content;
+  min-width: 160px;
+  
+  /* Smooth transition for sliding top position when scrolled state changes */
+  transition: top 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
+              background 0.4s ease,
+              border-color 0.4s ease,
+              transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.3s ease;
+}
+
+.dynamic-island-toast.scrolled {
+  top: 50px; /* Positions top edge exactly inside scrolled navbar bottom (54px) at resting (translateY(2px)) */
+  background: linear-gradient(110deg,
+      color-mix(in srgb, var(--accent-color, #ffffff) 8%, rgba(5, 5, 7, 0.36)),
+      rgba(8, 8, 10, 0.42) 52%,
+      color-mix(in srgb, var(--accent-color, #ffffff) 5%, rgba(5, 5, 7, 0.38))) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.9) contrast(1.03) !important;
+  backdrop-filter: blur(24px) saturate(1.9) contrast(1.03) !important;
+}
+
+.dynamic-island-toast.visible {
+  pointer-events: auto;
+  animation: dynamic-island-drop-in 0.65s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+.dynamic-island-toast.exit {
+  pointer-events: none;
+  animation: dynamic-island-drop-out 0.5s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+/* Teardrop drop-down entry animation (Cloud/Bubble emerging from Navbar) */
+@keyframes dynamic-island-drop-in {
+  0% {
+    /* Flat, thin and hidden inside the navbar */
+    transform: translateX(-50%) translateY(-25px) scaleX(0.2) scaleY(0);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  35% {
+    /* Squeezes out and stretches downwards like a bubble/droplet */
+    transform: translateX(-50%) translateY(20px) scaleX(0.7) scaleY(1.4);
+    opacity: 0.95;
+    filter: blur(0);
+  }
+  60% {
+    /* Balloons out horizontally like a cloud */
+    transform: translateX(-50%) translateY(5px) scaleX(1.15) scaleY(0.85);
+    opacity: 1;
+  }
+  80% {
+    /* Settles bounce */
+    transform: translateX(-50%) translateY(1px) scaleX(0.97) scaleY(1.03);
+  }
+  100% {
+    /* Rested and connected to navbar bottom border with overlap */
+    transform: translateX(-50%) translateY(2px) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Suction exit animation back inside the navbar */
+@keyframes dynamic-island-drop-out {
+  0% {
+    transform: translateX(-50%) translateY(2px) scale(1);
+    opacity: 1;
+  }
+  30% {
+    /* slight stretch downwards before snap */
+    transform: translateX(-50%) translateY(8px) scaleX(0.85) scaleY(1.15);
+    opacity: 0.95;
+  }
+  100% {
+    /* flattens and gets sucked back inside the navbar */
+    transform: translateX(-50%) translateY(-25px) scaleX(0.15) scaleY(0);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+/* Toast message text container for delayed fade-in */
+.dynamic-island-content {
+  opacity: 0;
+  animation: dynamic-island-content-fade 0.35s ease 0.22s forwards;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.dynamic-island-toast.exit .dynamic-island-content {
+  animation: dynamic-island-content-fade-out 0.15s ease forwards;
+}
+
+@keyframes dynamic-island-content-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes dynamic-island-content-fade-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+/* Hover state: spring zoom, brighter borders and clean glass drop shadow */
+.dynamic-island-toast:hover {
+  transform: translateX(-50%) translateY(2px) scale(1.04) !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+

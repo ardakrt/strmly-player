@@ -18,7 +18,13 @@ import {
   Search,
   Tv,
   Film,
-  Video
+  Video,
+  Globe,
+  FileText,
+  Tag,
+  Cpu,
+  Code,
+  ExternalLink
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import type { SavedPlaylist } from '../types';
@@ -304,12 +310,19 @@ export const SettingsPanel = () => {
   const [autoPlayNext, setAutoPlayNext] = useState(() => {
     try { return localStorage.getItem('strmly_auto_play_next') === 'true'; } catch { return false; }
   });
-  const [transcodeMode, setTranscodeMode] = useState(() => {
-    try { return localStorage.getItem('strmly_transcode_mode') || 'copy'; } catch { return 'copy'; }
-  });
+
   const [bufferEnabled, setBufferEnabled] = useState(() => {
     try { return localStorage.getItem('strmly_buffer_enabled') === 'true'; } catch { return false; }
   });
+  const [hwAccelerationEnabled, setHwAccelerationEnabled] = useState(() => {
+    try { return localStorage.getItem('strmly_hw_acceleration_enabled') !== 'false'; } catch { return true; }
+  });
+  const [appVersion, setAppVersion] = useState('1.5.17');
+  useEffect(() => {
+    if (window.electronAPI && window.electronAPI.getAppVersion) {
+      window.electronAPI.getAppVersion().then(setAppVersion).catch(() => {});
+    }
+  }, []);
   const [bufferSize, setBufferSize] = useState(() => {
     try { return localStorage.getItem('strmly_buffer_size') || '30'; } catch { return '30'; }
   });
@@ -1258,31 +1271,50 @@ export const SettingsPanel = () => {
                     )}
                   </div>
                 </SettingRow>
-                
+
                 <SettingRow
-                  title={language === 'tr' ? "Dönüştürme (Transcode) Performansı" : "Transcoding Performance"}
+                  title={language === 'tr' ? "Donanım Hızlandırması (GPU)" : "Hardware Acceleration (GPU)"}
                   description={language === 'tr' 
-                    ? "Desteklenmeyen ses formatlarına sahip (AC3/DTS vb.) yayınlarda sesin nasıl yeniden kodlanacağını belirler. Hızlı modu CPU tüketmez." 
-                    : "Determines how audio is re-encoded for streams with unsupported audio formats (like AC3/DTS). Fast mode uses almost zero CPU."}
+                    ? "Menülerde akıcılığı ve video oynatma performansını artırır. Ekran kartınızla ilgili çökme, donma veya siyah ekran sorunları yaşıyorsanız kapatmayı deneyin."
+                    : "Improves UI smoothness and video playback performance. Try turning this off if you experience GPU driver crashes, freezes, or black screens."}
                 >
-                  <CustomSelect
-                    value={transcodeMode}
-                    onChange={(val) => {
-                      setTranscodeMode(val);
-                      saveLocalSetting('strmly_transcode_mode', val);
-                    }}
-                    options={[
-                      {
-                        value: 'copy',
-                        label: language === 'tr' ? 'Hızlı (Sadece Ses Kodlanır, Düşük CPU)' : 'Fast (Transcode Audio Only, Low CPU)'
-                      },
-                      {
-                        value: 'full',
-                        label: language === 'tr' ? 'Uyumlu (Ses ve Video Kodlanır, Yüksek CPU)' : 'Compatible (Transcode Audio & Video, High CPU)'
+                  <button
+                    onClick={async () => {
+                      const next = !hwAccelerationEnabled;
+                      setHwAccelerationEnabled(next);
+                      try {
+                        localStorage.setItem('strmly_hw_acceleration_enabled', String(next));
+                        if (window.electronAPI && window.electronAPI.saveConfig) {
+                          await window.electronAPI.saveConfig('disableHardwareAcceleration', !next);
+                        }
+                        const confirmText = language === 'tr'
+                          ? 'Donanım hızlandırması ayarının geçerli olması için uygulamanın yeniden başlatılması gerekir. Şimdi yeniden başlatılsın mı?'
+                          : 'The application needs to be restarted for hardware acceleration settings to take effect. Restart now?';
+                        if (window.confirm(confirmText)) {
+                          if (window.electronAPI && window.electronAPI.relaunchApp) {
+                            window.electronAPI.relaunchApp();
+                          }
+                        }
+                      } catch (e) {
+                        console.error(e);
                       }
-                    ]}
-                  />
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
+                      hwAccelerationEnabled
+                        ? 'bg-[var(--accent-color)] border-[var(--accent-color)]'
+                        : 'bg-white/[0.03] border-white/8'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full transition-all duration-200 ${
+                        hwAccelerationEnabled
+                          ? 'left-5.5 bg-black'
+                          : 'left-0.5 bg-neutral-400'
+                      }`}
+                    />
+                  </button>
                 </SettingRow>
+
               </div>
             </>
           )}
@@ -1433,38 +1465,77 @@ export const SettingsPanel = () => {
           {activeTab.id === 'about' && (
             <>
               <PageHeader title="Strmly Hakkında" description="Uygulama sürümü, lisans ve platform bilgileri." />
-              <div className="relative overflow-hidden flex flex-col items-center text-center py-4">
-                <div className="relative w-16 h-16 rounded-[20px] bg-white text-black flex items-center justify-center shadow-md mb-4 border border-white/20 hover:scale-105 transition-all duration-300">
-                  <img src="./icon.png" className="w-10 h-10 object-contain" alt="Strmly Logo" />
+              <div className="relative overflow-hidden flex flex-col items-center text-center py-6">
+                
+                {/* Logo & Branding */}
+                <div className="relative w-20 h-20 rounded-[24px] bg-white text-black flex items-center justify-center shadow-[0_0_35px_rgba(255,255,255,0.08)] mb-5 border border-white/20 hover:scale-105 transition-all duration-300 group cursor-pointer">
+                  <img src="./icon.png" className="w-12 h-12 object-contain group-hover:rotate-6 transition-transform duration-300" alt="Strmly Logo" />
                 </div>
 
                 <h3 className="text-2xl font-black tracking-tight text-white leading-none">STRMLY</h3>
-                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--accent-color)] mt-1.5">Strmly</p>
-                <p className="mt-3.5 max-w-sm text-xs leading-relaxed text-neutral-400 font-medium">
+                <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--accent-color)] mt-2">Premium IPTV Player</p>
+                
+                <p className="mt-4 max-w-md text-xs leading-relaxed text-neutral-400 font-medium">
                   Strmly, en sevdiğiniz canlı yayınları, dizileri ve filmleri son derece akıcı cam arayüzü ve yüksek performanslı oynatma motoruyla izlemeniz için geliştirilmiş yeni nesil IPTV oynatıcıdır.
                 </p>
 
-                <div className="mt-8 grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t border-white/5 pt-6">
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] p-3">
-                    <div className="text-base font-black text-white">1.5.7</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">Versiyon</div>
+                {/* Grid Cards with Icons */}
+                <div className="mt-8 grid w-full gap-3.5 sm:grid-cols-2 lg:grid-cols-4 border-t border-white/5 pt-6">
+                  
+                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
+                    <Tag size={16} className="text-[var(--accent-color)] group-hover:scale-110 transition-transform mb-2.5" />
+                    <div className="text-sm font-black text-white">{appVersion}</div>
+                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">{language === 'tr' ? 'Versiyon' : 'Version'}</div>
                   </div>
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] p-3">
-                    <div className="text-base font-black text-white">Electron</div>
+
+                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
+                    <Cpu size={16} className="text-sky-400 group-hover:scale-110 transition-transform mb-2.5" />
+                    <div className="text-sm font-black text-white">Electron</div>
                     <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">Platform</div>
                   </div>
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] p-3">
-                    <div className="text-base font-black text-white">React 19</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">Teknoloji</div>
+
+                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
+                    <Code size={16} className="text-emerald-400 group-hover:scale-110 transition-transform mb-2.5" />
+                    <div className="text-sm font-black text-white">React 19</div>
+                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">{language === 'tr' ? 'Teknoloji' : 'Technology'}</div>
                   </div>
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] p-3">
-                    <div className="text-base font-black text-white">TMDB v3</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">Meta Veri</div>
+
+                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
+                    <Database size={16} className="text-purple-400 group-hover:scale-110 transition-transform mb-2.5" />
+                    <div className="text-sm font-black text-white">TMDB v3</div>
+                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">{language === 'tr' ? 'Meta Veri' : 'Metadata'}</div>
                   </div>
+
                 </div>
+
+                {/* External Links */}
+                <div className="mt-6 flex items-center gap-3 justify-center w-full">
+                  <a
+                    href="https://github.com/ardakrt/strmly-player"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-neutral-400 hover:text-neutral-200 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Globe size={13} />
+                    <span>GitHub</span>
+                    <ExternalLink size={10} className="opacity-55" />
+                  </a>
+                  <a
+                    href="https://github.com/ardakrt/strmly-player/blob/main/LICENSE"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-neutral-400 hover:text-neutral-200 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <FileText size={13} />
+                    <span>{language === 'tr' ? 'Lisans' : 'License'}</span>
+                    <ExternalLink size={10} className="opacity-55" />
+                  </a>
+                </div>
+
+                {/* Updates Checker */}
                 <div className="w-full max-w-sm mt-8 border-t border-white/5 pt-6 flex flex-col items-center gap-4">
-                  <div className="flex flex-col items-center gap-1.5 text-center">
-                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-neutral-500">Uygulama Güncellemesi</span>
+                  <div className="flex flex-col items-center gap-1 text-center">
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'UYGULAMA GÜNCELLEMESİ' : 'APPLICATION UPDATE'}</span>
                     {updateState.status !== 'idle' && (
                       <p className="text-xs font-semibold text-neutral-300 mt-1">{updateState.message}</p>
                     )}
@@ -1475,7 +1546,7 @@ export const SettingsPanel = () => {
                       onClick={handleCheckUpdates}
                       className="px-6 py-2.5 bg-white hover:bg-neutral-200 text-black font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
                     >
-                      Güncelleştirmeleri Denetle
+                      {language === 'tr' ? 'Güncelleştirmeleri Denetle' : 'Check for Updates'}
                     </button>
                   )}
 
@@ -1486,9 +1557,9 @@ export const SettingsPanel = () => {
                   {updateState.status === 'available' && (
                     <button
                       onClick={handleDownloadUpdate}
-                      className="px-6 py-2.5 bg-white hover:bg-neutral-200 text-black font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
+                      className="px-6 py-2.5 bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/95 font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
                     >
-                      Güncellemeyi İndir
+                      {language === 'tr' ? 'Güncellemeyi İndir' : 'Download Update'}
                     </button>
                   )}
 
@@ -1497,7 +1568,7 @@ export const SettingsPanel = () => {
                       <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
                         <div className="bg-[var(--accent-color)] h-full transition-all duration-300" style={{ width: `${updateState.progress ?? 0}%` }} />
                       </div>
-                      <span className="text-[10px] text-neutral-500 font-extrabold text-right">% {updateState.progress ?? 0} İndiriliyor</span>
+                      <span className="text-[10px] text-neutral-500 font-extrabold text-right">% {updateState.progress ?? 0} {language === 'tr' ? 'İndiriliyor' : 'Downloading'}</span>
                     </div>
                   )}
 
@@ -1506,7 +1577,7 @@ export const SettingsPanel = () => {
                       onClick={handleInstallUpdate}
                       className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs uppercase rounded-full shadow-lg transition-all active:scale-95 transform cursor-pointer animate-pulse mt-1"
                     >
-                      Güncellemeyi Kur ve Yeniden Başlat
+                      {language === 'tr' ? 'Güncellemeyi Kur ve Yeniden Başlat' : 'Install Update & Restart'}
                     </button>
                   )}
 
@@ -1515,7 +1586,7 @@ export const SettingsPanel = () => {
                       onClick={handleCheckUpdates}
                       className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs uppercase rounded-full shadow-md transition-transform active:scale-95 transform cursor-pointer"
                     >
-                      Yeniden Denetle
+                      {language === 'tr' ? 'Yeniden Denetle' : 'Check Again'}
                     </button>
                   )}
                 </div>

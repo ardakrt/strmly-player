@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+  relaunchApp: () => ipcRenderer.invoke('relaunch-app'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   onUpdateStatus: (callback) => {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('update-status', subscription);

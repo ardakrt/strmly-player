@@ -217,11 +217,7 @@ export function useCinematicPlayer({
   const resumeTimeRef = useRef<number | null>(null);
 
   const getTranscodeMode = () => {
-    try {
-      return localStorage.getItem('strmly_transcode_mode') || 'copy';
-    } catch {
-      return 'copy';
-    }
+    return 'full';
   };
 
   const [isPlaying, setIsPlaying] = useState(true);

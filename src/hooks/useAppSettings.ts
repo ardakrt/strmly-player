@@ -9,7 +9,10 @@ export function useAppSettings() {
 
   const showToast = useCallback((message: string) => {
     setToast({ show: true, message });
-    setTimeout(() => setToast({ show: false, message: '' }), 3500);
+  }, []);
+
+  const hideToast = useCallback(() => {
+    setToast({ show: false, message: '' });
   }, []);
 
   const [isParsing, setIsParsing] = useState(false);
@@ -149,6 +152,7 @@ export function useAppSettings() {
   return {
     toast,
     showToast,
+    hideToast,
     isParsing,
     setIsParsing,
     sortOption,
