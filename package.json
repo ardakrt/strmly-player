@@ -1,7 +1,7 @@
 {
   "name": "strmly",
   "private": true,
-  "version": "1.5.20",
+  "version": "1.5.21",
   "description": "Strmly is a desktop IPTV player.",
   "author": "Arda",
   "overrides": {
@@ -75,6 +75,18 @@
     "asar": true,
     "asarUnpack": [
       "**/node_modules/ffmpeg-static/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/ffmpeg-static",
+        "to": "ffmpeg-static",
+        "filter": [
+          "ffmpeg*",
+          "*.LICENSE",
+          "*.README",
+          "package.json"
+        ]
+      }
     ],
     "win": {
       "target": [

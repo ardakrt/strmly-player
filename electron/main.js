@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, protocol, net, session } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const http = require('http');
 const { migrateProfileData } = require('./migration');
@@ -109,25 +109,58 @@ protocol.registerSchemesAsPrivileged([
 
 // FFmpeg binary path (from ffmpeg-static package)
 let ffmpegPath = undefined;
-function getFfmpegPath() {
-  if (ffmpegPath !== undefined) return ffmpegPath;
+function normalizeFfmpegPath(candidatePath) {
+  if (!candidatePath) return null;
+  if (candidatePath.includes('app.asar') && !candidatePath.includes('app.asar.unpacked')) {
+    return candidatePath.replace(/app\.asar/i, 'app.asar.unpacked');
+  }
+  return candidatePath;
+}
+
+function canRunFfmpeg(candidatePath) {
   try {
-    let resolvedPath = require('ffmpeg-static');
-    
-    // In packaged/production builds, resolve path to app.asar.unpacked
-    if (resolvedPath && resolvedPath.includes('app.asar') && !resolvedPath.includes('app.asar.unpacked')) {
-      resolvedPath = resolvedPath.replace(/app\.asar/i, 'app.asar.unpacked');
+    if (!candidatePath || candidatePath !== 'ffmpeg') {
+      if (!fs.existsSync(candidatePath)) return false;
+      if (process.platform !== 'win32') {
+        try { fs.chmodSync(candidatePath, 0o755); } catch {}
+      }
     }
 
-    if (resolvedPath && fs.existsSync(resolvedPath)) {
-      console.log('FFmpeg found at:', resolvedPath);
-      ffmpegPath = resolvedPath;
-    } else {
-      ffmpegPath = null;
-    }
+    const probe = spawnSync(candidatePath, ['-version'], {
+      encoding: 'utf8',
+      timeout: 3000,
+      windowsHide: true
+    });
+    return probe.status === 0;
   } catch {
-    ffmpegPath = null;
+    return false;
   }
+}
+
+function getFfmpegPath() {
+  if (ffmpegPath !== undefined) return ffmpegPath;
+
+  const executableName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  const candidates = [];
+  try {
+    candidates.push(normalizeFfmpegPath(require('ffmpeg-static')));
+  } catch {}
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'ffmpeg-static', executableName));
+  }
+  candidates.push(path.join(__dirname, '..', 'node_modules', 'ffmpeg-static', executableName));
+  candidates.push('ffmpeg');
+
+  for (const candidatePath of candidates.filter(Boolean)) {
+    if (canRunFfmpeg(candidatePath)) {
+      console.log('FFmpeg found at:', candidatePath);
+      ffmpegPath = candidatePath;
+      return ffmpegPath;
+    }
+  }
+
+  console.error('FFmpeg unavailable. Checked paths:', candidates.filter(Boolean).join(', '));
+  ffmpegPath = null;
   return ffmpegPath;
 }
 
@@ -909,6 +942,8 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
 
   return new Promise((resolve) => {
     let resolved = false;
+    let proxyReady = false;
+    let ffmpegReady = false;
     let pendingRes = null;
     let bufferChunks = [];
     let bufferBytes = 0;
@@ -957,7 +992,8 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       proxyServer.listen(0, '127.0.0.1', () => {
         proxyPort = proxyServer.address().port;
         console.log(`[Proxy] Listening on port ${proxyPort}`);
-        if (!resolved) {
+        proxyReady = true;
+        if (ffmpegReady && !resolved) {
           resolved = true;
           resolve({ success: true, port: proxyPort, url: `http://127.0.0.1:${proxyPort}/stream` });
         }
@@ -1048,6 +1084,14 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
 
     ffmpegProcess = spawn(getFfmpegPath(), args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
+    ffmpegProcess.on('spawn', () => {
+      ffmpegReady = true;
+      if (proxyReady && !resolved) {
+        resolved = true;
+        resolve({ success: true, port: proxyPort, url: `http://127.0.0.1:${proxyPort}/stream` });
+      }
+    });
+
     ffmpegProcess.stdout.on('data', (chunk) => {
       if (headerSize < MAX_HEADER_SIZE) {
         const remaining = MAX_HEADER_SIZE - headerSize;
@@ -1075,10 +1119,21 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
 
     ffmpegProcess.on('error', (err) => {
       console.error('FFmpeg spawn error:', err.message);
+      if (!resolved) {
+        resolved = true;
+        stopFfmpegProxy();
+        resolve({ success: false, error: `FFmpeg başlatılamadı: ${err.message}` });
+      }
     });
 
     ffmpegProcess.on('close', (code, signal) => {
       console.log('FFmpeg exited with code:', code, 'signal:', signal);
+      if (!resolved) {
+        resolved = true;
+        stopFfmpegProxy();
+        resolve({ success: false, error: `FFmpeg erken kapandı (code: ${code ?? 'null'}, signal: ${signal ?? 'none'})` });
+        return;
+      }
       if (pendingRes && !pendingRes.destroyed) pendingRes.end();
     });
   });

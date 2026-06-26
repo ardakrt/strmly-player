@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.21 - 2026-06-26
+
+### Fixes
+
+- Fixed FFmpeg discovery and startup validation in packaged Linux builds.
+- Bundled the FFmpeg static binary as an explicit release resource.
+- Improved transcoding fallback errors when FFmpeg cannot start.
+
 ## 1.5.20 - 2026-06-26
 
 ### Fixes
