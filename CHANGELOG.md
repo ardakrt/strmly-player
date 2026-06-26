@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.19 - 2026-06-26
+
+### Fixes
+
+- Fixed TMDB poster and backdrop loading from the local image cache on Linux builds.
+
 ## 1.5.2 - 2026-06-21
 
 ### Highlights
