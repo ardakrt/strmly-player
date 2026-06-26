@@ -248,15 +248,26 @@ function normalizeDriveLetter(filePath) {
   return filePath;
 }
 
+function appFileUrlFromPath(filePath) {
+  const { pathToFileURL } = require('url');
+  return pathToFileURL(filePath).toString().replace(/^file:/i, 'app-file:');
+}
+
 app.whenReady().then(async () => {
   // Register custom protocol handle for app-file:// scheme
   const { pathToFileURL } = require('url');
   protocol.handle('app-file', async (request) => {
     try {
-      let rawPath = request.url.replace(/^app-file:\/+/i, '');
-      let filePath = decodeURIComponent(rawPath);
-      if (process.platform === 'win32' && /^[a-zA-Z]\//.test(filePath)) {
-        filePath = filePath[0] + ':' + filePath.substring(1);
+      const parsedUrl = new URL(request.url);
+      let filePath = decodeURIComponent(parsedUrl.pathname);
+      if (process.platform === 'win32') {
+        if (/^\/[a-zA-Z]:\//.test(filePath)) {
+          filePath = filePath.substring(1);
+        } else if (/^[a-zA-Z]\//.test(filePath)) {
+          filePath = filePath[0] + ':' + filePath.substring(1);
+        }
+      } else {
+        filePath = filePath.replace(/^\/+/, '/');
       }
       filePath = path.normalize(filePath);
 
@@ -808,7 +819,7 @@ ipcMain.handle('fetch-tmdb-image', async (event, { path: imagePath, size = 'w500
 
     // If cached on disk, return the app-file:/// URL directly
     if (fs.existsSync(localFilePath)) {
-      return { localUrl: `app-file:///${localFilePath.replace(/\\/g, '/')}` };
+      return { localUrl: appFileUrlFromPath(localFilePath) };
     }
 
     const data = await fetchHttpsFromHost('image.tmdb.org', `/t/p/${size}${imagePath}`, true);
@@ -817,7 +828,7 @@ ipcMain.handle('fetch-tmdb-image', async (event, { path: imagePath, size = 'w500
     await fs.promises.writeFile(localFilePath, data.buffer);
 
     return {
-      localUrl: `app-file:///${localFilePath.replace(/\\/g, '/')}`
+      localUrl: appFileUrlFromPath(localFilePath)
     };
   } catch (err) {
     console.error("TMDB image fetch error:", err);
