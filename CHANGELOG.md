@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.22 - 2026-06-26
+
+### Fixes
+
+- Wait for FFmpeg to produce stream output before handing the proxy URL to the player.
+- Surface early FFmpeg exit and startup timeout errors more clearly.
+
 ## 1.5.21 - 2026-06-26
 
 ### Fixes

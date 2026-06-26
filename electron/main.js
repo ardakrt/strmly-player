@@ -943,7 +943,9 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
   return new Promise((resolve) => {
     let resolved = false;
     let proxyReady = false;
-    let ffmpegReady = false;
+    let ffmpegOutputReady = false;
+    let startupTimer = null;
+    let stderrTail = '';
     let pendingRes = null;
     let bufferChunks = [];
     let bufferBytes = 0;
@@ -952,6 +954,23 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
     const MAX_HEADER_SIZE = 64 * 1024; // 64KB is plenty for empty moov MP4 headers
     const MAX_BUFFER_SIZE = 4 * 1024 * 1024;
     let isFirstRequest = true;
+
+    const resolveSuccessIfReady = () => {
+      if (proxyReady && ffmpegOutputReady && !resolved) {
+        resolved = true;
+        if (startupTimer) clearTimeout(startupTimer);
+        resolve({ success: true, port: proxyPort, url: `http://127.0.0.1:${proxyPort}/stream` });
+      }
+    };
+
+    const failBeforeReady = (message) => {
+      if (!resolved) {
+        resolved = true;
+        if (startupTimer) clearTimeout(startupTimer);
+        stopFfmpegProxy();
+        resolve({ success: false, error: message });
+      }
+    };
 
     function startProxyServer() {
       proxyServer = http.createServer((req, res) => {
@@ -993,10 +1012,7 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
         proxyPort = proxyServer.address().port;
         console.log(`[Proxy] Listening on port ${proxyPort}`);
         proxyReady = true;
-        if (ffmpegReady && !resolved) {
-          resolved = true;
-          resolve({ success: true, port: proxyPort, url: `http://127.0.0.1:${proxyPort}/stream` });
-        }
+        resolveSuccessIfReady();
       });
 
       proxyServer.on('error', (err) => {
@@ -1085,14 +1101,15 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
     ffmpegProcess = spawn(getFfmpegPath(), args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
     ffmpegProcess.on('spawn', () => {
-      ffmpegReady = true;
-      if (proxyReady && !resolved) {
-        resolved = true;
-        resolve({ success: true, port: proxyPort, url: `http://127.0.0.1:${proxyPort}/stream` });
-      }
+      console.log('FFmpeg spawned, waiting for output...');
     });
 
+    startupTimer = setTimeout(() => {
+      failBeforeReady(`FFmpeg veri üretmedi. ${stderrTail || 'Stream yanıt vermedi.'}`);
+    }, 10000);
+
     ffmpegProcess.stdout.on('data', (chunk) => {
+      ffmpegOutputReady = true;
       if (headerSize < MAX_HEADER_SIZE) {
         const remaining = MAX_HEADER_SIZE - headerSize;
         const toCopy = chunk.length <= remaining ? chunk : chunk.slice(0, remaining);
@@ -1110,30 +1127,30 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
           bufferBytes -= dropped ? dropped.length : 0;
         }
       }
+
+      resolveSuccessIfReady();
     });
 
     ffmpegProcess.stderr.on('data', (data) => {
       const msg = data.toString().trim();
-      if (msg) console.log('FFmpeg:', msg);
+      if (msg) {
+        stderrTail = `${stderrTail}\n${msg}`.slice(-1200);
+        console.log('FFmpeg:', msg);
+      }
     });
 
     ffmpegProcess.on('error', (err) => {
       console.error('FFmpeg spawn error:', err.message);
-      if (!resolved) {
-        resolved = true;
-        stopFfmpegProxy();
-        resolve({ success: false, error: `FFmpeg başlatılamadı: ${err.message}` });
-      }
+      failBeforeReady(`FFmpeg başlatılamadı: ${err.message}`);
     });
 
     ffmpegProcess.on('close', (code, signal) => {
       console.log('FFmpeg exited with code:', code, 'signal:', signal);
       if (!resolved) {
-        resolved = true;
-        stopFfmpegProxy();
-        resolve({ success: false, error: `FFmpeg erken kapandı (code: ${code ?? 'null'}, signal: ${signal ?? 'none'})` });
+        failBeforeReady(`FFmpeg erken kapandı (code: ${code ?? 'null'}, signal: ${signal ?? 'none'}). ${stderrTail || ''}`.trim());
         return;
       }
+      if (startupTimer) clearTimeout(startupTimer);
       if (pendingRes && !pendingRes.destroyed) pendingRes.end();
     });
   });
