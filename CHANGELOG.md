@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.20 - 2026-06-26
+
+### Fixes
+
+- Fixed Linux TMDB cached image loading when app-file URLs are parsed without the home directory prefix.
+- Fixed unreadable update download button text when the active accent color is white.
+
 ## 1.5.19 - 2026-06-26
 
 ### Fixes

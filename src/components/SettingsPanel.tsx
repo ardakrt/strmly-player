@@ -1557,7 +1557,7 @@ export const SettingsPanel = () => {
                   {updateState.status === 'available' && (
                     <button
                       onClick={handleDownloadUpdate}
-                      className="px-6 py-2.5 bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/95 font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
+                      className="min-w-[220px] px-6 py-2.5 bg-white hover:bg-neutral-200 text-neutral-950 font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
                     >
                       {language === 'tr' ? 'Güncellemeyi İndir' : 'Download Update'}
                     </button>

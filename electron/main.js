@@ -253,6 +253,30 @@ function appFileUrlFromPath(filePath) {
   return pathToFileURL(filePath).toString().replace(/^file:/i, 'app-file:');
 }
 
+function resolveTmdbCacheFilePath(filePath) {
+  if (fs.existsSync(filePath)) return filePath;
+
+  const normalizedForMatch = filePath.replace(/\\/g, '/');
+  const marker = '/tmdb-cache/';
+  const markerIndex = normalizedForMatch.indexOf(marker);
+  if (markerIndex === -1) return filePath;
+
+  const suffix = normalizedForMatch
+    .slice(markerIndex + marker.length)
+    .split('/')
+    .filter(Boolean);
+  if (suffix.length < 2) return filePath;
+
+  const cacheDir = getTmdbCacheDir();
+  const candidatePath = path.normalize(path.join(cacheDir, ...suffix));
+  const relativePath = path.relative(cacheDir, candidatePath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return filePath;
+  }
+
+  return fs.existsSync(candidatePath) ? candidatePath : filePath;
+}
+
 app.whenReady().then(async () => {
   // Register custom protocol handle for app-file:// scheme
   const { pathToFileURL } = require('url');
@@ -270,6 +294,7 @@ app.whenReady().then(async () => {
         filePath = filePath.replace(/^\/+/, '/');
       }
       filePath = path.normalize(filePath);
+      filePath = resolveTmdbCacheFilePath(filePath);
 
       if (!fs.existsSync(filePath)) {
         console.error(`[App-File Handler] File not found: ${filePath}`);
