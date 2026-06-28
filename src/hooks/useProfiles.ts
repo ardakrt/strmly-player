@@ -372,7 +372,7 @@ export function useProfiles({
           const res = await fetch(getCacheBustedUrl(profileM3uUrl), {
             cache: 'no-store',
             headers: {
-              'User-Agent': '9XtreamPlayer LibVLC/3.0.22-rc1'
+              'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
             }
           });
           if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
@@ -423,7 +423,7 @@ export function useProfiles({
           const res = await fetch(getCacheBustedUrl(finalUrl), {
             cache: 'no-store',
             headers: {
-              'User-Agent': '9XtreamPlayer LibVLC/3.0.22-rc1'
+              'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
             }
           });
           if (!res.ok) throw new Error("Bağlantı Hatası: " + res.status);

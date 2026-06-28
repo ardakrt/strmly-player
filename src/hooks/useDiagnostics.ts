@@ -37,7 +37,7 @@ export function useDiagnostics({
       const ch = toCheck[i];
       setCheckerLog(prev => [...prev, language === 'tr' ? `[Sorgu ${i + 1}/${limit}] ${ch.name} test ediliyor...` : `[Query ${i + 1}/${limit}] Checking ${ch.name}...`]);
       try {
-        const res = await fetch(ch.url, { method: 'HEAD', mode: 'cors', headers: { 'User-Agent': '9XtreamPlayer LibVLC/3.0.22-rc1' } }).catch(() => null);
+        const res = await fetch(ch.url, { method: 'HEAD', mode: 'cors', headers: { 'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20' } }).catch(() => null);
         if (res && res.status >= 200 && res.status < 400) {
           statusResults[ch.id] = 'online';
           setCheckerLog(prev => [...prev, language === 'tr' ? `ÇEVRİMİÇİ | Kod: ${res.status}` : `ONLINE | Status: ${res.status}`]);

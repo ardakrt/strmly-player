@@ -1038,7 +1038,7 @@ export function useCinematicPlayer({
           enableSoftwareAES: true,
           abrEwmaDefaultEstimate: 40000000,
           xhrSetup: (xhr) => {
-            xhr.setRequestHeader('User-Agent', '9XtreamPlayer LibVLC/3.0.22-rc1');
+            xhr.setRequestHeader('User-Agent', 'VLC/3.0.20 LibVLC/3.0.20');
           }
         });
         hlsInstanceRef.current = hls;

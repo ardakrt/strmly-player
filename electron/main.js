@@ -255,8 +255,8 @@ function createWindow() {
     console.error('[RENDERER] Window became unresponsive');
   });
 
-  // Set user agent to appear as a standard Xtream player to IPTV providers
-  mainWindow.webContents.setUserAgent('9XtreamPlayer LibVLC/3.0.22-rc1');
+  // Set user agent to appear as a standard VLC player to IPTV providers
+  mainWindow.webContents.setUserAgent('VLC/3.0.20 LibVLC/3.0.20');
 
   // In development, load Vite dev server. In production, load build folder.
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -761,7 +761,7 @@ async function fetchHttpsFromHost(hostname, requestPath, asBuffer = false) {
       method: 'GET',
       headers: {
         'Host': hostname,
-        'User-Agent': '9XtreamPlayer LibVLC/3.0.22-rc1'
+        'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
       },
       servername: hostname,
       rejectUnauthorized: !isIp,
@@ -1042,7 +1042,7 @@ ipcMain.handle('start-ffmpeg-proxy', async (event, { url, startTime, audioStream
       '-loglevel', 'warning',
       '-fflags', '+nobuffer+genpts+discardcorrupt',
       '-flags', '+low_delay',
-      '-user_agent', '9XtreamPlayer LibVLC/3.0.22-rc1',
+      '-user_agent', 'VLC/3.0.20 LibVLC/3.0.20',
       '-reconnect', '1',
       '-reconnect_at_eof', '1',
       '-reconnect_streamed', '1',
