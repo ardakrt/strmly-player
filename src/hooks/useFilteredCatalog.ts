@@ -2,10 +2,8 @@ import { useMemo } from 'react';
 import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import {
-  getItemCleanNameLower,
   getItemGroupLower,
   getItemNameLower,
-  getItemSearchScore,
   getQualityRank,
   isHdChannel,
   itemMatchesQuery
@@ -31,8 +29,6 @@ interface UseFilteredCatalogProps {
   deferredSearchQuery: string;
   sortOption: string;
   qualityFilter: string;
-  deferredSpotlightSearchInput: string;
-  spotlightScope: string;
 }
 
 const turkishCollator = new Intl.Collator('tr', { sensitivity: 'base', numeric: true });
@@ -52,9 +48,7 @@ export function useFilteredCatalog({
   hiddenSeriesCategories,
   deferredSearchQuery,
   sortOption,
-  qualityFilter,
-  deferredSpotlightSearchInput,
-  spotlightScope
+  qualityFilter
 }: UseFilteredCatalogProps) {
   
   // 1. filteredDisplayItems
@@ -206,126 +200,12 @@ export function useFilteredCatalog({
     return base;
   }, [allGroupedSeries, globalFavorites, deferredSearchQuery]);
 
-  // 4. genericLogosSet
-  const genericLogosSet = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type !== 'live') {
-        const logo = item.logo;
-        if (logo && logo.startsWith('http')) {
-          counts[logo] = (counts[logo] || 0) + 1;
-        }
-      }
-    }
 
-    const genericSet = new Set<string>();
-    for (const logo in counts) {
-      if (counts[logo] > 5) {
-        genericSet.add(logo);
-      }
-    }
-    return genericSet;
-  }, [items]);
 
-  // 5. spotlightSearchResults
-  const spotlightSearchResults = useMemo(() => {
-    if (!deferredSpotlightSearchInput.trim()) return [];
-    const query = deferredSpotlightSearchInput.trim().toLocaleLowerCase('tr-TR');
-    const hiddenLiveSet = new Set(hiddenCategories || []);
-    const hiddenMovieSet = new Set(hiddenMovieCategories || []);
-    const hiddenSeriesSet = new Set(hiddenSeriesCategories || []);
-
-    const matches: Array<{
-      type: 'live' | 'movie' | 'series';
-      item: PlaylistItem | GroupedSeries;
-      score: number;
-    }> = [];
-
-    // Live TV Search
-    if (spotlightScope === 'all' || spotlightScope === 'live') {
-      const liveItems = itemBuckets.live;
-      for (let i = 0; i < liveItems.length; i++) {
-        const ch = liveItems[i];
-        if (hiddenLiveSet.has(ch.group || 'Genel')) continue;
-        const groupLower = getItemGroupLower(ch);
-        if (groupLower.includes('ulusal') && !isHdChannel(ch.name)) continue;
-        const score = getItemSearchScore(ch, query);
-        if (score > 0) {
-          matches.push({ type: 'live', item: ch, score });
-        }
-      }
-    }
-
-    // Movies Search
-    if (spotlightScope === 'all' || spotlightScope === 'movie') {
-      const movieItems = itemBuckets.movie;
-      const dedupedMovies: Record<string, { item: PlaylistItem; score: number; qualityRank: number }> = {};
-      for (let i = 0; i < movieItems.length; i++) {
-        const ch = movieItems[i];
-        if (hiddenMovieSet.has(ch.group || 'Genel')) continue;
-        const clNameLower = getItemCleanNameLower(ch);
-        const nameLower = getItemNameLower(ch);
-        const score = getItemSearchScore(ch, query);
-        if (score > 0) {
-          const qRank = getQualityRank(ch.name, nameLower);
-          const existing = dedupedMovies[clNameLower];
-          if (!existing || score > existing.score || (score === existing.score && qRank > existing.qualityRank)) {
-            dedupedMovies[clNameLower] = { item: ch, score, qualityRank: qRank };
-          }
-        }
-      }
-      Object.values(dedupedMovies).forEach(m => {
-        matches.push({ type: 'movie', item: m.item, score: m.score });
-      });
-    }
-
-    // Series Search
-    if (spotlightScope === 'all' || spotlightScope === 'series') {
-      const dedupedSeries: Record<string, { item: GroupedSeries; score: number }> = {};
-      for (let i = 0; i < allGroupedSeries.length; i++) {
-        const series = allGroupedSeries[i];
-        if (hiddenSeriesSet.has(series.group || 'Genel')) continue;
-        const sNameLower = getItemNameLower(series);
-        const score = getItemSearchScore(series, query);
-
-        let episodeMatch = false;
-        const seasons = Object.values(series.seasons);
-        for (let s = 0; s < seasons.length; s++) {
-          const episodes = seasons[s];
-          for (let e = 0; e < episodes.length; e++) {
-            const ep = episodes[e];
-            const epNameLower = ep.item.nameLower || ep.item.name.toLocaleLowerCase('tr-TR');
-            if (epNameLower.includes(query)) {
-              episodeMatch = true;
-              break;
-            }
-          }
-          if (episodeMatch) break;
-        }
-        const finalScore = score > 0 ? score : (episodeMatch ? 50 : 0);
-        if (finalScore > 0) {
-          const existing = dedupedSeries[sNameLower];
-          if (!existing || finalScore > existing.score) {
-            dedupedSeries[sNameLower] = { item: series, score: finalScore };
-          }
-        }
-      }
-      Object.values(dedupedSeries).forEach(s => {
-        matches.push({ type: 'series', item: s.item, score: s.score });
-      });
-    }
-
-    // Sort matches by score descending
-    matches.sort((a, b) => b.score - a.score);
-    return matches;
-  }, [allGroupedSeries, deferredSpotlightSearchInput, spotlightScope, hiddenCategories, hiddenMovieCategories, hiddenSeriesCategories, itemBuckets.live, itemBuckets.movie]);
 
   return {
     filteredDisplayItems,
     groupedSeriesList,
-    favoriteSeriesList,
-    genericLogosSet,
-    spotlightSearchResults
+    favoriteSeriesList
   };
 }

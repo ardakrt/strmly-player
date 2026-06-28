@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, Heart, Trash2, Tv, Play, 
   Trophy, Film, Newspaper, Music, Gamepad, Compass, 
@@ -9,6 +9,7 @@ import { ImageWithFallback } from './ImageWithFallback';
 import { VirtualizedGrid } from './VirtualizedGrid';
 import { MediaCardContextMenu } from './MediaCardContextMenu';
 import { useSettings } from '../context/SettingsContext';
+import { cleanMovieName, getCachedTmdbResult } from '../utils/tmdb';
 
 // Helper to map category names to Lucide icons dynamically
 export const getCategoryIcon = (name: string) => {
@@ -53,12 +54,19 @@ interface MoviesViewProps {
   handleMainScroll: (e: React.UIEvent<HTMLElement>) => void;
   handleOpenDetails: (item: PlaylistItem) => void;
   handlePlayStream: (item: PlaylistItem) => void;
-  genericLogosSet: Set<string>;
   checkedStatusMap: Record<string, 'online' | 'offline'>;
   toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
   globalFavorites: string[];
   setVisibleCount: (count: number) => void;
 }
+
+const getQualityLabel = (name: string): string | null => {
+  const lower = name.toLowerCase();
+  if (lower.includes('4k') || lower.includes('uhd')) return '4K';
+  if (lower.includes('1080p') || lower.includes('fhd') || lower.includes('1080')) return 'FHD';
+  if (lower.includes('720p') || lower.includes('hd') || lower.includes('720')) return 'HD';
+  return null;
+};
 
 export const MovieCard = React.memo(({
   channel,
@@ -78,6 +86,19 @@ export const MovieCard = React.memo(({
   onContextMenu?: (event: React.MouseEvent, item: PlaylistItem) => void;
 }) => {
   const { language } = useSettings();
+  const [rating, setRating] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getCachedTmdbResult('movie', channel.name).then((res: any) => {
+      if (active && res && res.vote_average) {
+        setRating(res.vote_average);
+      }
+    });
+    return () => { active = false; };
+  }, [channel.name]);
+
+  const quality = getQualityLabel(channel.name);
   return (
     <div
       className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
@@ -94,6 +115,19 @@ export const MovieCard = React.memo(({
           isGenericLogo={isGenericLogo}
           aspect="portrait"
         />
+
+        {rating !== null && rating > 0 && (
+          <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md border border-white/10 text-[9px] font-black text-amber-400 flex items-center gap-0.5 shadow-md">
+            <Star size={9} fill="currentColor" />
+            <span>{rating.toFixed(1)}</span>
+          </div>
+        )}
+
+        {quality && (
+          <div className="absolute bottom-2.5 left-2.5 z-20 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[8px] font-extrabold uppercase tracking-wider text-neutral-300 shadow-md">
+            {quality}
+          </div>
+        )}
 
         {/* Hover Glassmorphism Play Button */}
         <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10 duration-300">
@@ -124,7 +158,7 @@ export const MovieCard = React.memo(({
         </button>
       </div>
       <div className="flex flex-col px-1">
-        <span className="text-xs font-bold premium-card-title truncate">{channel.name}</span>
+        <span className="text-xs font-bold premium-card-title truncate" title={channel.name}>{cleanMovieName(channel.name)}</span>
       </div>
     </div>
   );
@@ -144,7 +178,6 @@ export const MoviesView = React.memo(function MoviesView({
   handleMainScroll,
   handleOpenDetails,
   handlePlayStream,
-  genericLogosSet,
   checkedStatusMap,
   toggleFavorite,
   globalFavorites,
@@ -168,7 +201,7 @@ export const MoviesView = React.memo(function MoviesView({
   const otherCategories = movieCat.filteredOtherCategories;
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] animate-fade-in pb-12" onContextMenu={() => setContextMenu(null)}>
+    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] page-transition-enter pb-12" onContextMenu={() => setContextMenu(null)}>
       {/* 1. Left Categories Sidebar */}
       <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
         <div className="flex items-center justify-between px-2 mb-2">
@@ -332,7 +365,7 @@ export const MoviesView = React.memo(function MoviesView({
                   isOnline={checkedStatusMap[channel.id]}
                   isFavorite={globalFavorites.includes(channel.id)}
                   onToggleFavorite={toggleFavorite}
-                  isGenericLogo={channel.logo ? genericLogosSet.has(channel.logo) : false}
+                  isGenericLogo={!!channel.isGenericLogo}
                   onContextMenu={openContextMenu}
                 />
               )}

@@ -4,6 +4,7 @@ import { SPEED_OPTIONS } from '../constants';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 import { useSettings } from '../context/SettingsContext';
+import type { PlayerQualityLevel } from '../hooks/useCinematicPlayer';
 
 interface CinematicPlayerProps {
   channel: PlaylistItem;
@@ -20,6 +21,8 @@ interface CinematicPlayerProps {
   playbackMessage: string;
   playbackSpeed: number;
   showSpeedMenu: boolean;
+  qualityLevels: PlayerQualityLevel[];
+  activeQualityLevel: number;
   audioTracks: { id: number; name: string; lang: string }[];
   activeAudioTrack: number;
   subtitleTracks: { label: string; srclang: string; src: string }[];
@@ -33,6 +36,7 @@ interface CinematicPlayerProps {
   onToggleMute: () => void;
   onVolumeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSpeedChange: (speed: number) => void;
+  onQualityChange: (levelId: number) => void;
   onAudioTrackChange: (id: number) => void;
   onSubtitleChange: (idx: number) => void;
   onSubtitleUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -59,12 +63,13 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     playerVolume, playerMuted,
     showControls, videoReady, playbackStatus, playbackMessage,
     playbackSpeed,
+    qualityLevels, activeQualityLevel,
     audioTracks, activeAudioTrack,
     subtitleTracks, activeSubtitle,
     isFullscreen, accentStyles,
     bufferedProgress = 0,
     onClose, onTogglePlay, onToggleMute, onVolumeChange,
-    onSpeedChange, onAudioTrackChange, onSubtitleChange,
+    onSpeedChange, onQualityChange, onAudioTrackChange, onSubtitleChange,
     onSubtitleUpload, onPiP, onToggleFullscreen,
     onSeek,
     onHideControls,
@@ -83,8 +88,13 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   const shouldShowPlaybackOverlay = isPlaybackError || !videoReady || playbackMessage;
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [currentSubmenu, setCurrentSubmenu] = useState<'main' | 'speed' | 'subtitles' | 'scale' | 'audio'>('main');
-  const [videoScaleMode, setVideoScaleMode] = useState<'fit' | 'fill' | 'zoom' | '16:9' | '4:3'>('fit');
+  const [currentSubmenu, setCurrentSubmenu] = useState<'main' | 'speed' | 'quality' | 'subtitles' | 'scale' | 'audio'>('main');
+  const [videoScaleMode, setVideoScaleMode] = useState<'fit' | 'fill' | 'zoom' | '16:9' | '4:3'>(() => {
+    const saved = localStorage.getItem('cinema_player_scale_mode');
+    return saved === 'fit' || saved === 'fill' || saved === 'zoom' || saved === '16:9' || saved === '4:3'
+      ? saved
+      : 'fit';
+  });
 
   const displayAudioTracks = useMemo(() => {
     if (audioTracks && audioTracks.length > 0) {
@@ -93,6 +103,25 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     return [{ id: 0, name: language === 'tr' ? 'Varsayılan Ses' : 'Default Audio', lang: '' }];
   }, [audioTracks, language]);
 
+  const sourceQualityLabel = useMemo(() => {
+    const hlsLevel = qualityLevels.find(level => level.id === activeQualityLevel);
+    if (hlsLevel) return hlsLevel.label;
+    if (qualityLevels.length > 0 && activeQualityLevel === -1) return language === 'tr' ? 'Otomatik' : 'Auto';
+
+    const text = `${channel.name} ${channel.url}`.toLowerCase();
+    if (text.includes('2160') || text.includes('4k') || text.includes('uhd')) return '4K';
+    if (text.includes('1080') || text.includes('fhd')) return '1080p';
+    if (text.includes('720') || text.includes('hd')) return '720p';
+    return language === 'tr' ? 'Tek kaynak' : 'Single source';
+  }, [activeQualityLevel, channel.name, channel.url, language, qualityLevels]);
+
+  const sourceTypeLabel = useMemo(() => {
+    if (qualityLevels.length > 0 || channel.url.toLowerCase().includes('.m3u8')) return 'HLS';
+    const clean = channel.url.split('?')[0].toLowerCase();
+    const ext = clean.match(/\.([a-z0-9]+)$/)?.[1];
+    return ext ? ext.toUpperCase() : (language === 'tr' ? 'Doğrudan kaynak' : 'Direct source');
+  }, [channel.url, language, qualityLevels.length]);
+
   // Timeline Dragging states
   const [isDraggingTimeline, setIsDraggingTimeline] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -100,7 +129,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState(0);
 
-  const autoPlayNext = true;
+  const [autoPlayNext, setAutoPlayNext] = useState(() => localStorage.getItem('cinema_player_autoplay_next') !== 'false');
 
   const [isAutoplayCancelled, setIsAutoplayCancelled] = useState(false);
 
@@ -121,6 +150,14 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   useEffect(() => {
     setIsAutoplayCancelled(false);
   }, [channel]);
+
+  useEffect(() => {
+    localStorage.setItem('cinema_player_scale_mode', videoScaleMode);
+  }, [videoScaleMode]);
+
+  useEffect(() => {
+    localStorage.setItem('cinema_player_autoplay_next', String(autoPlayNext));
+  }, [autoPlayNext]);
 
   // Find sibling episodes sorted by season & episode
   const sortedSiblings = useMemo(() => {
@@ -778,6 +815,12 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             <span className="flex items-center gap-1 rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{playbackSpeed}x <ChevronRight size={10} /></span>
                           </button>
 
+                          <button onClick={() => setCurrentSubmenu('quality')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Gauge size={14} /></span>
+                            <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{language === 'tr' ? 'Kalite' : 'Quality'}</span><span className="mt-0.5 block text-[9px] text-white/35">{sourceTypeLabel}</span></span>
+                            <span className="flex max-w-[82px] items-center gap-1 truncate rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{sourceQualityLabel} <ChevronRight size={10} className="shrink-0" /></span>
+                          </button>
+
                           <button onClick={() => setCurrentSubmenu('subtitles')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Subtitles size={14} /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{t('player.subtitles')}</span><span className="mt-0.5 block truncate text-[9px] text-white/35">{language === 'tr' ? 'Dil veya yerel dosya seç' : 'Choose language or local file'}</span></span>
@@ -798,6 +841,18 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         </div>
 
                         <div className="my-2 h-px bg-white/[0.07]" />
+                        {channel.type === 'series' && (
+                          <button
+                            onClick={() => setAutoPlayNext(prev => !prev)}
+                            className="group/autoplay flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.07]"
+                          >
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 group-hover/autoplay:bg-white/10 group-hover/autoplay:text-white"><SkipForward size={14} /></span>
+                            <span className="flex-1 text-[11px] font-semibold text-white/80">{language === 'tr' ? 'Sonraki bölüm' : 'Next episode'}</span>
+                            <span className={`rounded-md px-2 py-1 text-[8px] font-bold ${autoPlayNext ? 'bg-white text-black' : 'border border-white/10 text-white/35'}`}>
+                              {autoPlayNext ? (language === 'tr' ? 'AÇIK' : 'ON') : (language === 'tr' ? 'KAPALI' : 'OFF')}
+                            </span>
+                          </button>
+                        )}
                         <button
                           onClick={() => { onPiP(); setShowSettingsMenu(false); }}
                           className="group/pip flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.07]"
@@ -831,6 +886,48 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             </button>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {currentSubmenu === 'quality' && (
+                      <div className="absolute bottom-full right-0 z-30 mb-3 w-[240px] rounded-[20px] border border-white/10 bg-[#09090b]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-scale-in">
+                        <div className="mb-2 flex items-center gap-2 border-b border-white/[0.07] px-1 pb-2">
+                          <button
+                            onClick={() => setCurrentSubmenu('main')}
+                            className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{language === 'tr' ? 'Kalite' : 'Quality'}</span>
+                        </div>
+                        {qualityLevels.length > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              onClick={() => { onQualityChange(-1); setShowSettingsMenu(false); }}
+                              className={`w-full px-3 py-2 rounded-xl text-xs font-semibold text-left transition-colors ${
+                                activeQualityLevel === -1 ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              {language === 'tr' ? 'Otomatik' : 'Auto'}
+                            </button>
+                            {[...qualityLevels].sort((a, b) => (b.height || 0) - (a.height || 0)).map(level => (
+                              <button
+                                key={level.id}
+                                onClick={() => { onQualityChange(level.id); setShowSettingsMenu(false); }}
+                                className={`w-full px-3 py-2 rounded-xl text-xs font-semibold text-left transition-colors ${
+                                  activeQualityLevel === level.id ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                {level.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-white/[0.05] px-3 py-3">
+                            <div className="text-xs font-bold text-white">{sourceQualityLabel}</div>
+                            <div className="mt-1 text-[10px] leading-4 text-white/45">{sourceTypeLabel}</div>
+                          </div>
+                        )}
                       </div>
                     )}
 

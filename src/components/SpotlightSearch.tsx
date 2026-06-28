@@ -4,6 +4,7 @@ import { ImageWithFallback } from './ImageWithFallback';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import { useSettings } from '../context/SettingsContext';
+import { cleanMovieName } from '../utils/tmdb';
 
 interface SpotlightSearchProps {
   showSpotlight: boolean;
@@ -225,7 +226,7 @@ export function SpotlightSearch({
               if (isSeries) {
                 const series = item as GroupedSeries;
                 logoSrc = series.logo || '';
-                titleName = series.name;
+                titleName = cleanMovieName(series.name);
                 const seasonsCount = Object.keys(series.seasons).length;
                 subtext = language === 'tr'
                   ? `${seasonsCount} Sezon • ${series.episodesCount} Bölüm`
@@ -233,7 +234,7 @@ export function SpotlightSearch({
               } else {
                 const plItem = item as PlaylistItem;
                 logoSrc = plItem.logo || '';
-                titleName = plItem.name;
+                titleName = plItem.type === 'movie' ? cleanMovieName(plItem.name) : plItem.name;
                 subtext = plItem.group || (language === 'tr' ? 'GENEL' : 'GENERAL');
               }
 

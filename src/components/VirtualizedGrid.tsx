@@ -113,6 +113,26 @@ export function VirtualizedGrid<T>({
   const paddingTop = startRow * rowHeight;
   const paddingBottom = (totalRows - endRow) * rowHeight;
 
+  if (items.length === 0) {
+    return (
+      <div ref={containerRef} className="w-full">
+        <div className="flex flex-col gap-6 w-full animate-fade-in">
+          <div 
+            className="grid gap-6"
+            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: columns * 2 }).map((_, index) => (
+              <div key={`skeleton-${index}`} className="flex flex-col gap-2.5">
+                <div className="relative aspect-[2/3] w-full rounded-2xl overflow-hidden border border-white/5 skeleton-card-shimmer" />
+                <div className="h-4 w-3/4 rounded bg-white/5 skeleton-card-shimmer mt-1" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={containerRef} style={{ paddingTop, paddingBottom, width: '100%' }}>
       <div className="flex flex-col gap-6 w-full">

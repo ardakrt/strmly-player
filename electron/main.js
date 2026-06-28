@@ -399,6 +399,15 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  if (configCache) {
+    try {
+      const configPath = getConfigPath();
+      fs.writeFileSync(configPath, JSON.stringify(configCache, null, 2), 'utf8');
+    } catch (err) {
+      console.error("Config save on exit error:", err);
+    }
+  }
+
   if (logBuffer.length > 0) {
     try {
       fs.appendFileSync(logFile, logBuffer.join(''), 'utf8');
@@ -614,11 +623,10 @@ ipcMain.on('save-config-sync', (event, { key, value }) => {
       event.returnValue = { success: false, error: 'Invalid config key' };
       return;
     }
-    const configPath = getConfigPath();
     const config = configCache || {};
     config[key] = value;
     configCache = config;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    queueConfigWrite();
     event.returnValue = { success: true };
   } catch (err) {
     console.error("Config save sync error:", err);
@@ -635,7 +643,7 @@ ipcMain.on('save-config-batch-sync', (event, entries) => {
     const config = configCache || {};
     Object.assign(config, entries);
     configCache = config;
-    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf8');
+    queueConfigWrite();
     event.returnValue = { success: true };
   } catch (err) {
     console.error('Config batch save sync error:', err);

@@ -593,7 +593,7 @@ export const SettingsPanel = () => {
   };
 
   return (
-    <div className="settings-redesign pb-10 text-[14px] leading-relaxed text-neutral-200">
+    <div className="settings-redesign pb-10 text-[14px] leading-relaxed text-neutral-200 page-transition-enter">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent-color)]/70">Strmly</span>

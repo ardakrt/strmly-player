@@ -8,6 +8,7 @@ import type { EpisodeThumbProps } from '../types';
 const episodeStillCache: Record<string, string> = {};
 
 export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, stillPath }: EpisodeThumbProps) => {
+  const language = typeof localStorage !== 'undefined' ? localStorage.getItem('cinema_language') || 'tr' : 'tr';
   const cacheKey = useMemo(() => {
     return tmdbShowId ? `${tmdbShowId}-${seasonNumber}-${episodeNumber}` : '';
   }, [tmdbShowId, seasonNumber, episodeNumber]);
@@ -140,7 +141,7 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
               <Play size={10} fill="currentColor" className="ml-0.5" />
             </div>
             <span className="text-[10px] font-black tracking-wider select-none">
-              S{String(seasonNumber).padStart(2, '0')}E{String(episodeNumber).padStart(2, '0')}
+              {language === 'tr' ? `${episodeNumber}. Bölüm` : `Episode ${episodeNumber}`}
             </span>
           </div>
         </div>

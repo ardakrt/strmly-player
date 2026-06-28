@@ -243,22 +243,7 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
 
-  const {
-    showSpotlight,
-    setShowSpotlight,
-    spotlightSearchInput,
-    setSpotlightSearchInput,
-    spotlightScope,
-    setSpotlightScope,
-    spotlightActiveStep,
-    setSpotlightActiveStep,
-    focusedButtonIndex,
-    setFocusedButtonIndex,
-    spotlightInputRef,
-    deferredSpotlightSearchInput,
-  } = useSpotlightSearch({
-    searchInputRef
-  });
+
   const [toastVisible, setToastVisible] = useState(false);
   const [toastExit, setToastExit] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -334,10 +319,12 @@ export default function App() {
 
   const itemBuckets = playlistIndex.itemBuckets;
 
+  const [isSeriesReady, setIsSeriesReady] = useState(false);
   const [allGroupedSeries, setAllGroupedSeries] = useState<GroupedSeries[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    setIsSeriesReady(false);
     setAllGroupedSeries([]);
     const run = () => {
       const grouped = groupPlaylistItemsToSeries(itemBuckets.series);
@@ -346,7 +333,10 @@ export default function App() {
         s.nameLower = s.name.toLocaleLowerCase('tr-TR');
         s.groupLower = (s.group || 'Genel').toLocaleLowerCase('tr-TR');
       }
-      if (!cancelled) setAllGroupedSeries(grouped);
+      if (!cancelled) {
+        setAllGroupedSeries(grouped);
+        setIsSeriesReady(true);
+      }
     };
 
     const idle = (window as any).requestIdleCallback;
@@ -359,6 +349,29 @@ export default function App() {
       else window.clearTimeout(handle);
     };
   }, [itemBuckets.series]);
+
+  const {
+    showSpotlight,
+    setShowSpotlight,
+    spotlightSearchInput,
+    setSpotlightSearchInput,
+    spotlightScope,
+    setSpotlightScope,
+    spotlightActiveStep,
+    setSpotlightActiveStep,
+    focusedButtonIndex,
+    setFocusedButtonIndex,
+    spotlightInputRef,
+    spotlightSearchResults
+  } = useSpotlightSearch({
+    searchInputRef,
+    items,
+    itemBuckets,
+    allGroupedSeries,
+    hiddenCategories,
+    hiddenMovieCategories,
+    hiddenSeriesCategories
+  });
 
   const {
     activeLiveCategory, setActiveLiveCategory,
@@ -449,7 +462,8 @@ export default function App() {
     populerDiziler,
     homeDiscoveryItems,
     homeLiveTvQuickChannels,
-    uniqueRecentlyWatched
+    uniqueRecentlyWatched,
+    isHomeReady
   } = useHomeData({
     items,
     itemBuckets,
@@ -462,9 +476,7 @@ export default function App() {
   const {
     filteredDisplayItems,
     groupedSeriesList,
-    favoriteSeriesList,
-    genericLogosSet,
-    spotlightSearchResults
+    favoriteSeriesList
   } = useFilteredCatalog({
     items,
     itemBuckets,
@@ -480,10 +492,18 @@ export default function App() {
     hiddenSeriesCategories,
     deferredSearchQuery,
     sortOption,
-    qualityFilter,
-    deferredSpotlightSearchInput,
-    spotlightScope
+    qualityFilter
   });
+
+  const [hasInitialBooted, setHasInitialBooted] = useState(false);
+
+  useEffect(() => {
+    if (loaded && isSeriesReady && isHomeReady) {
+      setHasInitialBooted(true);
+    }
+  }, [loaded, isSeriesReady, isHomeReady]);
+
+  const isAppReady = loaded && isSeriesReady && isHomeReady;
 
   const activeShowcaseList = useMemo(() => showcaseItems.length > 0 ? showcaseItems : HERO_BACKDROPS, [showcaseItems]);
   const isPlaylistHero = showcaseItems.length > 0;
@@ -676,7 +696,7 @@ export default function App() {
     );
   }
 
-  if (!loaded) {
+  if (!hasInitialBooted) {
     return (
       <div className="fixed inset-0 z-[9999] overflow-hidden bg-[#040405] text-white flex flex-col items-center justify-center select-none font-sans">
         {/* Faint pulsing ambient background glow in center */}
@@ -728,12 +748,15 @@ export default function App() {
     );
   }
 
-  if (loaded && activeProfileId === null) {
+  if (loaded && (activeProfileId === null || !isAppReady)) {
     return (
       <SettingsProvider value={settingsContextValue}>
         <ProfileScreenWrapper
-          profilesHook={profilesHook}
-          isParsing={isParsing}
+          profilesHook={{
+            ...profilesHook,
+            profileEntryReady: profilesHook.profileEntryReady || (activeProfileId !== null && isAppReady)
+          }}
+          isParsing={isParsing || (activeProfileId !== null && !isAppReady)}
           toast={toast}
           activeTheme={activeTheme}
           accentStyles={getAccentStyles()}
@@ -760,15 +783,7 @@ export default function App() {
       <div className="absolute top-[-15%] left-[10%] w-[800px] h-[800px] rounded-full bg-glow-one pointer-events-none z-0" />
       <div className="absolute bottom-[-15%] right-[5%] w-[700px] h-[700px] rounded-full bg-glow-two pointer-events-none z-0" />
 
-      {isParsing && (
-        <div className="fixed inset-0 z-[4000] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center gap-4 animate-fade-in select-none">
-          <div className="relative w-16 h-16">
-            <div className="absolute inset-0 rounded-full border-4 border-white/5" />
-            <div className="absolute inset-0 rounded-full border-4 border-t-[var(--accent-color)] animate-spin shadow-[0_0_15px_var(--accent-glow)]" />
-          </div>
-          <span className="text-xs font-semibold tracking-wide text-neutral-300">İçerikler Yükleniyor...</span>
-        </div>
-      )}
+
 
       {toastMessage && (() => {
         const { icon, colorClass } = getToastDetails(toastMessage);
@@ -791,7 +806,7 @@ export default function App() {
       })()}
 
       <Navbar
-        loaded={loaded}
+        loaded={isAppReady}
         scrolled={scrolled}
         selectedGroup={selectedGroup}
         setSelectedGroup={setSelectedGroup}
@@ -832,7 +847,6 @@ export default function App() {
           handleScrollSlider={handleScrollSlider}
           handlePlayStream={handlePlayStream}
           handleOpenDetails={handleOpenDetails}
-          genericLogosSet={genericLogosSet}
           toggleFavorite={toggleFavorite}
           globalFavorites={globalFavorites}
           getFavoriteIdForItem={getFavoriteIdForItem}
@@ -896,7 +910,6 @@ export default function App() {
           handleOpenSeriesModalDirect={handleOpenSeriesModalDirect}
           toggleFavorite={toggleFavorite}
           globalFavorites={globalFavorites}
-          genericLogosSet={genericLogosSet}
           checkedStatusMap={checkedStatusMap}
         />
           </Suspense>
@@ -940,7 +953,6 @@ export default function App() {
           groupedSeriesList={groupedSeriesList}
           handleMainScroll={handleMainScroll}
           handleOpenSeriesModalDirect={handleOpenSeriesModalDirect}
-          genericLogosSet={genericLogosSet}
           toggleFavorite={toggleFavorite}
           globalFavorites={globalFavorites}
           setVisibleCount={setVisibleCount}
@@ -964,7 +976,6 @@ export default function App() {
           handleMainScroll={handleMainScroll}
           handleOpenDetails={handleOpenDetails}
           handlePlayStream={handlePlayStream}
-          genericLogosSet={genericLogosSet}
           checkedStatusMap={checkedStatusMap}
           toggleFavorite={toggleFavorite}
           globalFavorites={globalFavorites}

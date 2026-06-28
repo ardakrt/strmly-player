@@ -5,7 +5,7 @@ import type { PlaylistItem } from '../utils/m3uParser';
 import { ImageWithFallback } from './ImageWithFallback';
 import { getFallbackGradient } from '../utils/helpers';
 import { cleanMediaTitle, parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
-import { getResolvedTmdbResult, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, fetchTmdbDetails } from '../utils/tmdb';
+import { getResolvedTmdbResult, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, fetchTmdbDetails, cleanMovieName } from '../utils/tmdb';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { useSettings } from '../context/SettingsContext';
 
@@ -85,8 +85,17 @@ const translateDuration = (durationStr: string, language: 'tr' | 'en'): string =
     .replace(/DK/g, 'M');
 };
 
+const getQualityLabel = (name: string): string | null => {
+  const lower = name.toLowerCase();
+  if (lower.includes('4k') || lower.includes('uhd')) return '4K';
+  if (lower.includes('1080p') || lower.includes('fhd') || lower.includes('1080')) return 'FHD';
+  if (lower.includes('720p') || lower.includes('hd') || lower.includes('720')) return 'HD';
+  return null;
+};
+
 function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, onContextMenu }: VodPosterCardProps) {
   const { language } = useSettings();
+  const quality = getQualityLabel(channel.name);
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -251,9 +260,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   if (!metadata) {
     return (
       <div ref={cardRef} className="flex-shrink-0 w-[176px] md:w-[208px] snap-start">
-        <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-neutral-900 border border-white/5">
-          <div className="absolute inset-0 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 bg-[length:200%_100%] animate-shimmer" />
-        </div>
+        <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden border border-white/5 skeleton-card-shimmer" />
       </div>
     );
   }
@@ -330,6 +337,11 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
           <span className="home-media-type-badge h-[22px] px-2.5 text-[9px] font-extrabold tracking-wider rounded-full text-white shadow-md flex items-center justify-center border border-white/10">
             {channel.type === 'series' ? 'DİZİ' : 'FİLM'}
           </span>
+          {quality && (
+            <span className="h-[22px] px-2.5 bg-[var(--accent-color)]/25 text-[var(--accent-color)] font-extrabold text-[9px] rounded-full flex items-center justify-center border border-[var(--accent-color)]/20 shadow-md">
+              {quality}
+            </span>
+          )}
           {metadata.rating && (
             <span className="h-[22px] px-2 bg-black/60 backdrop-blur-sm text-white font-extrabold text-[9px] md:text-[10px] rounded-full flex items-center justify-center gap-1 shadow-sm border border-white/10">
               <span className="text-yellow-400 text-xs">★</span> {metadata.rating}
@@ -402,7 +414,6 @@ interface HomeViewProps {
   handleScrollSlider: (sliderId: string, direction: 'left' | 'right') => void;
   handlePlayStream: (item: PlaylistItem) => void;
   handleOpenDetails: (item: PlaylistItem) => void;
-  genericLogosSet: Set<string>;
   toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
   globalFavorites: string[];
   getFavoriteIdForItem: (item: any) => string;
@@ -436,7 +447,6 @@ export const HomeView = memo(function HomeView({
   handleScrollSlider,
   handlePlayStream,
   handleOpenDetails,
-  genericLogosSet,
   toggleFavorite,
   globalFavorites,
   getFavoriteIdForItem,
@@ -608,7 +618,7 @@ export const HomeView = memo(function HomeView({
           name={channel.name}
           group={channel.group || 'LIVE'}
           itemType={channel.type}
-          isGenericLogo={channel.logo ? genericLogosSet.has(channel.logo) : false}
+          isGenericLogo={channel.isGenericLogo}
           aspect="landscape"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent z-10" />
@@ -640,7 +650,7 @@ export const HomeView = memo(function HomeView({
   const heroTitle = isPlaylistHero
     ? (currentHeroItem?.type === 'series'
       ? parseSeriesEpisodeInfo(currentHeroItem.name).cleanTitle
-      : currentHeroItem?.name || '')
+      : cleanMovieName(currentHeroItem?.name || ''))
     : fallbackHeroItem?.title || '';
   const heroTitleSize = heroTitle.length > 30
     ? 'lg:text-[46px]'
@@ -656,7 +666,7 @@ export const HomeView = memo(function HomeView({
 
   return (
     <div
-      className="flex flex-col gap-6 animate-fade-in pb-12"
+      className="flex flex-col gap-6 page-transition-enter pb-12"
       onContextMenu={() => setContextMenu(null)}
     >
       <div className="relative group/hero-outer mb-1">
@@ -837,7 +847,7 @@ export const HomeView = memo(function HomeView({
                       name={channel.name}
                       group={channel.group || 'LIVE'}
                       itemType={channel.type}
-                      isGenericLogo={channel.logo ? genericLogosSet.has(channel.logo) : false}
+                      isGenericLogo={channel.isGenericLogo}
                       aspect="landscape"
                     />
 
@@ -857,7 +867,19 @@ export const HomeView = memo(function HomeView({
                       </div>
                     )}
                     <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
-                      <span className="block text-xs font-extrabold text-white truncate drop-shadow">{channel.name}</span>
+                      {(() => {
+                        if (channel.type === 'series') {
+                          const parsed = parseSeriesEpisodeInfo(channel.name);
+                          if (parsed.season > 0 && parsed.episode > 0) {
+                            return (
+                              <span className="block text-xs font-extrabold text-white truncate drop-shadow">
+                                {parsed.cleanTitle} • {language === 'tr' ? `${parsed.season}. Sezon ${parsed.episode}. Bölüm` : `S${parsed.season} E${parsed.episode}`}
+                              </span>
+                            );
+                          }
+                        }
+                        return <span className="block text-xs font-extrabold text-white truncate drop-shadow">{channel.name}</span>;
+                      })()}
                       <span className="block text-[9px] text-white/50 uppercase tracking-wider font-semibold mt-0.5 truncate">{channel.group || (language === 'tr' ? 'Genel' : 'General')}</span>
                     </div>
                   </div>

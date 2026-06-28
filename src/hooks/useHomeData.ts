@@ -50,16 +50,20 @@ export function useHomeData({
   const [showcaseItems, setShowcaseItems] = useState<PlaylistItem[]>([]);
   const [featuredTmdbData, setFeaturedTmdbData] = useState<FeaturedTmdbData | null>(null);
   const [activeFeaturedIndex, setActiveFeaturedIndex] = useState<number>(0);
+  const [isHomeReady, setIsHomeReady] = useState(false);
 
   // Select highly-rated VOD items (movies/series) for Hero Showcase Carousel from cache/network
   useEffect(() => {
     if (items.length === 0) {
       setShowcaseItems([]);
       setActiveFeaturedIndex(0);
+      setIsHomeReady(true);
       return;
     }
 
     let active = true;
+    let worker: Worker | null = null;
+    setIsHomeReady(false);
 
     const selectShowcaseItems = async () => {
       const getDayOfYear = () => {
@@ -90,44 +94,6 @@ export function useHomeData({
         return selected;
       };
 
-      const getCandidateSuitabilityScore = (item: PlaylistItem) => {
-        const name = item.name.toLowerCase();
-        const group = (item.group || '').toLowerCase();
-
-        // Exclusions (pushed to the very bottom)
-        const excludeKeywords = ['7/24', '24/7', 'seç izle', 'sec izle', 'seçizle', 'secizle', 'sinema tv', 'sinematv', 'live', 'raw', 'test', 'promo', 'fragman'];
-        if (excludeKeywords.some(kw => name.includes(kw) || group.includes(kw))) {
-          return -10000;
-        }
-
-        let score = 0;
-
-        // Prioritize curated VOD platforms and high-quality categories.
-        const premiumKeywords = [
-          'netflix', 'amazon', 'prime', 'disney', 'apple', 'hbo',
-          'exxen', 'blu tv', 'blutv', 'uhd', '4k', '1080p',
-          'yabancı film', 'yabancı dizi', 'popüler', 'vizyon', 'trend',
-          'sine', 'türkçe dublaj', 'türkçe altyazı', 'aksiyon', 'bilim kurgu'
-        ];
-        for (const kw of premiumKeywords) {
-          if (group.includes(kw)) score += 50;
-          if (name.includes(kw)) score += 20;
-        }
-
-        // Favor VOD types over general type
-        if (item.type === 'series') score += 30;
-        if (item.type === 'movie') score += 20;
-
-        if (activeContentPreferences.includes('series') && item.type === 'series') score += 180;
-        if (activeContentPreferences.includes('movies') && item.type === 'movie') score += 180;
-        if (activeContentPreferences.includes('kids')) {
-          const kidsKeywords = ['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney', 'nickelodeon'];
-          if (kidsKeywords.some(keyword => name.includes(keyword) || group.includes(keyword))) score += 240;
-        }
-
-        return score;
-      };
-
       const getCleanTitle = (item: PlaylistItem) => {
         const isSeries = item.type === 'series';
         return isSeries
@@ -135,13 +101,41 @@ export function useHomeData({
           : cleanMovieName(item.name).toLowerCase().trim();
       };
 
-      const vodItems = [...itemBuckets.movie, ...itemBuckets.series];
-      const candidatesSource = vodItems.length > 0 ? vodItems : items;
+      // Fetch sorted candidates source from worker
+      const sortedCandidatesSource = await new Promise<PlaylistItem[]>((resolve) => {
+        try {
+          worker = new Worker(new URL('../utils/search.worker.ts', import.meta.url), { type: 'module' });
+          worker.onmessage = (e) => {
+            if (e.data.action === 'home_candidates_results') {
+              resolve(e.data.candidates);
+            }
+          };
+          worker.onerror = () => {
+            resolve([]);
+          };
+          worker.postMessage({
+            action: 'get_home_candidates',
+            items,
+            itemBuckets,
+            activeContentPreferences
+          });
+        } catch (err) {
+          console.error("Failed to initialize home candidates worker:", err);
+          resolve([]);
+        }
+      });
 
-      const sortedCandidatesSource = [...candidatesSource]
-        .map(item => ({ item, score: getCandidateSuitabilityScore(item) }))
-        .sort((a, b) => b.score - a.score)
-        .map(x => x.item);
+      if (!active) {
+        if (worker) {
+          worker.terminate();
+        }
+        return;
+      }
+
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
 
       // Take first 300 candidates to check cache
       const candidates = sortedCandidatesSource.slice(0, 300);
@@ -188,6 +182,7 @@ export function useHomeData({
       // Deduplicate cached items by clean title
       const seenCachedTitles = new Set<string>();
       const uniqueCached: typeof candidatesWithCachedData = [];
+
       for (const c of candidatesWithCachedData) {
         const title = getCleanTitle(c.item);
         if (!seenCachedTitles.has(title)) {
@@ -196,35 +191,18 @@ export function useHomeData({
         }
       }
 
+      // Only check TMDB API for missing items if we don't have enough candidates in cache
       let finalSelected: PlaylistItem[];
 
-      // If we have at least 5 unique cached items with ratings and backdrops, sort and select them
       if (uniqueCached.length >= 5) {
         uniqueCached.sort((a, b) => b.rating - a.rating);
-        const topPool = uniqueCached.slice(0, 15);
-        finalSelected = selectDailyShowcase(topPool, 5).map(c => c.item);
+        finalSelected = selectDailyShowcase(uniqueCached.map(x => x.item), 5);
       } else {
-        // Collect unique uncached candidates, excluding already cached unique titles
-        const seenUncachedTitles = new Set<string>();
-        for (const title of seenCachedTitles) {
-          seenUncachedTitles.add(title);
-        }
+        // Fetch up to (15 - cached count) items from TMDB network
+        const needed = 15 - uniqueCached.length;
+        const fetchTargets = uncachedCandidates.slice(0, needed);
 
-        const uniqueUncached: PlaylistItem[] = [];
-        for (const item of uncachedCandidates) {
-          const title = getCleanTitle(item);
-          if (!seenUncachedTitles.has(title)) {
-            seenUncachedTitles.add(title);
-            uniqueUncached.push(item);
-          }
-        }
-
-        // Fetch TMDB ratings from network for a small batch of unique items in parallel
-        const apiKey = tmdbApiKey;
-        const fetchCount = Math.min(uniqueUncached.length, 15);
-        const toFetch = uniqueUncached.slice(0, fetchCount);
-
-        const fetchPromises = toFetch.map(async (item) => {
+        const fetchPromises = fetchTargets.map(async (item) => {
           const isSeries = item.type === 'series';
           const cleanTitle = isSeries
             ? parseSeriesEpisodeInfo(item.name).cleanTitle
@@ -232,7 +210,7 @@ export function useHomeData({
           const endpoint = isSeries ? 'tv' : 'movie';
 
           try {
-            const result = await getResolvedTmdbResult(endpoint, apiKey, cleanTitle);
+            const result = await getResolvedTmdbResult(endpoint, tmdbApiKey, cleanTitle);
             if (result && (result.backdrop_path || result.poster_path)) {
               return { item, result, rating: result.vote_average || 0.1 };
             }
@@ -267,7 +245,7 @@ export function useHomeData({
           }
         }
 
-        // Fallback to candidatesSource (deduplicated) if we still have less than 15 items
+        // Fallback to sortedCandidatesSource if we still have less than 15 items
         for (const item of sortedCandidatesSource) {
           if (selectList.length >= 15) break;
           const title = getCleanTitle(item);
@@ -283,6 +261,7 @@ export function useHomeData({
       if (active) {
         setShowcaseItems(finalSelected);
         setActiveFeaturedIndex(0);
+        setIsHomeReady(true);
       }
     };
 
@@ -290,8 +269,11 @@ export function useHomeData({
 
     return () => {
       active = false;
+      if (worker) {
+        worker.terminate();
+      }
     };
-  }, [items, itemBuckets.movie, itemBuckets.series, tmdbApiKey, activeContentPreferences]);
+  }, [items, itemBuckets, tmdbApiKey, activeContentPreferences]);
 
   // Fetch TMDB data for active featured carousel item
   useEffect(() => {
@@ -573,6 +555,7 @@ export function useHomeData({
     populerDiziler,
     homeDiscoveryItems,
     homeLiveTvQuickChannels,
-    uniqueRecentlyWatched
+    uniqueRecentlyWatched,
+    isHomeReady
   };
 }

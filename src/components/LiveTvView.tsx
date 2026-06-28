@@ -328,7 +328,7 @@ export const LiveTvView = React.memo(function LiveTvView({
 
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] animate-fade-in pb-12" onContextMenu={() => setContextMenu(null)}>
+    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] page-transition-enter pb-12" onContextMenu={() => setContextMenu(null)}>
       {/* 1. Left Categories Sidebar */}
       <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
         <div className="flex items-center justify-between px-2 mb-2">

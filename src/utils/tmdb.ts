@@ -86,34 +86,26 @@ class IndexedDBCache {
   }
 
   async loadAllToMemory(): Promise<void> {
-    await this.init();
-    if (!this.db) return;
     return new Promise((resolve) => {
       try {
-        const transaction = this.db!.transaction(this.storeName, 'readonly');
-        const store = transaction.objectStore(this.storeName);
-        // Only query keys starting with "resolved-" to avoid loading large cached images or API responses at startup
-        const range = IDBKeyRange.bound("resolved-", "resolved-\uffff");
-        const keysRequest = store.getAllKeys(range);
-        keysRequest.onsuccess = () => {
-          const keys = keysRequest.result;
-          const valuesRequest = store.getAll(range);
-          valuesRequest.onsuccess = () => {
-            const values = valuesRequest.result;
-            for (let i = 0; i < keys.length; i++) {
-              const key = keys[i];
-              const value = values[i];
-              if (value && typeof key === 'string') {
-                globalSyncPosterMap.set(key, value);
-              }
+        const worker = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });
+        worker.onmessage = (e) => {
+          if (e.data.action === 'tmdb_preload_results') {
+            const cacheData = e.data.cacheData || {};
+            for (const key in cacheData) {
+              globalSyncPosterMap.set(key, cacheData[key]);
             }
+            worker.terminate();
             resolve();
-          };
-          valuesRequest.onerror = () => resolve();
+          }
         };
-        keysRequest.onerror = () => resolve();
-      } catch (e) {
-        console.error("IndexedDB batch load error:", e);
+        worker.onerror = () => {
+          worker.terminate();
+          resolve();
+        };
+        worker.postMessage({ action: 'preload_tmdb_cache' });
+      } catch (err) {
+        console.error("Failed to preload TMDB cache using worker:", err);
         resolve();
       }
     });
@@ -436,4 +428,22 @@ export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', s
   }
 
   return remoteUrl;
+};
+
+export const getCachedTmdbResult = async (endpoint: 'tv' | 'movie', title: string): Promise<any> => {
+  if (!title) return null;
+  const cleanTitle = cleanMovieName(title);
+  const cacheKey = `api-/3/search/${endpoint}?query=${encodeURIComponent(cleanTitle)}&include_adult=false&page=1`;
+  try {
+    const cached = await tmdbCache.get(cacheKey);
+    if (cached?.value?.results?.[0]) {
+      return cached.value.results[0];
+    }
+    if (cached?.results?.[0]) {
+      return cached.results[0];
+    }
+  } catch {
+    return null;
+  }
+  return null;
 };

@@ -11,8 +11,11 @@ interface UseCinematicPlayerProps {
 
 const PLAYER_VOLUME_KEY = 'cinema_player_volume';
 const PLAYER_MUTED_KEY = 'cinema_player_muted';
-const PAUSED_STREAM_REFRESH_MS = 30_000;
+const PLAYER_SPEED_KEY = 'cinema_player_speed';
+const PLAYER_QUALITY_KEY = 'cinema_player_quality';
+const PLAYER_AUDIO_PREF_KEY = 'cinema_player_audio_pref';
 type PlaybackStatus = 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
+export type PlayerQualityLevel = { id: number; label: string; height?: number; bitrate?: number };
 
 function translateReason(reason: string, language: 'tr' | 'en'): string {
   const dictionary: Record<string, { tr: string; en: string }> = {
@@ -187,6 +190,45 @@ function getSavedPlayerMuted(): boolean {
   return localStorage.getItem(PLAYER_MUTED_KEY) === 'true';
 }
 
+function getSavedPlaybackSpeed(): number {
+  const saved = Number(localStorage.getItem(PLAYER_SPEED_KEY));
+  return Number.isFinite(saved) && saved >= 0.25 && saved <= 2 ? saved : 1;
+}
+
+function getSavedQualityLevel(): number {
+  const saved = Number(localStorage.getItem(PLAYER_QUALITY_KEY));
+  return Number.isFinite(saved) ? saved : -1;
+}
+
+function getSavedAudioPreference(): { name?: string; lang?: string } | null {
+  try {
+    const saved = localStorage.getItem(PLAYER_AUDIO_PREF_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getPreferredAudioTrackIndex(tracks: { name?: string; lang?: string }[]): number {
+  const preferred = getSavedAudioPreference();
+  if (preferred) {
+    const preferredName = preferred.name?.toLowerCase();
+    const preferredLang = preferred.lang?.toLowerCase();
+    const exact = tracks.findIndex(track =>
+      (preferredLang && track.lang?.toLowerCase() === preferredLang) ||
+      (preferredName && track.name?.toLowerCase() === preferredName)
+    );
+    if (exact >= 0) return exact;
+  }
+
+  const turkish = tracks.findIndex(track =>
+    track.name?.toLowerCase().includes('tÃ¼rk') ||
+    track.name?.toLowerCase().includes('turk') ||
+    track.lang?.toLowerCase() === 'tr'
+  );
+  return turkish >= 0 ? turkish : 0;
+}
+
 export function useCinematicPlayer({
   selectedChannel,
   saveWatchProgress,
@@ -212,8 +254,6 @@ export function useCinematicPlayer({
   const lastBufferedUpdateRef = useRef(0);
   const seekGraceUntilRef = useRef(0);
   const lastRequestedSeekRef = useRef<number | null>(null);
-  const resumeRecoveryAttemptedRef = useRef(false);
-  const resumeRecoveryStartedAtRef = useRef(0);
 
   // States/refs to reload the stream if paused for a long time (TCP/Token timeout recovery)
   const pausedTimeRef = useRef<number | null>(null);
@@ -234,9 +274,11 @@ export function useCinematicPlayer({
   const [videoReady, setVideoReady] = useState(false);
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>('loading');
   const [playbackMessage, setPlaybackMessage] = useState('');
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState(getSavedPlaybackSpeed);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [qualityLevels, setQualityLevels] = useState<PlayerQualityLevel[]>([]);
+  const [activeQualityLevel, setActiveQualityLevel] = useState(getSavedQualityLevel);
 
   const [audioTracks, setAudioTracks] = useState<{ id: number; name: string; lang: string }[]>([]);
   const [activeAudioTrack, setActiveAudioTrack] = useState(0);
@@ -323,24 +365,7 @@ export function useCinematicPlayer({
       videoRef.current.pause();
       pausedTimeRef.current = Date.now();
     } else {
-      const pausedFor = pausedTimeRef.current ? Date.now() - pausedTimeRef.current : 0;
-      const resumeAt = seekOffsetRef.current + videoRef.current.currentTime;
       pausedTimeRef.current = null;
-
-      if (selectedChannel?.type !== 'live' && pausedFor >= PAUSED_STREAM_REFRESH_MS) {
-        resumeTimeRef.current = resumeAt;
-        resumeRecoveryAttemptedRef.current = true;
-        resumeRecoveryStartedAtRef.current = Date.now();
-        setPlaybackStatus('recovering');
-        setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
-        setVideoReady(false);
-        videoRef.current.dispatchEvent(new CustomEvent('strmly:refresh-paused-stream', {
-          detail: { resumeAt }
-        }));
-        return;
-      }
-
-      resumeRecoveryStartedAtRef.current = Date.now();
       videoRef.current.play().then(forceUnmute).catch(() => { });
     }
   };
@@ -449,9 +474,19 @@ export function useCinematicPlayer({
 
   const handleSpeedChange = (speed: number) => {
     setPlaybackSpeed(speed);
+    localStorage.setItem(PLAYER_SPEED_KEY, String(speed));
     setShowSpeedMenu(false);
     if (videoRef.current) {
       videoRef.current.playbackRate = speed;
+    }
+  };
+
+  const handleQualityChange = (levelId: number) => {
+    setActiveQualityLevel(levelId);
+    localStorage.setItem(PLAYER_QUALITY_KEY, String(levelId));
+    if (hlsInstanceRef.current) {
+      hlsInstanceRef.current.currentLevel = levelId;
+      hlsInstanceRef.current.loadLevel = levelId;
     }
   };
 
@@ -494,6 +529,13 @@ export function useCinematicPlayer({
 
   const handleAudioTrackChange = async (trackId: number) => {
     setActiveAudioTrack(trackId);
+    const selectedTrack = audioTracks.find(track => track.id === trackId);
+    if (selectedTrack) {
+      localStorage.setItem(PLAYER_AUDIO_PREF_KEY, JSON.stringify({
+        name: selectedTrack.name,
+        lang: selectedTrack.lang
+      }));
+    }
     if (hlsInstanceRef.current) {
       hlsInstanceRef.current.audioTrack = trackId;
     } else {
@@ -589,6 +631,8 @@ export function useCinematicPlayer({
     setDuration(selectedChannel.duration && selectedChannel.duration > 0 ? selectedChannel.duration : 0);
     setAudioTracks([]);
     setActiveAudioTrack(0);
+    setQualityLevels([]);
+    setActiveQualityLevel(getSavedQualityLevel());
     setVideoReady(false);
     setPlaybackStatus('loading');
     setPlaybackMessage(getLoadingMessage(selectedChannel, language));
@@ -602,8 +646,6 @@ export function useCinematicPlayer({
     seekOffsetRef.current = 0;
     seekGraceUntilRef.current = 0;
     lastRequestedSeekRef.current = null;
-    resumeRecoveryAttemptedRef.current = false;
-    resumeRecoveryStartedAtRef.current = 0;
     recoveryAttemptRef.current = 0;
     hlsNetworkRecoveriesRef.current = 0;
     hlsMediaRecoveriesRef.current = 0;
@@ -690,25 +732,11 @@ export function useCinematicPlayer({
       const err = video.error;
       console.warn('Video error:', err?.code, err?.message);
       if (isTranscodingRef.current) {
-        if (
-          selectedChannel.type !== 'live' &&
-          resumeRecoveryAttemptedRef.current &&
-          Date.now() - resumeRecoveryStartedAtRef.current < 15_000
-        ) {
-          const resumeAt = Math.max(0, resumeTimeRef.current ?? (seekOffsetRef.current + video.currentTime));
-          resumeRecoveryAttemptedRef.current = false;
-          startFfmpegFallback(resumeAt, 'Yayin akisi kurtariliyor...');
-          return;
-        }
         failPlayback(err?.message || 'Video cozulurken hata olustu');
         return;
       }
       if (err?.code === 4 || err?.code === 3) {
-        const resumeAt = resumeRecoveryAttemptedRef.current
-          ? Math.max(0, resumeTimeRef.current ?? (seekOffsetRef.current + video.currentTime))
-          : undefined;
-        resumeRecoveryAttemptedRef.current = false;
-        startFfmpegFallback(resumeAt, 'Yerel oynatma basarisiz oldu');
+        startFfmpegFallback(undefined, 'Yerel oynatma basarisiz oldu');
       } else {
         failPlayback(err?.message || 'Oynatma hatasi');
       }
@@ -917,30 +945,6 @@ export function useCinematicPlayer({
       }
     };
 
-    const refreshPausedStream = (event: Event) => {
-      if (!active || selectedChannel.type === 'live') return;
-      const detail = (event as CustomEvent<{ resumeAt?: number }>).detail;
-      const resumeAt = Math.max(0, detail?.resumeAt ?? (seekOffsetRef.current + video.currentTime));
-      resumeTimeRef.current = resumeAt;
-      recoveryAttemptRef.current = 0;
-      seekGraceUntilRef.current = Date.now() + 20000;
-      setPlaybackStatus('recovering');
-      setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
-      showToast(translateReason("Yayin akisi kurtariliyor...", language));
-
-      if (hlsInstanceRef.current) {
-        hlsInstanceRef.current.stopLoad();
-        hlsInstanceRef.current.startLoad(resumeAt);
-        video.currentTime = resumeAt;
-        video.play().then(forceUnmute).catch(() => {
-          startFfmpegFallback(resumeAt, 'Yayin akisi kurtariliyor...');
-        });
-        return;
-      }
-
-      startFfmpegFallback(resumeAt, 'Yayin akisi kurtariliyor...');
-    };
-
     let stallTimeout: any = null;
 
     const onWaiting = () => {
@@ -1002,7 +1006,6 @@ export function useCinematicPlayer({
     video.addEventListener('timeupdate', timeUpdate);
     video.addEventListener('durationchange', durationChange);
     video.addEventListener('pause', onPauseEvent);
-    video.addEventListener('strmly:refresh-paused-stream', refreshPausedStream);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('seeking', clearStall);
     video.addEventListener('seeked', clearStall);
@@ -1057,6 +1060,9 @@ export function useCinematicPlayer({
             const selectedTrack = trTrack >= 0 ? trTrack : 0;
             hls.audioTrack = selectedTrack;
             setActiveAudioTrack(selectedTrack);
+            const preferredTrack = getPreferredAudioTrackIndex(tracks);
+            hls.audioTrack = preferredTrack;
+            setActiveAudioTrack(preferredTrack);
           }
           forceUnmute();
         });
@@ -1065,6 +1071,28 @@ export function useCinematicPlayer({
           forceUnmute();
           if (hls.levels && hls.levels.length > 0) {
             hls.loadLevel = hls.levels.length - 1;
+            const levels = hls.levels.map((level: any, index: number) => {
+              const height = Number(level.height) || undefined;
+              const bitrate = Number(level.bitrate) || undefined;
+              return {
+                id: index,
+                height,
+                bitrate,
+                label: height
+                  ? `${height}p`
+                  : bitrate
+                    ? `${Math.round(bitrate / 1000)} kbps`
+                    : `Level ${index + 1}`
+              };
+            });
+            setQualityLevels(levels);
+            const savedQuality = getSavedQualityLevel();
+            const selectedLevel = savedQuality >= 0 && levels.some(level => level.id === savedQuality)
+              ? savedQuality
+              : -1;
+            hls.currentLevel = selectedLevel;
+            hls.loadLevel = selectedLevel;
+            setActiveQualityLevel(selectedLevel);
           }
           resumePlayback(video.duration || 0);
           video.play().then(forceUnmute).catch(() => { });
@@ -1154,6 +1182,10 @@ export function useCinematicPlayer({
               setActiveAudioTrack(selectedTrack);
               streamId = res.audioStreams[selectedTrack]?.streamId;
               activeAudioStreamIdRef.current = streamId;
+              const preferredTrack = getPreferredAudioTrackIndex(res.audioStreams);
+              setActiveAudioTrack(preferredTrack);
+              streamId = res.audioStreams[preferredTrack]?.streamId;
+              activeAudioStreamIdRef.current = streamId;
             }
 
             if (res.codec) {
@@ -1214,7 +1246,6 @@ export function useCinematicPlayer({
       video.removeEventListener('timeupdate', timeUpdate);
       video.removeEventListener('durationchange', durationChange);
       video.removeEventListener('pause', onPauseEvent);
-      video.removeEventListener('strmly:refresh-paused-stream', refreshPausedStream);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('seeking', clearStall);
       video.removeEventListener('seeked', clearStall);
@@ -1259,6 +1290,8 @@ export function useCinematicPlayer({
     playbackMessage,
     playbackSpeed,
     showSpeedMenu,
+    qualityLevels,
+    activeQualityLevel,
     audioTracks,
     activeAudioTrack,
     subtitleTracks,
@@ -1291,6 +1324,7 @@ export function useCinematicPlayer({
     handlePlayerVolumeChange,
     handleTogglePlayerMute,
     handleSpeedChange,
+    handleQualityChange,
     handleSeekForward,
     handleSeekBackward,
     handleToggleFullscreen,

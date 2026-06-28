@@ -134,6 +134,18 @@ function isSeriesName(name: string): boolean {
 export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[] {
   const vodExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.mpeg', '.mpg', '.m4v', '.webm', '.wmv'];
 
+  // Count non-live logos to detect generic ones
+  const counts: Record<string, number> = {};
+  for (let i = 0; i < rawItems.length; i++) {
+    const item = rawItems[i];
+    if (item.type !== 'live') {
+      const logo = item.logo;
+      if (logo && logo.startsWith('http')) {
+        counts[logo] = (counts[logo] || 0) + 1;
+      }
+    }
+  }
+
   for (let i = 0; i < rawItems.length; i++) {
     const item = rawItems[i];
     if (!item.nameLower) {
@@ -186,6 +198,9 @@ export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[
         item.type = deducedType;
       }
     }
+
+    // Set generic logo flag based on counts
+    item.isGenericLogo = !!(item.logo && counts[item.logo] > 5);
   }
   return rawItems;
 }

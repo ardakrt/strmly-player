@@ -17,7 +17,6 @@ interface FavoritesViewProps {
   handleOpenSeriesModalDirect: (series: GroupedSeries) => void;
   toggleFavorite: (itemId: string, e: React.MouseEvent) => void;
   globalFavorites: string[];
-  genericLogosSet: Set<string>;
   checkedStatusMap: Record<string, 'online' | 'offline'>;
 }
 
@@ -31,7 +30,6 @@ export function FavoritesView({
   handleOpenSeriesModalDirect,
   toggleFavorite,
   globalFavorites,
-  genericLogosSet,
   checkedStatusMap
 }: FavoritesViewProps) {
   const { t, language } = useSettings();
@@ -121,7 +119,7 @@ export function FavoritesView({
                    isOnline={checkedStatusMap[movie.id]}
                    isFavorite={globalFavorites.includes(movie.id)}
                    onToggleFavorite={toggleFavorite}
-                   isGenericLogo={movie.logo ? genericLogosSet.has(movie.logo) : false}
+                   isGenericLogo={!!movie.isGenericLogo}
                 />
               ))}
             </div>
@@ -141,7 +139,7 @@ export function FavoritesView({
                    onClick={handleOpenSeriesModalDirect}
                    isFavorite={globalFavorites.includes(series.id)}
                    onToggleFavorite={toggleFavorite}
-                   isGenericLogo={series.logo ? genericLogosSet.has(series.logo) : false}
+                   isGenericLogo={!!series.isGenericLogo}
                    seasonsCount={Object.keys(series.seasons).length}
                 />
               ))}

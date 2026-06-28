@@ -380,16 +380,15 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
               <div className="absolute inset-0 shadow-[inset_0_0_240px_100px_rgba(0,0,0,0.8)]" />
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
-              <div className="relative z-10 w-full max-w-md px-6 flex flex-col items-center text-center animate-fade-in">
-                <div className="mb-10 flex items-center gap-2.5 text-white/75">
-                  <img src="./icon.png" className="w-7 h-7 object-contain" alt="" />
-                  <span className="text-xs font-black tracking-[0.24em]">STRMLY</span>
+              <div className="relative z-10 w-full max-w-[400px] px-8 py-10 rounded-[36px] border border-white/10 bg-[#09090b]/72 backdrop-blur-2xl shadow-[0_32px_100px_rgba(0,0,0,0.7)] flex flex-col items-center text-center animate-fade-in">
+                <div className="mb-8 flex items-center gap-2.5 text-white/60">
+                  <img src="./icon.png" className="w-6 h-6 object-contain opacity-80" alt="" />
+                  <span className="text-[10px] font-black tracking-[0.28em]">STRMLY</span>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute -inset-7 rounded-full border border-white/5 animate-pulse" />
-                  <div className="absolute -inset-3 rounded-[34px] bg-white/10 blur-xl" />
-                  <div className="relative w-28 h-28 rounded-[30px] overflow-hidden border-2 border-white/35 bg-neutral-950 shadow-[0_28px_90px_rgba(0,0,0,0.65)]">
+                  <div className="absolute -inset-2 rounded-[34px] bg-[var(--accent-color)]/5 blur-xl" />
+                  <div className="relative w-24 h-24 rounded-[28px] overflow-hidden border-2 border-white/20 bg-neutral-950 shadow-[0_24px_70px_rgba(0,0,0,0.6)]">
                     {enteringProfile ? (
                       enteringProfile.avatarUrl.startsWith('linear-gradient') ? (
                         <div className="w-full h-full" style={{ background: enteringProfile.avatarUrl }} />
@@ -397,16 +396,16 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                         <img src={enteringProfile.avatarUrl} className="w-full h-full object-cover" alt={enteringProfile.name} />
                       )
                     ) : (
-                      <UserRound size={34} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-neutral-500" />
+                      <UserRound size={30} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-neutral-500" />
                     )}
                   </div>
                 </div>
 
-                <span className="mt-7 text-[9px] font-black uppercase tracking-[0.24em] text-neutral-500">{language === 'tr' ? 'Hoş geldin' : 'Welcome'}</span>
-                <h2 className="mt-2 text-3xl font-black tracking-tight text-white">{enteringProfile?.name || (language === 'tr' ? 'Profilin' : 'Your profile')}</h2>
+                <span className="mt-6 text-[8px] font-black uppercase tracking-[0.24em] text-neutral-500">{language === 'tr' ? 'Hoş geldin' : 'Welcome'}</span>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-white">{enteringProfile?.name || (language === 'tr' ? 'Profilin' : 'Your profile')}</h2>
 
                 {enteringProfile?.contentPreferences?.length ? (
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <div className="mt-3.5 flex flex-wrap justify-center gap-1.5">
                     {contentPreferenceLabels.filter(option => enteringProfile.contentPreferences?.includes(option.id)).map(option => {
                       const optLabel = option.id === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') :
                                        option.id === 'movies' ? (language === 'tr' ? 'Film' : 'Movies') :
@@ -414,23 +413,27 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                                        option.id === 'live' ? (language === 'tr' ? 'Canlı TV' : 'Live TV') :
                                        (language === 'tr' ? 'Çocuk' : 'Kids');
                       return (
-                        <span key={option.id} className="rounded-full border border-white/10 bg-white/[0.055] px-3 py-1.5 text-[9px] font-bold text-neutral-400">{optLabel}</span>
+                        <span key={option.id} className="rounded-full border border-white/5 bg-white/[0.04] px-2.5 py-1 text-[8px] font-bold text-neutral-400">{optLabel}</span>
                       );
                     })}
                   </div>
                 ) : null}
 
-                <div className="mt-9 w-full max-w-xs">
-                  <div className="h-1 overflow-hidden rounded-full bg-white/10">
+                <div className="mt-8 w-full max-w-[260px]">
+                  <div className="h-[3px] overflow-hidden rounded-full bg-white/[0.07]">
                     <div
-                      className="h-full rounded-full bg-white shadow-[0_0_18px_rgba(255,255,255,0.5)] transition-[width] duration-700 ease-out"
-                      style={{ width: `${[28, 58, 92, 100][entryStage]}%` }}
+                      className="h-full rounded-full transition-[width] duration-750 ease-out"
+                      style={{ 
+                        width: `${[28, 58, 92, 100][entryStage]}%`,
+                        backgroundColor: 'var(--accent-color)',
+                        boxShadow: '0 0 10px var(--accent-glow)'
+                      }}
                     />
                   </div>
-                  <div className="mt-4 flex items-center justify-center gap-2">
-                    <span className="relative flex w-2 h-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-40" />
-                      <span className="relative inline-flex w-2 h-2 rounded-full bg-white" />
+                  <div className="mt-3.5 flex items-center justify-center gap-2">
+                    <span className="relative flex w-1.5 h-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ backgroundColor: 'var(--accent-color)' }} />
+                      <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent-color)' }} />
                     </span>
                     <span className="text-[10px] font-bold tracking-wide text-neutral-400">
                       {[
@@ -454,7 +457,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </div>
       )}
 
-      <div className="flex-1 z-10 overflow-y-auto hide-scrollbar select-none animate-fade-in w-full">
+      <div className="flex-1 z-10 overflow-y-auto hide-scrollbar select-none page-transition-enter w-full">
         <div className="relative min-h-full w-full max-w-[1480px] mx-auto px-6 md:px-12 py-10 md:py-14 flex flex-col items-center justify-center">
           <div className="absolute top-8 right-8 md:top-10 md:right-12">
             {profileSelectMode === 'select' ? (
@@ -629,7 +632,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       )}
 
         {profileSelectMode === 'edit' && (
-          <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4 select-none animate-fade-in">
+          <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4 select-none page-transition-enter">
             <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={() => {
               setProfileSelectMode(editingProfileId ? 'manage' : 'select');
               setEditingProfileId(null);

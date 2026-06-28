@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.24 - 2026-06-28
+
+### Updates
+
+- Added player quality/source controls, remembered playback preferences, and configurable next-episode autoplay.
+- Restored simple pause/resume behavior while keeping playback controls and catalog performance improvements.
+
 ## 1.5.23 - 2026-06-28
 
 ### Fixes

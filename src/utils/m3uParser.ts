@@ -18,6 +18,7 @@ export interface PlaylistItem {
   groupLower?: string;
   clNameLower?: string;
   qualityRank?: number;
+  isGenericLogo?: boolean;
 }
 
 export interface ParsedPlaylist {

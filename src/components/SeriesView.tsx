@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, Heart, Trash2, Tv, Play, 
   Trophy, Film, Newspaper, Music, Gamepad, Compass, 
@@ -9,6 +9,7 @@ import { ImageWithFallback } from './ImageWithFallback';
 import { VirtualizedGrid } from './VirtualizedGrid';
 import { MediaCardContextMenu } from './MediaCardContextMenu';
 import { useSettings } from '../context/SettingsContext';
+import { cleanMovieName, getCachedTmdbResult } from '../utils/tmdb';
 
 // Helper to map category names to Lucide icons dynamically
 export const getCategoryIcon = (name: string) => {
@@ -52,11 +53,18 @@ interface SeriesViewProps {
   groupedSeriesList: GroupedSeries[];
   handleMainScroll: (e: React.UIEvent<HTMLElement>) => void;
   handleOpenSeriesModalDirect: (series: GroupedSeries) => void;
-  genericLogosSet: Set<string>;
   toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
   globalFavorites: string[];
   setVisibleCount: (count: number) => void;
 }
+
+const getQualityLabel = (name: string): string | null => {
+  const lower = name.toLowerCase();
+  if (lower.includes('4k') || lower.includes('uhd')) return '4K';
+  if (lower.includes('1080p') || lower.includes('fhd') || lower.includes('1080')) return 'FHD';
+  if (lower.includes('720p') || lower.includes('hd') || lower.includes('720')) return 'HD';
+  return null;
+};
 
 export const SeriesCard = React.memo(({
   series,
@@ -76,6 +84,19 @@ export const SeriesCard = React.memo(({
   onContextMenu?: (event: React.MouseEvent, series: GroupedSeries) => void;
 }) => {
   const { language } = useSettings();
+  const [rating, setRating] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getCachedTmdbResult('tv', series.name).then((res) => {
+      if (active && res && res.vote_average) {
+        setRating(res.vote_average);
+      }
+    });
+    return () => { active = false; };
+  }, [series.name]);
+
+  const quality = getQualityLabel(series.name);
   return (
     <div
       className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
@@ -93,11 +114,23 @@ export const SeriesCard = React.memo(({
           aspect="portrait"
         />
 
+        {rating !== null && rating > 0 && (
+          <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md border border-white/10 text-[9px] font-black text-amber-400 flex items-center gap-0.5 shadow-md animate-fade-in">
+            <Star size={9} fill="currentColor" />
+            <span>{rating.toFixed(1)}</span>
+          </div>
+        )}
+
         {/* Seasons/Episodes Badge Overlay */}
-        <div className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-wider text-neutral-300">
-          {language === 'tr'
-            ? `${seasonsCount} S • ${series.episodesCount} B`
-            : `${seasonsCount} S • ${series.episodesCount} E`}
+        <div className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-wider text-neutral-300 flex items-center gap-1.5 shadow-md">
+          <span>
+            {language === 'tr'
+              ? `${seasonsCount} S • ${series.episodesCount} B`
+              : `${seasonsCount} S • ${series.episodesCount} E`}
+          </span>
+          {quality && (
+            <span className="px-1 rounded bg-[var(--accent-color)]/25 text-[var(--accent-color)] text-[8px] font-black">{quality}</span>
+          )}
         </div>
 
         {/* Hover Glassmorphism Play Button */}
@@ -122,7 +155,7 @@ export const SeriesCard = React.memo(({
         </button>
       </div>
       <div className="flex flex-col px-1">
-        <span className="text-xs font-bold premium-card-title truncate">{series.name}</span>
+        <span className="text-xs font-bold premium-card-title truncate" title={series.name}>{cleanMovieName(series.name)}</span>
       </div>
     </div>
   );
@@ -141,7 +174,6 @@ export const SeriesView = React.memo(function SeriesView({
   groupedSeriesList,
   handleMainScroll,
   handleOpenSeriesModalDirect,
-  genericLogosSet,
   toggleFavorite,
   globalFavorites,
   setVisibleCount
@@ -164,7 +196,7 @@ export const SeriesView = React.memo(function SeriesView({
   const otherCategories = seriesCat.filteredOtherCategories;
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] animate-fade-in pb-12" onContextMenu={() => setContextMenu(null)}>
+    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] page-transition-enter pb-12" onContextMenu={() => setContextMenu(null)}>
       {/* 1. Left Categories Sidebar */}
       <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
         <div className="flex items-center justify-between px-2 mb-2">
@@ -327,7 +359,7 @@ export const SeriesView = React.memo(function SeriesView({
                   onClick={handleOpenSeriesModalDirect}
                   isFavorite={globalFavorites.includes(series.id)}
                   onToggleFavorite={toggleFavorite}
-                  isGenericLogo={series.logo ? genericLogosSet.has(series.logo) : false}
+                  isGenericLogo={!!series.isGenericLogo}
                   seasonsCount={Object.keys(series.seasons).length}
                   onContextMenu={openContextMenu}
                 />

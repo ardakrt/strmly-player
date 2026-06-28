@@ -54,6 +54,8 @@ export function PlayerScreen({
       playbackMessage={player.playbackMessage}
       playbackSpeed={player.playbackSpeed}
       showSpeedMenu={player.showSpeedMenu}
+      qualityLevels={player.qualityLevels}
+      activeQualityLevel={player.activeQualityLevel}
       audioTracks={player.audioTracks}
       activeAudioTrack={player.activeAudioTrack}
       subtitleTracks={player.subtitleTracks}
@@ -66,6 +68,7 @@ export function PlayerScreen({
       onToggleMute={player.handleTogglePlayerMute}
       onVolumeChange={player.handlePlayerVolumeChange}
       onSpeedChange={player.handleSpeedChange}
+      onQualityChange={player.handleQualityChange}
       onAudioTrackChange={player.handleAudioTrackChange}
       onSubtitleChange={player.setActiveSubtitle}
       onSubtitleUpload={player.handleSubtitleUpload}

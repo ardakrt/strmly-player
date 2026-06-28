@@ -17,6 +17,7 @@ export interface GroupedSeries {
   score?: number;
   nameLower?: string;
   groupLower?: string;
+  isGenericLogo?: boolean;
 }
 
 export interface ParsedEpisodeInfo {
@@ -200,7 +201,8 @@ export function groupPlaylistItemsToSeries(items: PlaylistItem[]): GroupedSeries
         group: item.group || 'Genel',
         type: 'series',
         seasons: {},
-        episodesCount: 0
+        episodesCount: 0,
+        isGenericLogo: item.isGenericLogo
       };
     }
 

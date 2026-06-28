@@ -43,6 +43,7 @@ interface EpisodeMeta {
   stillPath?: string;
   runtime?: number;
   overview?: string;
+  name?: string;
 }
 
 export const SeriesModal = ({
@@ -81,7 +82,7 @@ export const SeriesModal = ({
     const apiKey = getTmdbApiKey();
     const path = `/3/tv/${tmdbShowId}/season/${activeSeason}?api_key=${apiKey}&language=${getTmdbLanguage()}`;
 
-    fetchTmdbPath<{ episodes?: { episode_number: number; still_path?: string; runtime?: number; overview?: string }[]; error?: string }>(path)
+    fetchTmdbPath<{ episodes?: { episode_number: number; still_path?: string; runtime?: number; overview?: string; name?: string }[]; error?: string }>(path)
       .then((data) => {
         if (cancelled) return;
         const metaMap: Record<number, EpisodeMeta> = {};
@@ -90,7 +91,8 @@ export const SeriesModal = ({
             metaMap[ep.episode_number] = {
               stillPath: ep.still_path,
               runtime: ep.runtime,
-              overview: ep.overview
+              overview: ep.overview,
+              name: ep.name
             };
           });
         }
@@ -426,11 +428,32 @@ export const SeriesModal = ({
                 const epSubtitle = cleanedTitle
                   ? cleanedTitle.replace(new RegExp(`^${seriesCleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').trim()
                   : '';
+                const cleanSubtitle = (() => {
+                  if (!epSubtitle) return '';
+                  let clean = epSubtitle.trim();
+                  clean = clean.replace(/^s\d+\s*e\d+\s*[:-]?\s*/i, '');
+                  clean = clean.replace(/^(?:\d+\.?\s*(?:sezon|season|s\.?)\s*)?(?:\d+\.?\s*(?:bölüm|episode|ep?\.?))\s*[:-]?\s*/i, '');
+                  clean = clean.replace(/^(?:(?:sezon|season|s)\s*\d+\s*)?(?:(?:bölüm|episode|ep)\s*\d+)\s*[:-]?\s*/i, '');
+                  clean = clean.replace(/^[:-]\s*/, '');
+                  return clean.trim();
+                })();
                 const historyItem = recentlyWatched.find(x => x.id === ep.item.id);
                 const progress = historyItem?.progress;
                 const isWatched = recentlyWatched.some(x => x.id === ep.item.id);
                 const isTarget = expandedEpisodeId === ep.item.id;
                 const meta = episodeMeta[ep.episodeNumber] || {};
+                const tmdbEpisodeName = (() => {
+                  if (!meta.name) return '';
+                  const lower = meta.name.toLowerCase().trim();
+                  const isGeneric =
+                    /^(?:episode|bölüm|ep\.?|s\d+e\d+)\s*\d+$/i.test(lower) ||
+                    /^[se]\d+$/i.test(lower) ||
+                    lower === `episode ${ep.episodeNumber}` ||
+                    lower === `bölüm ${ep.episodeNumber}` ||
+                    lower === `${ep.episodeNumber}. bölüm` ||
+                    lower === `${ep.episodeNumber}.bölüm`;
+                  return isGeneric ? '' : meta.name;
+                })();
                 const runtimeText = meta.runtime
                   ? `${meta.runtime} dk`
                   : (language === 'tr' ? 'HD Akış' : 'HD Stream');
@@ -486,7 +509,7 @@ export const SeriesModal = ({
                           : `Season ${ep.seasonNumber} • Episode ${ep.episodeNumber}`}
                       </span>
                       <h4 className="text-xs font-black text-white truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
-                        {epSubtitle || (language === 'tr' ? `Bölüm ${ep.episodeNumber}` : `Episode ${ep.episodeNumber}`)}
+                        {tmdbEpisodeName || cleanSubtitle || (language === 'tr' ? `${ep.episodeNumber}. Bölüm` : `Episode ${ep.episodeNumber}`)}
                       </h4>
                       <span className="block text-[9px] text-neutral-500 truncate mt-1 max-w-[92%]">
                         {epTitle}
