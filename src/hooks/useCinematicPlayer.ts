@@ -11,6 +11,7 @@ interface UseCinematicPlayerProps {
 
 const PLAYER_VOLUME_KEY = 'cinema_player_volume';
 const PLAYER_MUTED_KEY = 'cinema_player_muted';
+const PAUSED_STREAM_REFRESH_MS = 30_000;
 type PlaybackStatus = 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
 
 function translateReason(reason: string, language: 'tr' | 'en'): string {
@@ -211,6 +212,8 @@ export function useCinematicPlayer({
   const lastBufferedUpdateRef = useRef(0);
   const seekGraceUntilRef = useRef(0);
   const lastRequestedSeekRef = useRef<number | null>(null);
+  const resumeRecoveryAttemptedRef = useRef(false);
+  const resumeRecoveryStartedAtRef = useRef(0);
 
   // States/refs to reload the stream if paused for a long time (TCP/Token timeout recovery)
   const pausedTimeRef = useRef<number | null>(null);
@@ -320,7 +323,24 @@ export function useCinematicPlayer({
       videoRef.current.pause();
       pausedTimeRef.current = Date.now();
     } else {
+      const pausedFor = pausedTimeRef.current ? Date.now() - pausedTimeRef.current : 0;
+      const resumeAt = seekOffsetRef.current + videoRef.current.currentTime;
       pausedTimeRef.current = null;
+
+      if (selectedChannel?.type !== 'live' && pausedFor >= PAUSED_STREAM_REFRESH_MS) {
+        resumeTimeRef.current = resumeAt;
+        resumeRecoveryAttemptedRef.current = true;
+        resumeRecoveryStartedAtRef.current = Date.now();
+        setPlaybackStatus('recovering');
+        setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
+        setVideoReady(false);
+        videoRef.current.dispatchEvent(new CustomEvent('strmly:refresh-paused-stream', {
+          detail: { resumeAt }
+        }));
+        return;
+      }
+
+      resumeRecoveryStartedAtRef.current = Date.now();
       videoRef.current.play().then(forceUnmute).catch(() => { });
     }
   };
@@ -582,6 +602,8 @@ export function useCinematicPlayer({
     seekOffsetRef.current = 0;
     seekGraceUntilRef.current = 0;
     lastRequestedSeekRef.current = null;
+    resumeRecoveryAttemptedRef.current = false;
+    resumeRecoveryStartedAtRef.current = 0;
     recoveryAttemptRef.current = 0;
     hlsNetworkRecoveriesRef.current = 0;
     hlsMediaRecoveriesRef.current = 0;
@@ -668,11 +690,25 @@ export function useCinematicPlayer({
       const err = video.error;
       console.warn('Video error:', err?.code, err?.message);
       if (isTranscodingRef.current) {
+        if (
+          selectedChannel.type !== 'live' &&
+          resumeRecoveryAttemptedRef.current &&
+          Date.now() - resumeRecoveryStartedAtRef.current < 15_000
+        ) {
+          const resumeAt = Math.max(0, resumeTimeRef.current ?? (seekOffsetRef.current + video.currentTime));
+          resumeRecoveryAttemptedRef.current = false;
+          startFfmpegFallback(resumeAt, 'Yayin akisi kurtariliyor...');
+          return;
+        }
         failPlayback(err?.message || 'Video cozulurken hata olustu');
         return;
       }
       if (err?.code === 4 || err?.code === 3) {
-        startFfmpegFallback(undefined, 'Yerel oynatma basarisiz oldu');
+        const resumeAt = resumeRecoveryAttemptedRef.current
+          ? Math.max(0, resumeTimeRef.current ?? (seekOffsetRef.current + video.currentTime))
+          : undefined;
+        resumeRecoveryAttemptedRef.current = false;
+        startFfmpegFallback(resumeAt, 'Yerel oynatma basarisiz oldu');
       } else {
         failPlayback(err?.message || 'Oynatma hatasi');
       }
@@ -881,6 +917,30 @@ export function useCinematicPlayer({
       }
     };
 
+    const refreshPausedStream = (event: Event) => {
+      if (!active || selectedChannel.type === 'live') return;
+      const detail = (event as CustomEvent<{ resumeAt?: number }>).detail;
+      const resumeAt = Math.max(0, detail?.resumeAt ?? (seekOffsetRef.current + video.currentTime));
+      resumeTimeRef.current = resumeAt;
+      recoveryAttemptRef.current = 0;
+      seekGraceUntilRef.current = Date.now() + 20000;
+      setPlaybackStatus('recovering');
+      setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
+      showToast(translateReason("Yayin akisi kurtariliyor...", language));
+
+      if (hlsInstanceRef.current) {
+        hlsInstanceRef.current.stopLoad();
+        hlsInstanceRef.current.startLoad(resumeAt);
+        video.currentTime = resumeAt;
+        video.play().then(forceUnmute).catch(() => {
+          startFfmpegFallback(resumeAt, 'Yayin akisi kurtariliyor...');
+        });
+        return;
+      }
+
+      startFfmpegFallback(resumeAt, 'Yayin akisi kurtariliyor...');
+    };
+
     let stallTimeout: any = null;
 
     const onWaiting = () => {
@@ -942,6 +1002,7 @@ export function useCinematicPlayer({
     video.addEventListener('timeupdate', timeUpdate);
     video.addEventListener('durationchange', durationChange);
     video.addEventListener('pause', onPauseEvent);
+    video.addEventListener('strmly:refresh-paused-stream', refreshPausedStream);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('seeking', clearStall);
     video.addEventListener('seeked', clearStall);
@@ -1153,6 +1214,7 @@ export function useCinematicPlayer({
       video.removeEventListener('timeupdate', timeUpdate);
       video.removeEventListener('durationchange', durationChange);
       video.removeEventListener('pause', onPauseEvent);
+      video.removeEventListener('strmly:refresh-paused-stream', refreshPausedStream);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('seeking', clearStall);
       video.removeEventListener('seeked', clearStall);

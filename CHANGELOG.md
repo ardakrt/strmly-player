@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.23 - 2026-06-28
+
+### Fixes
+
+- Refresh paused VOD streams from the current timestamp after a long pause to avoid decode/source errors when resuming series episodes.
+
 ## 1.5.22 - 2026-06-26
 
 ### Fixes
