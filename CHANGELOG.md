@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.27 - 2026-07-01
+
+### Fixes
+
+- Added a static HTML/CSS boot splash rendered before the JS bundle loads, removing the perceived black-screen gap on startup.
+- Prevented multiple app instances from fighting over the same GPU/disk cache directory, which could cause cache errors and slow startup.
+- Disabled the on-disk GPU shader cache to avoid startup delays caused by disk cache write failures on some Windows setups.
+
 ## 1.5.24 - 2026-06-28
 
 ### Updates

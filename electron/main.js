@@ -176,8 +176,32 @@ app.commandLine.appendSwitch('disable-features', 'PreloadMediaEngagementData,Med
 // Enable hardware acceleration for smoother video playback
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
+// Disable the on-disk GPU shader cache. On some Windows setups (AV/EDR file
+// locking, cloud-sync file handles, etc.) Chromium repeatedly fails to move
+// this cache into place ("Unable to move the cache: Erişim engellendi"),
+// which delays first paint and can look like a slow/black-screen startup.
+// Shaders are still cached in memory for the session, so this has no real
+// effect on playback performance.
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 let mainWindow;
+
+// Prevent multiple instances from running simultaneously. Running two
+// instances at once causes both processes to fight over the same GPU/disk
+// cache directory, which triggers "Unable to move the cache: Erişim
+// engellendi" errors and a slow/black-screen startup.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -311,6 +335,8 @@ function resolveTmdbCacheFilePath(filePath) {
 }
 
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return;
+
   // Register custom protocol handle for app-file:// scheme
   const { pathToFileURL } = require('url');
   protocol.handle('app-file', async (request) => {
