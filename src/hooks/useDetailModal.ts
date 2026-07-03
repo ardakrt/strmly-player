@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { PlaylistItem } from '../types';
-import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
+import { parseSeriesEpisodeInfo, getSeriesId } from '../utils/seriesGroupers';
 import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
 import {
   cleanMovieName,
@@ -174,7 +174,7 @@ export function useDetailModal({
     }
 
     const grouped: GroupedSeries = {
-      id: `series-${item.id}`,
+      id: getSeriesId(parsed.cleanTitle, seriesGroup),
       name: parsed.cleanTitle,
       logo: item.logo || (siblings.find(s => s.logo)?.logo || ''),
       group: seriesGroup,

@@ -1,6 +1,6 @@
-import React, { createContext, useContext } from 'react';
-import type { SavedPlaylist } from '../types';
-import type { Language } from '../utils/translations';
+import React, { createContext, useContext } from "react";
+import type { SavedPlaylist } from "../types";
+import type { Language } from "../utils/translations";
 
 export interface SettingsContextType {
   language: Language;
@@ -10,6 +10,8 @@ export interface SettingsContextType {
   setActiveSettingsTab: (tab: string) => void;
   defaultPlayer: string;
   setDefaultPlayer: (player: string) => void;
+  transcodeMode: "auto" | "copy" | "full";
+  setTranscodeMode: (mode: "auto" | "copy" | "full") => void;
   tmdbApiKey: string;
   setTmdbApiKey: (key: string) => void;
   activeTheme: string;
@@ -26,8 +28,8 @@ export interface SettingsContextType {
   activePlaylistId: string;
   showAddPlaylistForm: boolean;
   setShowAddPlaylistForm: (show: boolean) => void;
-  playlistMode: 'm3u' | 'xtream';
-  setPlaylistMode: (mode: 'm3u' | 'xtream') => void;
+  playlistMode: "m3u" | "xtream";
+  setPlaylistMode: (mode: "m3u" | "xtream") => void;
   playlistFormName: string;
   setPlaylistFormName: (name: string) => void;
   m3uUrl: string;
@@ -39,6 +41,7 @@ export interface SettingsContextType {
   xtreamPass: string;
   setXtreamPass: (pass: string) => void;
   isParsing: boolean;
+  activeProfileId: string | null;
   hiddenCategories: string[];
   hiddenSeriesCategories: string[];
   hiddenMovieCategories: string[];
@@ -61,11 +64,15 @@ export interface SettingsContextType {
   onResetHiddenSeriesCategories: () => void;
   onResetHiddenMovieCategories: () => void;
   onSaveSetting: (key: string, value: any) => void;
+  onLoadSetting: (key: string, isJson?: boolean) => Promise<any>;
   onShowToast: (message: string) => void;
   onClearRecentlyWatched: () => void;
   onClearFavorites: () => void;
   onRefreshPlaylist: (playlist: SavedPlaylist) => void;
-  onUpdatePlaylistAutoUpdateInterval: (id: string, hours: 6 | 12 | 24 | 168) => void;
+  onUpdatePlaylistAutoUpdateInterval: (
+    id: string,
+    hours: 6 | 12 | 24 | 168,
+  ) => void;
 }
 
 export const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -73,7 +80,7 @@ export const SettingsContext = createContext<SettingsContextType | null>(null);
 export const useSettings = () => {
   const context = useContext(SettingsContext);
   if (!context) {
-    throw new Error('useSettings must be used within a SettingsProvider');
+    throw new Error("useSettings must be used within a SettingsProvider");
   }
   return context;
 };
@@ -83,7 +90,10 @@ interface SettingsProviderProps {
   children: React.ReactNode;
 }
 
-export const SettingsProvider = ({ value, children }: SettingsProviderProps) => {
+export const SettingsProvider = ({
+  value,
+  children,
+}: SettingsProviderProps) => {
   return (
     <SettingsContext.Provider value={value}>
       {children}

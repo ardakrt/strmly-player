@@ -184,6 +184,14 @@ export function parseSeriesEpisodeInfo(name: string): ParsedEpisodeInfo {
   });
 }
 
+// Stable series id derived from title + category, independent of any single
+// episode item's id. Use this everywhere a GroupedSeries id needs to be
+// (re)computed so favorites/watch-history keep matching the same series
+// across playlist re-parses.
+export function getSeriesId(cleanTitle: string, group: string): string {
+  return `series-${cleanTitle}:::${group || 'Genel'}`;
+}
+
 export function groupPlaylistItemsToSeries(items: PlaylistItem[]): GroupedSeries[] {
   const groups: Record<string, GroupedSeries> = {};
 
@@ -195,7 +203,7 @@ export function groupPlaylistItemsToSeries(items: PlaylistItem[]): GroupedSeries
 
     if (!groups[key]) {
       groups[key] = {
-        id: `series-${item.id}`,
+        id: getSeriesId(parsed.cleanTitle, item.group || 'Genel'),
         name: parsed.cleanTitle,
         logo: item.logo,
         group: item.group || 'Genel',

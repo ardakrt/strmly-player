@@ -168,7 +168,7 @@ export const getTmdbApiKey = () => {
   if (isValidTmdbKey(bundledKey)) return bundledKey;
   if (isValidTmdbKey(storedKey)) return storedKey;
   
-  return 'c7e12a2b1d8e1851399f4b92dc124332';
+  return '';
 };
 
 export const getTmdbLanguage = () => {

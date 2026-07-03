@@ -1,49 +1,77 @@
-import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
-import type { ContentPreference } from '../types';
-import { HERO_BACKDROPS } from '../constants';
-import { getAccentStylesHelper } from '../utils/helpers';
-import { APP_VIEWS } from '../navigation/views';
+import { useState, useEffect, useRef, useMemo, useDeferredValue } from "react";
+import type { ContentPreference } from "../types";
+import { HERO_BACKDROPS } from "../constants";
+import { getAccentStylesHelper } from "../utils/helpers";
+import { APP_VIEWS } from "../navigation/views";
 
-import { useProfilePreferences } from './useProfilePreferences';
-import { useProfiles } from './useProfiles';
-import { usePlaylists } from './usePlaylists';
-import { usePlayerState } from './usePlayerState';
-import { useAppBoot } from './useAppBoot';
-import { useHomeData } from './useHomeData';
-import { useAppSettings } from './useAppSettings';
-import { useSpotlightSearch } from './useSpotlightSearch';
-import { useFilteredCatalog } from './useFilteredCatalog';
-import { useAppSettingsContextValue } from './useAppSettingsContextValue';
-import { useTmdbCrawler } from './useTmdbCrawler';
-import { usePlaylistIndex } from './usePlaylistIndex';
-import { useAppCategories } from './useAppCategories';
-import { useDetailModal } from './useDetailModal';
-import { useDiagnostics } from './useDiagnostics';
-import { useGroupedSeriesReady } from './useGroupedSeriesReady';
-import { useDynamicIslandToast } from './useDynamicIslandToast';
-import { usePlaybackNavigation } from './usePlaybackNavigation';
+import { useProfilePreferences } from "./useProfilePreferences";
+import { useProfiles } from "./useProfiles";
+import { usePlaylists } from "./usePlaylists";
+import { usePlayerState } from "./usePlayerState";
+import { useAppBoot } from "./useAppBoot";
+import { useHomeData } from "./useHomeData";
+import { useAppSettings } from "./useAppSettings";
+import { useSpotlightSearch } from "./useSpotlightSearch";
+import { useFilteredCatalog } from "./useFilteredCatalog";
+import { useAppSettingsContextValue } from "./useAppSettingsContextValue";
+import { useTmdbCrawler } from "./useTmdbCrawler";
+import { usePlaylistIndex } from "./usePlaylistIndex";
+import { useAppCategories } from "./useAppCategories";
+import { useDetailModal } from "./useDetailModal";
+import { useDiagnostics } from "./useDiagnostics";
+import { useGroupedSeriesReady } from "./useGroupedSeriesReady";
+import { useDynamicIslandToast } from "./useDynamicIslandToast";
+import { usePlaybackNavigation } from "./usePlaybackNavigation";
 
 export function useAppProvider() {
   const appSettings = useAppSettings();
   const {
-    toast, showToast, hideToast, isParsing, setIsParsing, sortOption, setSortOption,
-    qualityFilter, setQualityFilter, defaultPlayer,
-    tmdbApiKey, activeAccent, activeTheme,
-    glassIntensity, neonGlowEnabled, language,
-    setLanguageState, scrolled, setScrolled, selectedGroup, setSelectedGroup,
-    categorySearchQuery, saveAppSetting, loadAppSetting,
-    setActiveProfileIdSettings, setActiveSettingsTab, setGlassIntensity,
-    setNeonGlowEnabled, setCardLayoutSize, setDefaultPlayer, setTmdbApiKey,
-    setActiveAccent, setActiveTheme,
+    toast,
+    showToast,
+    hideToast,
+    isParsing,
+    setIsParsing,
+    sortOption,
+    setSortOption,
+    qualityFilter,
+    setQualityFilter,
+    defaultPlayer,
+    tmdbApiKey,
+    activeAccent,
+    activeTheme,
+    glassIntensity,
+    neonGlowEnabled,
+    language,
+    setLanguageState,
+    scrolled,
+    setScrolled,
+    selectedGroup,
+    setSelectedGroup,
+    categorySearchQuery,
+    saveAppSetting,
+    loadAppSetting,
+    setActiveProfileIdSettings,
+    setActiveSettingsTab,
+    setGlassIntensity,
+    setNeonGlowEnabled,
+    setCardLayoutSize,
+    setDefaultPlayer,
+    setTmdbApiKey,
+    setActiveAccent,
+    setActiveTheme,
+    setTranscodeMode,
   } = appSettings;
 
   const preferences = useProfilePreferences({
-    loadAppSetting: (key, isJson, profileId) => loadAppSetting(key, isJson, profileId),
+    loadAppSetting: (key, isJson, profileId) =>
+      loadAppSetting(key, isJson, profileId),
   });
 
   const playlistsHook = usePlaylists({
-    saveAppSetting: (key, val, profileId) => saveAppSetting(key, val, profileId),
-    loadAppSetting: (key, isJson, profileId) => loadAppSetting(key, isJson, profileId),
+    saveAppSetting: (key, val, profileId) =>
+      saveAppSetting(key, val, profileId),
+    loadAppSetting: (key, isJson, profileId) =>
+      loadAppSetting(key, isJson, profileId),
     showToast: (msg) => showToast(msg),
     setSelectedGroup,
     isParsing,
@@ -90,12 +118,15 @@ export function useAppProvider() {
     setNeonGlowEnabled,
     setCardLayoutSize,
     showToast,
+    setTranscodeMode,
   });
 
   const profilesHook = useProfiles({
     tmdbApiKey,
-    saveAppSetting: (key, val, profileId) => saveAppSetting(key, val, profileId),
-    loadAppSetting: (key, isJson, profileId) => loadAppSetting(key, isJson, profileId),
+    saveAppSetting: (key, val, profileId) =>
+      saveAppSetting(key, val, profileId),
+    loadAppSetting: (key, isJson, profileId) =>
+      loadAppSetting(key, isJson, profileId),
     showToast: (msg) => showToast(msg),
     loadProfileData: (id) => loadProfileData(id, false),
     resetAllProfileData: () => resetAllProfileData(),
@@ -115,15 +146,24 @@ export function useAppProvider() {
   }, [activeProfileId, setActiveProfileIdSettings]);
 
   const {
-    favoriteCategories, setFavoriteCategories,
-    customCategoryOrder, setCustomCategoryOrder,
-    hiddenCategories, setHiddenCategories,
-    favoriteSeriesCategories, setFavoriteSeriesCategories,
-    customSeriesCategoryOrder, setCustomSeriesCategoryOrder,
-    hiddenSeriesCategories, setHiddenSeriesCategories,
-    favoriteMovieCategories, setFavoriteMovieCategories,
-    customMovieCategoryOrder, setCustomMovieCategoryOrder,
-    hiddenMovieCategories, setHiddenMovieCategories,
+    favoriteCategories,
+    setFavoriteCategories,
+    customCategoryOrder,
+    setCustomCategoryOrder,
+    hiddenCategories,
+    setHiddenCategories,
+    favoriteSeriesCategories,
+    setFavoriteSeriesCategories,
+    customSeriesCategoryOrder,
+    setCustomSeriesCategoryOrder,
+    hiddenSeriesCategories,
+    setHiddenSeriesCategories,
+    favoriteMovieCategories,
+    setFavoriteMovieCategories,
+    customMovieCategoryOrder,
+    setCustomMovieCategoryOrder,
+    hiddenMovieCategories,
+    setHiddenMovieCategories,
   } = preferences;
 
   const {
@@ -136,7 +176,8 @@ export function useAppProvider() {
   } = playlistsHook;
 
   const {
-    selectedChannel, setSelectedChannel,
+    selectedChannel,
+    setSelectedChannel,
     globalFavorites,
     recentlyWatched,
     toggleFavorite,
@@ -146,8 +187,8 @@ export function useAppProvider() {
     removeFromRecentlyWatched,
   } = playerState;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const dynamicIslandToast = useDynamicIslandToast({ toast, hideToast });
@@ -173,7 +214,9 @@ export function useAppProvider() {
     itemBuckets,
   } = playlistIndex;
 
-  const { isSeriesReady, allGroupedSeries } = useGroupedSeriesReady(itemBuckets.series);
+  const { isSeriesReady, allGroupedSeries } = useGroupedSeriesReady(
+    itemBuckets.series,
+  );
 
   const {
     showSpotlight,
@@ -199,10 +242,15 @@ export function useAppProvider() {
   });
 
   const {
-    activeLiveCategory, setActiveLiveCategory,
-    activeMovieCategory, setActiveMovieCategory,
-    activeSeriesCategory, setActiveSeriesCategory,
-    liveCat, seriesCat, movieCat,
+    activeLiveCategory,
+    setActiveLiveCategory,
+    activeMovieCategory,
+    setActiveMovieCategory,
+    activeSeriesCategory,
+    setActiveSeriesCategory,
+    liveCat,
+    seriesCat,
+    movieCat,
     visibleLiveCategoryLimit,
     setVisibleLiveCategoryLimit,
     visibleSeriesCategoryLimit,
@@ -273,12 +321,15 @@ export function useAppProvider() {
     showToast,
   });
 
-  const itemStats = useMemo(() => ({
-    live: itemBuckets.live.length,
-    movie: itemBuckets.movie.length,
-    series: itemBuckets.series.length,
-    total: items.length,
-  }), [itemBuckets, items.length]);
+  const itemStats = useMemo(
+    () => ({
+      live: itemBuckets.live.length,
+      movie: itemBuckets.movie.length,
+      series: itemBuckets.series.length,
+      total: items.length,
+    }),
+    [itemBuckets, items.length],
+  );
 
   const {
     showcaseItems,
@@ -300,27 +351,24 @@ export function useAppProvider() {
     activeContentPreferences,
   });
 
-  const {
-    filteredDisplayItems,
-    groupedSeriesList,
-    favoriteSeriesList,
-  } = useFilteredCatalog({
-    items,
-    itemBuckets,
-    playlistIndex,
-    allGroupedSeries,
-    selectedGroup,
-    globalFavorites,
-    activeLiveCategory,
-    activeMovieCategory,
-    activeSeriesCategory,
-    hiddenCategories,
-    hiddenMovieCategories,
-    hiddenSeriesCategories,
-    deferredSearchQuery,
-    sortOption,
-    qualityFilter,
-  });
+  const { filteredDisplayItems, groupedSeriesList, favoriteSeriesList } =
+    useFilteredCatalog({
+      items,
+      itemBuckets,
+      playlistIndex,
+      allGroupedSeries,
+      selectedGroup,
+      globalFavorites,
+      activeLiveCategory,
+      activeMovieCategory,
+      activeSeriesCategory,
+      hiddenCategories,
+      hiddenMovieCategories,
+      hiddenSeriesCategories,
+      deferredSearchQuery,
+      sortOption,
+      qualityFilter,
+    });
 
   const [hasInitialBooted, setHasInitialBooted] = useState(false);
 
@@ -338,7 +386,10 @@ export function useAppProvider() {
   );
   const isPlaylistHero = showcaseItems.length > 0;
   const currentHeroItem = useMemo(
-    () => (isPlaylistHero ? (showcaseItems[activeFeaturedIndex] as typeof items[number]) : null),
+    () =>
+      isPlaylistHero
+        ? (showcaseItems[activeFeaturedIndex] as (typeof items)[number])
+        : null,
     [isPlaylistHero, showcaseItems, activeFeaturedIndex],
   );
   const fallbackHeroItem = useMemo(
@@ -351,24 +402,38 @@ export function useAppProvider() {
   }, [selectedGroup, searchQuery, activePlaylistId, setVisibleCount]);
 
   useEffect(() => {
-    setSortOption('default');
-    setQualityFilter('all');
-  }, [selectedGroup, activeLiveCategory, activeMovieCategory, activeSeriesCategory, activePlaylistId, setSortOption, setQualityFilter]);
+    setSortOption("default");
+    setQualityFilter("all");
+  }, [
+    selectedGroup,
+    activeLiveCategory,
+    activeMovieCategory,
+    activeSeriesCategory,
+    activePlaylistId,
+    setSortOption,
+    setQualityFilter,
+  ]);
 
   const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
     const scrollTop = e.currentTarget.scrollTop;
     setScrolled(scrollTop > 10);
-    const bottom = e.currentTarget.scrollHeight - e.currentTarget.scrollTop <= e.currentTarget.clientHeight + 800;
+    const bottom =
+      e.currentTarget.scrollHeight - e.currentTarget.scrollTop <=
+      e.currentTarget.clientHeight + 800;
     if (bottom) {
-      setVisibleCount(prev => prev + 100);
+      setVisibleCount((prev) => prev + 100);
     }
   };
 
-  const handleScrollSlider = (sliderId: string, direction: 'left' | 'right') => {
+  const handleScrollSlider = (
+    sliderId: string,
+    direction: "left" | "right",
+  ) => {
     const el = document.getElementById(sliderId);
     if (el) {
-      const scrollAmount = direction === 'left' ? -el.clientWidth * 0.75 : el.clientWidth * 0.75;
-      el.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      const scrollAmount =
+        direction === "left" ? -el.clientWidth * 0.75 : el.clientWidth * 0.75;
+      el.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };
 
@@ -388,17 +453,24 @@ export function useAppProvider() {
 
   useEffect(() => {
     if (selectedGroup !== APP_VIEWS.home) return;
-    const maxItems = showcaseItems.length > 0 ? showcaseItems.length : HERO_BACKDROPS.length;
+    const maxItems =
+      showcaseItems.length > 0 ? showcaseItems.length : HERO_BACKDROPS.length;
     if (maxItems <= 1) return;
 
     const timer = setInterval(() => {
-      setActiveFeaturedIndex(prev => (prev + 1) % maxItems);
+      setActiveFeaturedIndex((prev) => (prev + 1) % maxItems);
     }, 8000);
 
     return () => clearInterval(timer);
-  }, [selectedGroup, showcaseItems.length, activeFeaturedIndex, setActiveFeaturedIndex]);
+  }, [
+    selectedGroup,
+    showcaseItems.length,
+    activeFeaturedIndex,
+    setActiveFeaturedIndex,
+  ]);
 
-  const getAccentStyles = () => getAccentStylesHelper(activeAccent, glassIntensity, neonGlowEnabled);
+  const getAccentStyles = () =>
+    getAccentStylesHelper(activeAccent, glassIntensity, neonGlowEnabled);
 
   useTmdbCrawler({
     loaded,
@@ -426,16 +498,22 @@ export function useAppProvider() {
     movieCat,
     items,
     itemStats,
+    activeProfileId,
   });
 
   const liveFavCatsToShow = favoriteCategories.filter(
-    group => uniqueLiveCategories.includes(group) && !hiddenCategories.includes(group),
+    (group) =>
+      uniqueLiveCategories.includes(group) && !hiddenCategories.includes(group),
   );
   const seriesFavCatsToShow = favoriteSeriesCategories.filter(
-    group => uniqueSeriesCategories.includes(group) && !hiddenSeriesCategories.includes(group),
+    (group) =>
+      uniqueSeriesCategories.includes(group) &&
+      !hiddenSeriesCategories.includes(group),
   );
   const movieFavCatsToShow = favoriteMovieCategories.filter(
-    group => uniqueMovieCategories.includes(group) && !hiddenMovieCategories.includes(group),
+    (group) =>
+      uniqueMovieCategories.includes(group) &&
+      !hiddenMovieCategories.includes(group),
   );
 
   return {
@@ -493,6 +571,7 @@ export function useAppProvider() {
       favItems: filteredDisplayItems,
       favSeries: favoriteSeriesList,
       groupedSeriesList,
+      allGroupedSeries,
       itemStats,
       checkedStatusMap,
       isCheckingHealth,

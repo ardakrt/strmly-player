@@ -24,10 +24,12 @@ import {
   Tag,
   Cpu,
   Code,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import type { SavedPlaylist } from '../types';
+import { useDownloads } from '../hooks/useDownloads';
 
 const ACCENT_COLORS = [
   { color: '#FFFFFF', name: 'Beyaz' },
@@ -193,7 +195,7 @@ function EmptyState({ icon: Icon, title, description }: { icon: React.ComponentT
   );
 }
 
-export const SettingsPanel = () => {
+export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => void }) => {
   const {
     language, setLanguage, t,
     activeSettingsTab, setActiveSettingsTab,
@@ -225,6 +227,8 @@ export const SettingsPanel = () => {
     onUpdatePlaylistAutoUpdateInterval
   } = useSettings();
 
+  const { downloads } = useDownloads();
+
   const safePlaylists = Array.isArray(playlists) ? playlists : EMPTY_ARRAY;
   const safeHiddenCategories = Array.isArray(hiddenCategories) ? hiddenCategories : EMPTY_ARRAY;
   const safeHiddenSeriesCategories = Array.isArray(hiddenSeriesCategories) ? hiddenSeriesCategories : EMPTY_ARRAY;
@@ -244,6 +248,41 @@ export const SettingsPanel = () => {
     progress?: number;
   }>({ status: 'idle', message: '' });
   const hasAutoCheckedUpdatesRef = useRef(false);
+
+  const [downloadsFolder, setDownloadsFolder] = useState<string>('');
+  const [showMoveDownloadsPrompt, setShowMoveDownloadsPrompt] = useState<boolean>(false);
+  const [pendingDownloadsFolder, setPendingDownloadsFolder] = useState<string>('');
+  const [moveExistingDownloads, setMoveExistingDownloads] = useState<boolean>(true);
+  const [isMovingDownloads, setIsMovingDownloads] = useState<boolean>(false);
+  const [moveProgress, setMoveProgress] = useState<{
+    percent: number;
+    currentFile: string;
+    filesMoved: number;
+    totalFiles: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (window.electronAPI?.getDownloadsFolder) {
+      window.electronAPI.getDownloadsFolder().then(setDownloadsFolder).catch(console.error);
+    } else {
+      setDownloadsFolder(language === 'tr' ? 'Varsayılan (Videolar/Strmly)' : 'Default (Videos/Strmly)');
+    }
+  }, [language]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onMoveDownloadsProgress) return;
+    const unsub = window.electronAPI.onMoveDownloadsProgress((data) => {
+      setMoveProgress({
+        percent: data.progress,
+        currentFile: data.currentFile,
+        filesMoved: data.filesMoved,
+        totalFiles: data.totalFiles
+      });
+    });
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI || !window.electronAPI.onUpdateStatus || !window.electronAPI.onUpdateProgress) return;
@@ -382,6 +421,7 @@ export const SettingsPanel = () => {
     { id: 'players', label: t('settings.tabs.players'), icon: Activity },
     { id: 'playlists', label: t('settings.tabs.playlists'), icon: Database },
     { id: 'categories', label: t('settings.tabs.categories'), icon: EyeOff },
+    { id: 'downloads', label: language === 'tr' ? 'Kaydedilenler' : 'Saved', icon: Download },
     { id: 'appearance', label: t('settings.tabs.appearance'), icon: Palette },
     { id: 'playback', label: t('settings.tabs.playback'), icon: Check },
     { id: 'network', label: t('settings.tabs.network'), icon: UploadCloud },
@@ -674,6 +714,88 @@ export const SettingsPanel = () => {
                   />
                 </SettingRow>
  
+              </div>
+            </>
+          )}
+
+          {activeTab.id === 'downloads' && (
+            <>
+              <PageHeader
+                title={language === 'tr' ? 'Kaydedilenler' : 'Saved'}
+                description={language === 'tr' ? 'İndirdiğiniz ve kaydettiğiniz medyaları tam ekran yöneticide düzenleyin.' : 'Manage your downloaded and saved media in the full-screen manager.'}
+              />
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col items-center justify-center text-center p-8 rounded-2xl border border-white/5 bg-white/[0.01] backdrop-blur-md shadow-xl py-12">
+                  <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--accent-color)]/20 bg-[var(--accent-color)]/5 text-[var(--accent-color)] shadow-lg shadow-[var(--accent-color)]/5 animate-pulse-slow">
+                    <Download size={28} />
+                  </div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    {language === 'tr' ? 'Gelişmiş İndirme Yöneticisi' : 'Advanced Download Manager'}
+                  </h3>
+                  <p className="mt-2 max-w-sm text-xs leading-relaxed text-neutral-400 font-medium">
+                    {language === 'tr'
+                      ? 'İndirme hızlarını takip etmek, disk alanı durumunu kontrol etmek ve tüm indirmelerinizi modern bir arayüzle yönetmek için tam ekran indirme yöneticisini açın.'
+                      : 'Open the full-screen download manager to track download speeds, monitor disk space usage, and manage all your downloads in a modern interface.'}
+                  </p>
+
+                  {downloads.length > 0 && (
+                    <div className="mt-6 mb-8 flex gap-6 px-6 py-3.5 rounded-xl bg-black/30 border border-white/5">
+                      <div className="text-center">
+                        <span className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Ögeler' : 'Items'}</span>
+                        <span className="block mt-0.5 text-sm font-black text-white">{downloads.length}</span>
+                      </div>
+                      <div className="w-px bg-white/5" />
+                      <div className="text-center">
+                        <span className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Durum' : 'Status'}</span>
+                        <span className="block mt-0.5 text-sm font-black text-emerald-400">
+                          {downloads.filter(d => d.status === 'completed').length} {language === 'tr' ? 'Hazır' : 'Ready'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => onNavigate?.('İndirilenler')}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[var(--accent-color)] px-6 text-xs font-black uppercase tracking-wider text-black transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-lg shadow-[var(--accent-color)]/10"
+                  >
+                    <Download size={14} strokeWidth={2.5} />
+                    <span>{language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved Media'}</span>
+                  </button>
+                </div>
+
+                {/* Kayıt Konumu Ayarı */}
+                <div className="p-6 rounded-2xl border border-white/5 bg-white/[0.01] backdrop-blur-md shadow-xl flex flex-col gap-4 text-left animate-fade-in">
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-black text-white tracking-wide flex items-center gap-2">
+                      <HardDrive size={16} className="text-[var(--accent-color)]" />
+                      <span>{language === 'tr' ? 'Kayıt Klasörü' : 'Save Directory'}</span>
+                    </h4>
+                    <p className="text-xs text-neutral-400 font-medium leading-relaxed">
+                      {language === 'tr'
+                        ? 'Dizi ve filmlerin indirileceği varsayılan disk konumunu seçin.'
+                        : 'Choose the default storage directory for your movies and series downloads.'}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/5 text-xs text-neutral-300 font-mono select-text truncate">
+                      {downloadsFolder || (language === 'tr' ? 'Yükleniyor...' : 'Loading...')}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!window.electronAPI?.selectDownloadsFolder) return;
+                        const res = await window.electronAPI.selectDownloadsFolder();
+                        if (!res.canceled && res.filePath) {
+                          setPendingDownloadsFolder(res.filePath);
+                          setShowMoveDownloadsPrompt(true);
+                        }
+                      }}
+                      className="h-11 px-4 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      <span>{language === 'tr' ? 'Konumu Değiştir' : 'Change Location'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -1595,6 +1717,141 @@ export const SettingsPanel = () => {
           )}
         </section>
       </div>
+      {showMoveDownloadsPrompt && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
+          <div className="relative w-full max-w-md bg-neutral-950 border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 animate-scale-in text-left">
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-lg font-black text-white leading-tight">
+                {language === 'tr' ? 'İndirme Konumunu Değiştir' : 'Change Download Directory'}
+              </h3>
+              <p className="text-xs text-neutral-400 font-medium leading-relaxed">
+                {language === 'tr'
+                  ? `Yeni klasör konumu: ${pendingDownloadsFolder}`
+                  : `New directory location: ${pendingDownloadsFolder}`}
+              </p>
+            </div>
+
+            {isMovingDownloads ? (
+              <div className="flex flex-col gap-4 py-2 animate-fade-in text-left">
+                <div className="flex justify-between items-center text-xs font-bold text-white">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                    <span>{language === 'tr' ? 'Dosyalar Taşınıyor...' : 'Moving Files...'}</span>
+                  </span>
+                  <span>{moveProgress ? `%${moveProgress.percent}` : '%0'}</span>
+                </div>
+                
+                {/* Progress Bar Container */}
+                <div className="w-full bg-white/5 border border-white/5 rounded-full h-3 overflow-hidden p-0.5">
+                  <div
+                    className="h-full rounded-full transition-all duration-300 shadow-[0_0_8px_var(--accent-glow)]"
+                    style={{
+                      width: `${moveProgress ? moveProgress.percent : 0}%`,
+                      backgroundColor: 'var(--accent-color)'
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 mt-1 bg-white/[0.01] border border-white/5 p-3 rounded-2xl">
+                  <div className="flex justify-between items-center text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
+                    <span>{language === 'tr' ? 'Taşınan Ögeler' : 'Moved Items'}</span>
+                    <span className="text-white">
+                      {moveProgress ? `${moveProgress.filesMoved} / ${moveProgress.totalFiles}` : '0 / 0'}
+                    </span>
+                  </div>
+                  {moveProgress?.currentFile && (
+                    <div className="text-[10px] text-neutral-500 font-mono select-text truncate mt-1 border-t border-white/5 pt-1.5 leading-relaxed">
+                      <span className="text-neutral-400 font-bold">{language === 'tr' ? 'Dosya:' : 'File:'}</span> {moveProgress.currentFile}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-white">
+                    {language === 'tr' ? 'Mevcut Dosyaları Taşı' : 'Move Existing Files'}
+                  </span>
+                  <span className="text-[10px] text-neutral-500 font-medium">
+                    {language === 'tr'
+                      ? 'Eski klasördeki tüm indirmelerinizi yeni konuma otomatik taşır.'
+                      : 'Automatically moves all existing downloads from the old directory to the new directory.'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setMoveExistingDownloads(!moveExistingDownloads)}
+                  className={`w-12 h-6.5 rounded-full p-[3px] transition-all duration-300 relative cursor-pointer border ${
+                    moveExistingDownloads
+                      ? 'border-transparent shadow-[0_0_12px_var(--accent-glow)]'
+                      : 'bg-black/40 border-white/10 hover:border-white/20'
+                  }`}
+                  style={moveExistingDownloads ? { backgroundColor: 'var(--accent-color)' } : {}}
+                >
+                  <div
+                    className={`w-4.5 h-4.5 rounded-full shadow-md transition-all duration-300 ${
+                      moveExistingDownloads ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                    style={{
+                      backgroundColor: moveExistingDownloads
+                        ? (activeAccent === '#FFFFFF' || activeAccent === '#fff' ? '#000000' : '#FFFFFF')
+                        : '#9CA3AF'
+                    }}
+                  />
+                </button>
+              </div>
+            )}
+
+            {!isMovingDownloads ? (
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={() => {
+                    setShowMoveDownloadsPrompt(false);
+                    setPendingDownloadsFolder('');
+                  }}
+                  className="flex-1 py-3 border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-xs font-bold text-white rounded-xl transition-all cursor-pointer text-center"
+                >
+                  {language === 'tr' ? 'İptal' : 'Cancel'}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!window.electronAPI?.setDownloadsFolder) return;
+                    setIsMovingDownloads(true);
+                    setMoveProgress({ percent: 0, currentFile: '', filesMoved: 0, totalFiles: 0 });
+                    try {
+                      const res = await window.electronAPI.setDownloadsFolder({
+                        folderPath: pendingDownloadsFolder,
+                        moveExisting: moveExistingDownloads
+                      });
+                      if (res?.success) {
+                        setDownloadsFolder(pendingDownloadsFolder);
+                        onShowToast(language === 'tr' ? 'İndirme konumu güncellendi!' : 'Download directory updated!');
+                      } else {
+                        onShowToast(language === 'tr' ? `Hata: ${res?.error}` : `Error: ${res?.error}`);
+                      }
+                    } catch (err: any) {
+                      onShowToast(language === 'tr' ? `Hata: ${err.message}` : `Error: ${err.message}`);
+                    } finally {
+                      setIsMovingDownloads(false);
+                      setShowMoveDownloadsPrompt(false);
+                      setPendingDownloadsFolder('');
+                      setMoveProgress(null);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-white hover:bg-neutral-200 text-black text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
+                >
+                  <span>{language === 'tr' ? 'Uygula' : 'Apply'}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="text-[10px] text-neutral-500 text-center font-medium mt-1 animate-pulse-slow">
+                {language === 'tr'
+                  ? 'Lütfen aktarım tamamlanana kadar uygulamayı kapatmayın.'
+                  : 'Please do not close the application until transfer completes.'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

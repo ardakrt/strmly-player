@@ -221,19 +221,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     return null;
   }, [currentEpisodeIndex, sortedSiblings]);
 
-  // Early autoplay trigger at 20 seconds remaining (for long videos)
-  useEffect(() => {
-    if (
-      channel.type === 'series' &&
-      nextEpisode &&
-      duration > 35 &&
-      autoPlayNext &&
-      !isAutoplayCancelled &&
-      duration - currentTime <= 20
-    ) {
-      onChannelChange(nextEpisode);
-    }
-  }, [currentTime, duration, channel, nextEpisode, autoPlayNext, isAutoplayCancelled, onChannelChange]);
+
 
   // Fallback autoplay trigger when jenerik ends naturally (essential for short videos or if seeking near end)
   useEffect(() => {
@@ -470,7 +458,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             />
           ))}
         </video>
-        {channel.type === 'series' && nextEpisode && duration > 35 && (duration - currentTime <= 35) && (duration - currentTime > 20) && !isAutoplayCancelled && (
+        {channel.type === 'series' && nextEpisode && duration > 35 && (duration - currentTime <= 35) && (duration - currentTime > 1) && !isAutoplayCancelled && (
           <div
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-28 right-8 z-30 bg-neutral-950/90 border border-white/10 backdrop-blur-2xl p-5 rounded-2xl shadow-2xl flex flex-col gap-3 min-w-[280px] max-w-[90%] animate-scale-in"
@@ -480,7 +468,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               <span className="text-xs font-bold text-white line-clamp-1">{nextEpisode.name}</span>
               <span className="text-[10px] text-neutral-400">
                 {autoPlayNext
-                  ? (language === 'tr' ? `${Math.max(0, Math.ceil(duration - currentTime - 20))} saniye içinde başlıyor...` : `Starting in ${Math.max(0, Math.ceil(duration - currentTime - 20))} seconds...`)
+                  ? (language === 'tr' ? `${Math.max(0, Math.ceil(duration - currentTime))} saniye içinde başlıyor...` : `Starting in ${Math.max(0, Math.ceil(duration - currentTime))} seconds...`)
                   : (language === 'tr' ? 'Sonraki bölüm hazır' : 'Next episode is ready')}
               </span>
             </div>

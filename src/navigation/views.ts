@@ -6,6 +6,7 @@ export const APP_VIEWS = {
   favorites: 'Favorilerim',
   diagnostics: 'İstatistikler',
   settings: 'Ayarlar',
+  downloads: 'İndirilenler',
 } as const;
 
 export type AppView = typeof APP_VIEWS[keyof typeof APP_VIEWS];

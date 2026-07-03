@@ -142,7 +142,9 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
 
       try {
         const cached = await tmdbCache.get(cacheKey);
-        if (cached) {
+        // Self-healing: If cached metadata exists but posterUrl is null, and it was a successful TMDB match
+        // (meaning it has a rating, year, or overview), let's bypass the cache to re-resolve the poster.
+        if (cached && (cached.posterUrl !== null || (!cached.rating && !cached.year && !cached.overview))) {
           globalVodMetadataMap.set(cacheKey, cached);
           if (!cancelled) setMetadata(cached);
           return;

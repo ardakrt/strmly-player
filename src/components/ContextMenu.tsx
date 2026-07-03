@@ -7,6 +7,7 @@ export interface ContextMenuItem {
   icon: ReactNode;
   onSelect: () => void;
   danger?: boolean;
+  disabled?: boolean;
   separatorBefore?: boolean;
 }
 
@@ -73,14 +74,19 @@ export function ContextMenu({ x, y, title, subtitle, items, onClose }: ContextMe
           <button
             type="button"
             role="menuitem"
+            disabled={item.disabled}
             className={`w-full h-11 px-3.5 rounded-xl flex items-center gap-3.5 text-left text-[13px] leading-none font-semibold transition-colors ${
-              item.danger
-                ? 'text-red-400 hover:bg-red-500/15 hover:text-red-300'
-                : 'text-neutral-100 hover:bg-white/10 hover:text-white'
+              item.disabled
+                ? 'text-neutral-600 cursor-not-allowed'
+                : item.danger
+                  ? 'text-red-400 hover:bg-red-500/15 hover:text-red-300'
+                  : 'text-neutral-100 hover:bg-white/10 hover:text-white'
             }`}
             onClick={() => {
-              item.onSelect();
-              onClose();
+              if (!item.disabled) {
+                item.onSelect();
+                onClose();
+              }
             }}
           >
             <span className="w-[18px] h-[18px] flex items-center justify-center shrink-0 text-current">{item.icon}</span>

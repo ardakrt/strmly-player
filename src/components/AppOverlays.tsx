@@ -8,7 +8,7 @@ interface AppOverlaysProps {
 }
 
 export function AppOverlays({ app }: AppOverlaysProps) {
-  const { ui, spotlight, modals, catalog, playback } = app;
+  const { ui, spotlight, modals, catalog, playback, navigation } = app;
 
   return (
     <>
@@ -54,6 +54,10 @@ export function AppOverlays({ app }: AppOverlaysProps) {
         toggleFavorite={catalog.toggleFavorite}
         setActiveSeason={modals.setActiveSeason}
         setExpandedEpisodeId={modals.setExpandedEpisodeId}
+        onNavigateToDownloads={() => {
+          navigation.setSelectedGroup('İndirilenler');
+          modals.setSelectedSeriesForModal(null);
+        }}
       />
     </>
   );

@@ -15,6 +15,17 @@ export function useAppSettings() {
     setToast({ show: false, message: '' });
   }, []);
 
+  useEffect(() => {
+    const handleShowToast = (e: Event) => {
+      const customEvt = e as CustomEvent<{ message: string }>;
+      if (customEvt.detail?.message) {
+        showToast(customEvt.detail.message);
+      }
+    };
+    window.addEventListener('show-toast', handleShowToast);
+    return () => window.removeEventListener('show-toast', handleShowToast);
+  }, [showToast]);
+
   const [isParsing, setIsParsing] = useState(false);
   const [sortOption, setSortOption] = useState<string>('default');
   const [qualityFilter, setQualityFilter] = useState<string>('all');
@@ -72,6 +83,18 @@ export function useAppSettings() {
   const [cardLayoutSize, setCardLayoutSize] = useState<string>('medium');
   const [activeSettingsTab, setActiveSettingsTab] = useState<string>('players');
 
+  const [transcodeMode, setTranscodeModeState] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('cinema_transcode_mode');
+      if (stored) {
+        return stored.startsWith('"') ? JSON.parse(stored) : stored;
+      }
+    } catch {
+      // Ignore
+    }
+    return 'full';
+  });
+
   const [language, setLanguageState] = useState<Language>(() => {
     try {
       const stored = localStorage.getItem('cinema_language');
@@ -90,7 +113,68 @@ export function useAppSettings() {
   }, [language]);
 
   const [scrolled, setScrolled] = useState<boolean>(false);
-  const [selectedGroup, setSelectedGroup] = useState<string>('Ana Sayfa');
+  const [selectedGroup, setSelectedGroupState] = useState<string>('Ana Sayfa');
+  const historyRef = useRef<string[]>(['Ana Sayfa']);
+  const historyIndexRef = useRef<number>(0);
+
+  const setSelectedGroup = useCallback((group: string | ((prev: string) => string)) => {
+    setSelectedGroupState((prev) => {
+      const nextGroup = typeof group === 'function' ? group(prev) : group;
+      if (nextGroup === prev) return prev;
+
+      const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+      newHistory.push(nextGroup);
+      if (newHistory.length > 50) {
+        newHistory.shift();
+      }
+      historyRef.current = newHistory;
+      historyIndexRef.current = newHistory.length - 1;
+      return nextGroup;
+    });
+  }, []);
+
+  const navigateBack = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current--;
+      const prevGroup = historyRef.current[historyIndexRef.current];
+      setSelectedGroupState(prevGroup);
+    }
+  }, []);
+
+  const navigateForward = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current++;
+      const nextGroup = historyRef.current[historyIndexRef.current];
+      setSelectedGroupState(nextGroup);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        navigateBack();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        navigateForward();
+      }
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+
+    const unsubBack = window.electronAPI?.onNavigateBack?.(() => {
+      navigateBack();
+    });
+    const unsubForward = window.electronAPI?.onNavigateForward?.(() => {
+      navigateForward();
+    });
+
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+      if (unsubBack) unsubBack();
+      if (unsubForward) unsubForward();
+    };
+  }, [navigateBack, navigateForward]);
+
   const [categorySearchQuery, setCategorySearchQuery] = useState('');
 
   const saveAppSetting = useCallback(async (key: string, value: unknown, profileIdOverride?: string | null) => {
@@ -99,7 +183,11 @@ export function useAppSettings() {
     if (profId && !GLOBAL_KEYS.includes(key)) {
       finalKey = `profile_${profId}_${key}`;
     }
-    localStorage.setItem(finalKey, typeof value === 'string' ? value : JSON.stringify(value));
+    const newValueStr = typeof value === 'string' ? value : JSON.stringify(value);
+    if (localStorage.getItem(finalKey) === newValueStr) {
+      return;
+    }
+    localStorage.setItem(finalKey, newValueStr);
 
     const api = window.electronAPI;
     if (api && api.saveConfig) {
@@ -128,6 +216,11 @@ export function useAppSettings() {
       }
     }
   }, []);
+
+  const setTranscodeMode = useCallback((mode: string) => {
+    setTranscodeModeState(mode);
+    saveAppSetting('cinema_transcode_mode', mode);
+  }, [saveAppSetting]);
 
   const loadAppSetting = useCallback(async (key: string, isJson = false, profileIdOverride?: string | null): Promise<any> => {
     let finalKey = key;
@@ -161,6 +254,8 @@ export function useAppSettings() {
     setQualityFilter,
     defaultPlayer,
     setDefaultPlayer,
+    transcodeMode,
+    setTranscodeMode,
     tmdbApiKey,
     setTmdbApiKey,
     activeAccent,

@@ -22,6 +22,7 @@ interface UseAppBootProps {
   setNeonGlowEnabled: (enabled: boolean) => void;
   setCardLayoutSize: (size: string) => void;
   showToast: (msg: string) => void;
+  setTranscodeMode?: (mode: 'auto' | 'copy' | 'full') => void;
 }
 
 export function useAppBoot({
@@ -39,7 +40,8 @@ export function useAppBoot({
   setGlassIntensity,
   setNeonGlowEnabled,
   setCardLayoutSize,
-  showToast
+  showToast,
+  setTranscodeMode
 }: UseAppBootProps) {
   const [loaded, setLoaded] = useState(false);
   const [splashStatus, setSplashStatus] = useState<string>(() => {
@@ -201,7 +203,8 @@ export function useAppBoot({
         configGlass,
         configGlow,
         configCardSize,
-        configLanguage
+        configLanguage,
+        configTranscodeMode
       ] = await Promise.all([
         loadAppSetting('cinema_profiles', true),
         loadAppSetting('cinema_default_player'),
@@ -210,7 +213,8 @@ export function useAppBoot({
         loadAppSetting('cinema_glass_intensity'),
         loadAppSetting('cinema_neon_glow'),
         loadAppSetting('cinema_card_layout_size'),
-        loadAppSetting('cinema_language')
+        loadAppSetting('cinema_language'),
+        loadAppSetting('cinema_transcode_mode')
       ]);
 
       let loadedProfiles = Array.isArray(savedProfiles) ? savedProfiles : [];
@@ -225,6 +229,9 @@ export function useAppBoot({
       setCardLayoutSize(configCardSize || 'medium');
       if (configLanguage === 'en' || configLanguage === 'tr') {
         setLanguageState(configLanguage);
+      }
+      if (setTranscodeMode && (configTranscodeMode === 'auto' || configTranscodeMode === 'copy' || configTranscodeMode === 'full')) {
+        setTranscodeMode(configTranscodeMode);
       }
 
       // Legacy profile migration

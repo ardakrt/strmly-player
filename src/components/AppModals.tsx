@@ -20,6 +20,7 @@ interface AppModalsProps {
   toggleFavorite: (id: string, e?: React.MouseEvent) => void;
   setActiveSeason: (season: number) => void;
   setExpandedEpisodeId: (id: string | null) => void;
+  onNavigateToDownloads?: () => void;
 }
 
 export function AppModals({
@@ -37,6 +38,7 @@ export function AppModals({
   toggleFavorite,
   setActiveSeason,
   setExpandedEpisodeId,
+  onNavigateToDownloads,
 }: AppModalsProps) {
   return (
     <>
@@ -68,6 +70,7 @@ export function AppModals({
             onSetExpandedEpisodeId={setExpandedEpisodeId}
             isFavorite={globalFavorites.includes(selectedSeriesForModal.id)}
             onToggleFavorite={(e) => toggleFavorite(selectedSeriesForModal.id, e)}
+            onNavigateToDownloads={onNavigateToDownloads}
           />
         </Suspense>
       )}

@@ -222,7 +222,7 @@ function getPreferredAudioTrackIndex(tracks: { name?: string; lang?: string }[])
   }
 
   const turkish = tracks.findIndex(track =>
-    track.name?.toLowerCase().includes('tÃ¼rk') ||
+    track.name?.toLowerCase().includes('türk') ||
     track.name?.toLowerCase().includes('turk') ||
     track.lang?.toLowerCase() === 'tr'
   );
@@ -234,13 +234,14 @@ export function useCinematicPlayer({
   saveWatchProgress,
   showToast
 }: UseCinematicPlayerProps) {
-  const { language } = useSettings();
+  const { language, transcodeMode } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const hlsInstanceRef = useRef<Hls | null>(null);
   const controlsTimeoutRef = useRef<any>(null);
   const seekOffsetRef = useRef(0);
   const isTranscodingRef = useRef(false);
+  const probedVideoCodecRef = useRef<string>('unknown');
   const activeAudioStreamIdRef = useRef<number | undefined>(undefined);
   const seekRequestIdRef = useRef(0);
   const subtitleObjectUrlsRef = useRef<string[]>([]);
@@ -260,6 +261,10 @@ export function useCinematicPlayer({
   const resumeTimeRef = useRef<number | null>(null);
 
   const getTranscodeMode = () => {
+    if (transcodeMode === 'copy') return 'copy';
+    if (transcodeMode === 'full') return 'full';
+    // 'auto' mode: copy video only if video codec is h264, otherwise full transcode
+    if (probedVideoCodecRef.current === 'h264') return 'copy';
     return 'full';
   };
 
@@ -378,6 +383,8 @@ export function useCinematicPlayer({
 
     if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
       const requestId = ++seekRequestIdRef.current;
+      setPlaybackStatus('recovering');
+      setPlaybackMessage(translateReason("Video ileri sarılıyor...", language));
       showToast(translateReason("Video ileri sarılıyor...", language));
       try {
         const result = await window.electronAPI.startFfmpegProxy(
@@ -394,14 +401,17 @@ export function useCinematicPlayer({
           videoRef.current.volume = playerVolumeRef.current;
           videoRef.current.play().then(forceUnmute).catch(() => { });
         } else {
+          setPlaybackMessage('');
           showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
         }
       } catch (e) {
         console.error("Transcoded seek error:", e);
+        setPlaybackMessage('');
         showToast(translateReason("Video ileri sarilirken hata olustu.", language));
       }
     } else {
       try {
+        setPlaybackMessage('');
         videoRef.current.currentTime = targetTime;
       } catch (error) {
         console.warn("Native seek failed:", error);
@@ -641,6 +651,7 @@ export function useCinematicPlayer({
     video.playbackRate = playbackSpeedRef.current;
     setFfmpegFallbackActive(false);
     isTranscodingRef.current = false;
+    probedVideoCodecRef.current = 'unknown';
     activeAudioStreamIdRef.current = undefined;
     seekRequestIdRef.current = 0;
     seekOffsetRef.current = 0;
@@ -758,6 +769,10 @@ export function useCinematicPlayer({
       try {
         const result = await window.electronAPI.probeAudioCodec(selectedChannel.url);
         if (!active || !result.success) return;
+
+        if (result.videoCodec) {
+          probedVideoCodecRef.current = result.videoCodec.toLowerCase();
+        }
 
         if (result.duration && result.duration > 0) {
           setDuration(result.duration);
@@ -1168,6 +1183,10 @@ export function useCinematicPlayer({
           if (!active) return;
 
           if (res.success) {
+            if (res.videoCodec) {
+              probedVideoCodecRef.current = res.videoCodec.toLowerCase();
+            }
+
             if (res.duration && res.duration > 0) {
               setDuration(res.duration);
             }
@@ -1218,6 +1237,7 @@ export function useCinematicPlayer({
           failPlayback(transcodeRes.error || 'Uyumluluk modu baslatilamadi');
         }
       } else {
+        setPlaybackMessage('');
         await loadPlayerSource(playUrl, false);
       }
     };

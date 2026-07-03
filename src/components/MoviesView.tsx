@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, Heart, Trash2, Tv, Play, 
-  Trophy, Film, Newspaper, Music, Gamepad, Compass, 
-  Sparkles, Star, Radio 
+import {
+  Search, Heart, Trash2, Tv, Play, Download,
+  Trophy, Film, Newspaper, Music, Gamepad, Compass,
+  Sparkles, Star, Radio
 } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { ImageWithFallback } from './ImageWithFallback';
@@ -10,6 +10,7 @@ import { VirtualizedGrid } from './VirtualizedGrid';
 import { MediaCardContextMenu } from './MediaCardContextMenu';
 import { useSettings } from '../context/SettingsContext';
 import { cleanMovieName, getCachedTmdbResult } from '../utils/tmdb';
+import { useDownloads } from '../hooks/useDownloads';
 
 // Helper to map category names to Lucide icons dynamically
 export const getCategoryIcon = (name: string) => {
@@ -73,7 +74,9 @@ export const MovieCard = React.memo(({
   onClick,
   isOnline,
   isFavorite,
+  isDownloading = false,
   onToggleFavorite,
+  onDownload,
   isGenericLogo,
   onContextMenu
 }: {
@@ -81,7 +84,9 @@ export const MovieCard = React.memo(({
   onClick: (item: PlaylistItem) => void;
   isOnline: 'online' | 'offline' | undefined;
   isFavorite: boolean;
+  isDownloading?: boolean;
   onToggleFavorite: (itemId: string, e: React.MouseEvent) => void;
+  onDownload?: (item: PlaylistItem) => void;
   isGenericLogo: boolean;
   onContextMenu?: (event: React.MouseEvent, item: PlaylistItem) => void;
 }) => {
@@ -131,8 +136,26 @@ export const MovieCard = React.memo(({
 
         {/* Hover Glassmorphism Play Button */}
         <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10 duration-300">
-          <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border border-white/20">
-            <Play size={15} fill="#000" className="ml-0.5" />
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border border-white/20">
+              <Play size={15} fill="#000" className="ml-0.5" />
+            </div>
+            {onDownload && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isDownloading) onDownload(channel);
+                }}
+                className={`w-10 h-10 rounded-full flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border cursor-pointer ${
+                  isDownloading
+                    ? 'bg-blue-500/80 text-white border-blue-400/30 animate-pulse'
+                    : 'bg-white/90 text-black border-white/20 hover:bg-white'
+                }`}
+                title={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}
+              >
+                <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -184,6 +207,7 @@ export const MoviesView = React.memo(function MoviesView({
   setVisibleCount
 }: MoviesViewProps) {
   const { t, language } = useSettings();
+  const { addDownload, isDownloading } = useDownloads();
   const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; item: PlaylistItem } | null>(null);
 
   if (selectedGroup !== 'Sinema') return null;
@@ -364,7 +388,9 @@ export const MoviesView = React.memo(function MoviesView({
                   onClick={handleOpenDetails}
                   isOnline={checkedStatusMap[channel.id]}
                   isFavorite={globalFavorites.includes(channel.id)}
+                  isDownloading={isDownloading(channel.url)}
                   onToggleFavorite={toggleFavorite}
+                  onDownload={addDownload}
                   isGenericLogo={!!channel.isGenericLogo}
                   onContextMenu={openContextMenu}
                 />
@@ -379,10 +405,12 @@ export const MoviesView = React.memo(function MoviesView({
           y={contextMenu.y}
           item={contextMenu.item}
           isFavorite={globalFavorites.includes(contextMenu.item.id)}
+          isDownloading={isDownloading(contextMenu.item.url)}
           onClose={() => setContextMenu(null)}
           onPlay={handlePlayStream}
           onOpenDetails={(item) => handleOpenDetails(item as PlaylistItem)}
           onToggleFavorite={(id) => toggleFavorite(id)}
+          onDownload={addDownload}
         />
       )}
     </div>

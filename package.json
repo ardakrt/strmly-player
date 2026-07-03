@@ -1,7 +1,7 @@
 {
   "name": "strmly",
   "private": true,
-  "version": "1.5.27",
+  "version": "1.6.0",
   "description": "Strmly is a desktop IPTV player.",
   "author": "Arda",
   "overrides": {

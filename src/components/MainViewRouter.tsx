@@ -10,6 +10,7 @@ const MoviesView = lazy(() => import('./MoviesView').then(m => ({ default: m.Mov
 const FavoritesView = lazy(() => import('./FavoritesView').then(m => ({ default: m.FavoritesView })));
 const DiagnosticsView = lazy(() => import('./DiagnosticsView').then(m => ({ default: m.DiagnosticsView })));
 const SettingsPanel = lazy(() => import('./SettingsPanel').then(m => ({ default: m.SettingsPanel })));
+const DownloadsView = lazy(() => import('./DownloadsView').then(m => ({ default: m.DownloadsView })));
 
 interface MainViewRouterProps {
   app: AppProviderValue;
@@ -173,7 +174,13 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
 
       {selectedGroup === APP_VIEWS.settings && !deferredSearchQuery.trim() && (
         <Suspense fallback={null}>
-          <SettingsPanel />
+          <SettingsPanel onNavigate={setSelectedGroup} />
+        </Suspense>
+      )}
+
+      {selectedGroup === APP_VIEWS.downloads && (
+        <Suspense fallback={null}>
+          <DownloadsView app={app} />
         </Suspense>
       )}
     </>

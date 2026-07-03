@@ -1,4 +1,4 @@
-import { Heart, Info, Play } from 'lucide-react';
+import { Heart, Info, Play, Download } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import { cleanMediaTitle } from '../utils/seriesGroupers';
@@ -10,10 +10,12 @@ interface MediaCardContextMenuProps {
   y: number;
   item: PlaylistItem | GroupedSeries;
   isFavorite: boolean;
+  isDownloading?: boolean;
   onClose: () => void;
   onPlay?: (item: PlaylistItem) => void;
   onOpenDetails?: (item: PlaylistItem | GroupedSeries) => void;
   onToggleFavorite: (id: string) => void;
+  onDownload?: (item: PlaylistItem) => void;
 }
 
 export function MediaCardContextMenu({
@@ -21,20 +23,23 @@ export function MediaCardContextMenu({
   y,
   item,
   isFavorite,
+  isDownloading = false,
   onClose,
   onPlay,
   onOpenDetails,
-  onToggleFavorite
+  onToggleFavorite,
+  onDownload
 }: MediaCardContextMenuProps) {
   const { language } = useSettings();
   const isSeries = 'seasons' in item || item.type === 'series';
+  const isLive = item.type === 'live';
   const items: ContextMenuItem[] = [];
 
   if (onPlay && !('seasons' in item)) {
     items.push({
       id: 'play',
-      label: item.type === 'live' 
-        ? (language === 'tr' ? 'Kanalı oynat' : 'Play channel') 
+      label: item.type === 'live'
+        ? (language === 'tr' ? 'Kanalı oynat' : 'Play channel')
         : (language === 'tr' ? 'Şimdi oynat' : 'Play now'),
       icon: <Play size={15} fill="currentColor" />,
       onSelect: () => onPlay(item)
@@ -44,18 +49,39 @@ export function MediaCardContextMenu({
   if (onOpenDetails) {
     items.push({
       id: 'details',
-      label: isSeries 
-        ? (language === 'tr' ? 'Dizi detayına git' : 'Go to series details') 
+      label: isSeries
+        ? (language === 'tr' ? 'Dizi detayına git' : 'Go to series details')
         : (language === 'tr' ? 'Detayları aç' : 'Open details'),
       icon: <Info size={16} />,
       onSelect: () => onOpenDetails(item)
     });
   }
 
+  if (onDownload && !isLive && !isDownloading) {
+    items.push({
+      id: 'download',
+      label: language === 'tr' ? 'Kaydet' : 'Save',
+      icon: <Download size={15} />,
+      separatorBefore: items.length > 1,
+      onSelect: () => onDownload(item as PlaylistItem)
+    });
+  }
+
+  if (isDownloading) {
+    items.push({
+      id: 'downloading',
+      label: language === 'tr' ? 'Kaydediliyor...' : 'Saving...',
+      icon: <Download size={15} className="animate-pulse" />,
+      separatorBefore: items.length > 1,
+      disabled: true,
+      onSelect: () => {}
+    });
+  }
+
   items.push({
     id: 'favorite',
-    label: isFavorite 
-      ? (language === 'tr' ? 'Favorilerden çıkar' : 'Remove from favorites') 
+    label: isFavorite
+      ? (language === 'tr' ? 'Favorilerden çıkar' : 'Remove from favorites')
       : (language === 'tr' ? 'Favorilere ekle' : 'Add to favorites'),
     icon: <Heart size={15} fill={isFavorite ? 'currentColor' : 'none'} />,
     separatorBefore: items.length > 1,
@@ -73,4 +99,3 @@ export function MediaCardContextMenu({
     />
   );
 }
-

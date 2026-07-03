@@ -205,11 +205,21 @@ export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[
   return rawItems;
 }
 
-export function getStableMatchPercentage(title: string): string {
+export function getStableMatchPercentage(title: string, preferences?: string[], itemType?: 'movie' | 'series' | 'live'): string {
   let hash = 0;
   for (let i = 0; i < title.length; i++) {
     hash = title.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const score = 85 + (Math.abs(hash) % 15);
-  return `${score}% Eşleşme`;
+  let baseScore = 80 + (Math.abs(hash) % 15); // Base matching between 80% and 94%
+
+  if (preferences && preferences.length > 0 && itemType) {
+    const preferenceKey = itemType === 'movie' ? 'movies' : itemType === 'series' ? 'series' : 'live';
+    if (preferences.includes(preferenceKey)) {
+      baseScore = Math.min(99, baseScore + 5);
+    } else {
+      baseScore = Math.max(60, baseScore - 15);
+    }
+  }
+
+  return `${baseScore}% Eşleşme`;
 }

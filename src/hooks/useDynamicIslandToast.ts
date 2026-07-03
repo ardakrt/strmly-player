@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { getToastDuration } from '../utils/toastHelpers';
 
 interface UseDynamicIslandToastProps {
   toast: { show: boolean; message: string };
@@ -12,6 +13,16 @@ export function useDynamicIslandToast({ toast, hideToast }: UseDynamicIslandToas
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const startToastExit = useCallback(() => {
+    setToastVisible(false);
+    setToastExit(true);
+    toastExitTimerRef.current = setTimeout(() => {
+      setToastMessage('');
+      setToastExit(false);
+      hideToast();
+    }, 320);
+  }, [hideToast]);
+
   useEffect(() => {
     if (toast.show) {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -21,21 +32,13 @@ export function useDynamicIslandToast({ toast, hideToast }: UseDynamicIslandToas
       setToastExit(false);
       setToastVisible(true);
 
-      toastTimerRef.current = setTimeout(() => {
-        setToastVisible(false);
-        setToastExit(true);
-        toastExitTimerRef.current = setTimeout(() => {
-          setToastMessage('');
-          setToastExit(false);
-          hideToast();
-        }, 500);
-      }, 5000);
+      toastTimerRef.current = setTimeout(startToastExit, getToastDuration(toast.message));
     }
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (toastExitTimerRef.current) clearTimeout(toastExitTimerRef.current);
     };
-  }, [toast.show, toast.message, hideToast]);
+  }, [toast.show, toast.message, startToastExit]);
 
   const handleToastMouseEnter = () => {
     if (toastTimerRef.current) {
@@ -46,15 +49,7 @@ export function useDynamicIslandToast({ toast, hideToast }: UseDynamicIslandToas
 
   const handleToastMouseLeave = () => {
     if (!toastVisible || toastExit) return;
-    toastTimerRef.current = setTimeout(() => {
-      setToastVisible(false);
-      setToastExit(true);
-      toastExitTimerRef.current = setTimeout(() => {
-        setToastMessage('');
-        setToastExit(false);
-        hideToast();
-      }, 500);
-    }, 5000);
+    toastTimerRef.current = setTimeout(startToastExit, Math.min(1200, getToastDuration(toastMessage)));
   };
 
   return {

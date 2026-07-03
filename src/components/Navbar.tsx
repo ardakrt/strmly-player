@@ -43,7 +43,7 @@ export const Navbar = memo(function Navbar({
   handleSelectProfile,
   handleLogoutProfile
 }: NavbarProps) {
-  const { t } = useSettings();
+  const { t, language } = useSettings();
   if (!loaded) return null;
 
   return (
@@ -74,7 +74,8 @@ export const Navbar = memo(function Navbar({
               { id: 'Canlı TV', label: t('navbar.liveTv') },
               { id: 'Sinema', label: t('navbar.movies') },
               { id: 'Diziler', label: t('navbar.series') },
-              { id: 'Favorilerim', label: t('navbar.favorites') }
+              { id: 'Favorilerim', label: t('navbar.favorites') },
+              { id: 'İndirilenler', label: language === 'tr' ? 'Kaydedilenler' : 'Saved' }
             ].map(link => {
               const isActive = selectedGroup === link.id;
               return (

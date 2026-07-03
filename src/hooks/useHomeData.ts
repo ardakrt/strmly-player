@@ -304,7 +304,7 @@ export function useHomeData({
               : undefined;
             if (signal.aborted) return;
             setFeaturedTmdbData({
-              match: getStableMatchPercentage(cleanTitle),
+              match: getStableMatchPercentage(cleanTitle, activeContentPreferences, isSeries ? 'series' : 'movie'),
               rating: result.vote_average ? result.vote_average.toFixed(1) : '7.8',
               year: isSeries
                 ? (result.first_air_date ? result.first_air_date.split('-')[0] : '2025')
@@ -349,7 +349,7 @@ export function useHomeData({
     return () => {
       controller.abort();
     };
-  }, [activeFeaturedIndex, showcaseItems, tmdbApiKey]);
+  }, [activeFeaturedIndex, showcaseItems, tmdbApiKey, activeContentPreferences]);
 
   // Memoized popular movies, excluding maintenance/test/backup items
   const populerFilmler = useMemo(() => {
@@ -526,25 +526,74 @@ export function useHomeData({
   }, [itemBuckets.live, activeContentPreferences]);
 
   // Filter recently watched list to keep only the most recent episode of each series, and movies
+  // If an episode/movie is finished (progress > 90%):
+  // - For movies: remove it
+  // - For series: show next episode (with progress = 0), or remove if no next episode
   const uniqueRecentlyWatched = useMemo(() => {
     const seenSeries = new Set<string>();
-    return recentlyWatched.filter(item => {
-      if (!item || !item.type || !item.name) return false;
+    const mapped = recentlyWatched.map(item => {
+      if (!item || !item.type || !item.name) return null;
+
+      const progress = item.progress ?? 0;
+      const isFinished = progress > 90;
+
       if (item.type === 'movie') {
-        return true;
+        if (isFinished) return null;
+        return item;
       }
+
       if (item.type === 'series') {
         const parsed = parseSeriesEpisodeInfo(item.name);
         const key = `${parsed.cleanTitle}:::${item.group || ''}`;
         if (seenSeries.has(key)) {
-          return false;
+          return null;
         }
         seenSeries.add(key);
-        return true;
+
+        if (isFinished) {
+          const grouped = allGroupedSeries.find(series =>
+            series.name === parsed.cleanTitle &&
+            (series.group || 'Genel') === (item.group || 'Genel')
+          );
+
+          if (grouped) {
+            const allEpisodes: { episodeNumber: number; seasonNumber: number; item: PlaylistItem }[] = [];
+            for (const sNoStr in grouped.seasons) {
+              const sNo = parseInt(sNoStr, 10);
+              allEpisodes.push(...grouped.seasons[sNo]);
+            }
+            allEpisodes.sort((a, b) => {
+              if (a.seasonNumber !== b.seasonNumber) {
+                return a.seasonNumber - b.seasonNumber;
+              }
+              return a.episodeNumber - b.episodeNumber;
+            });
+
+            const currentIndex = allEpisodes.findIndex(ep =>
+              ep.seasonNumber === parsed.season && ep.episodeNumber === parsed.episode
+            );
+
+            if (currentIndex !== -1 && currentIndex < allEpisodes.length - 1) {
+              const nextEp = allEpisodes[currentIndex + 1].item;
+              return {
+                ...nextEp,
+                currentTime: undefined,
+                duration: undefined,
+                progress: undefined
+              };
+            }
+          }
+          return null;
+        }
+
+        return item;
       }
-      return false;
+
+      return null;
     });
-  }, [recentlyWatched]);
+
+    return mapped.filter((item): item is PlaylistItem => item !== null);
+  }, [recentlyWatched, allGroupedSeries]);
 
   return {
     showcaseItems,

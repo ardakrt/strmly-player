@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { CheckCircle2, Clock3, Play, X, ChevronDown, Heart } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { CheckCircle2, Clock3, Play, X, ChevronDown, Heart, Download } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { EpisodeThumb } from './EpisodeThumb';
 import { cleanMediaTitle } from '../utils/seriesGroupers';
@@ -7,6 +7,7 @@ import { fetchTmdbPath, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, getTmdbLa
 import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { useSettings } from '../context/SettingsContext';
+import { useDownloads } from '../hooks/useDownloads';
 
 interface TmdbData {
   id?: number;
@@ -31,6 +32,7 @@ interface SeriesModalProps {
   onSetExpandedEpisodeId: (id: string | null) => void;
   isFavorite: boolean;
   onToggleFavorite: (e: React.MouseEvent) => void;
+  onNavigateToDownloads?: () => void;
 }
 
 interface CastMember {
@@ -46,6 +48,44 @@ interface EpisodeMeta {
   name?: string;
 }
 
+function CircularSaveProgress({ progress }: { progress: number }) {
+  const radius = 7;
+  const circumference = 2 * Math.PI * radius;
+  const safeProgress = Math.max(0, Math.min(100, progress || 0));
+  const offset = circumference - (safeProgress / 100) * circumference;
+
+  return (
+    <span className="relative flex h-5 w-5 items-center justify-center">
+      <svg className="h-5 w-5 -rotate-90" viewBox="0 0 20 20" aria-hidden="true">
+        <circle
+          cx="10"
+          cy="10"
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+          className="text-blue-400/20"
+        />
+        <circle
+          cx="10"
+          cy="10"
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="text-blue-300 transition-[stroke-dashoffset] duration-300"
+        />
+      </svg>
+      <span className="absolute text-[6px] font-black leading-none text-blue-100 tabular-nums">
+        {safeProgress > 0 ? Math.round(safeProgress) : ''}
+      </span>
+    </span>
+  );
+}
+
 export const SeriesModal = ({
   series,
   tmdbData,
@@ -58,12 +98,92 @@ export const SeriesModal = ({
   onSetActiveSeason,
   onSetExpandedEpisodeId,
   isFavorite,
-  onToggleFavorite
+  onToggleFavorite,
+  onNavigateToDownloads
 }: SeriesModalProps) => {
   const { language } = useSettings();
+  const { downloads, addDownload, getDownloadByStreamUrl } = useDownloads();
+  const [savedEpisodeUrls, setSavedEpisodeUrls] = useState<Set<string>>(() => new Set());
   const seasonsList = Object.keys(series.seasons).map(Number).sort((a, b) => a - b);
-  const episodes = series.seasons[activeSeason] || [];
+  const episodes = useMemo(() => series.seasons[activeSeason] || [], [activeSeason, series.seasons]);
   const seriesCleanName = series.name.toLowerCase();
+
+  useEffect(() => {
+    let active = true;
+
+    const checkSavedEpisodes = async () => {
+      const savedUrls = new Set<string>();
+
+      for (const episode of episodes) {
+        const knownDownload = getDownloadByStreamUrl(episode.item.url);
+        if (knownDownload?.status === 'pending' || knownDownload?.status === 'downloading') {
+          continue;
+        }
+        if (knownDownload?.status === 'completed') {
+          savedUrls.add(episode.item.url);
+          continue;
+        }
+
+        // Try matching by name in downloads as fallback
+        const matchingByName = downloads.find(
+          d => d.type === 'series' && d.name.toLowerCase() === episode.item.name.toLowerCase()
+        );
+        if (matchingByName?.status === 'completed') {
+          savedUrls.add(episode.item.url);
+          continue;
+        }
+
+        try {
+          if (window.electronAPI?.getSavedMediaInfo) {
+            const savedMedia = await window.electronAPI.getSavedMediaInfo({
+              type: 'series',
+              name: episode.item.name
+            });
+            if (savedMedia?.exists) {
+              savedUrls.add(episode.item.url);
+            }
+          }
+        } catch {
+          // Older Electron main processes may not expose this handler until restart.
+        }
+      }
+
+      if (active) {
+        setSavedEpisodeUrls(savedUrls);
+      }
+    };
+
+    void checkSavedEpisodes();
+
+    return () => {
+      active = false;
+    };
+  }, [downloads, episodes, getDownloadByStreamUrl]);
+
+  const getEpisodeSaveState = (url: string, name?: string) => {
+    let download = getDownloadByStreamUrl(url);
+    if (!download && name) {
+      download = downloads.find(
+        d => d.type === 'series' && d.name.toLowerCase() === name.toLowerCase()
+      );
+    }
+
+    if (download?.status === 'pending' || download?.status === 'downloading') {
+      return {
+        download,
+        saved: false,
+        saving: true,
+        progress: download.status === 'downloading' ? download.progress : 0
+      };
+    }
+
+    return {
+      download,
+      saved: download?.status === 'completed' || savedEpisodeUrls.has(url),
+      saving: false,
+      progress: 0
+    };
+  };
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -96,13 +216,10 @@ export const SeriesModal = ({
             };
           });
         }
-        setEpisodeMeta(metaMap);
+        if (!cancelled) setEpisodeMeta(metaMap);
       })
       .catch((err) => {
-        console.error("Failed to fetch season details:", err);
-        if (!cancelled) {
-          setEpisodeMeta({});
-        }
+        console.error("Failed to load tmdb season details:", err);
       });
 
     return () => {
@@ -412,13 +529,60 @@ export const SeriesModal = ({
           </div>
           <div className="flex-1 overflow-y-auto pr-3 pl-6 md:pr-4 md:pl-8 pt-4 pb-6 md:pb-8 min-h-0 custom-modal-scrollbar flex flex-col gap-4">
 
-            <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40 px-1 mb-1 shrink-0">
-              <span>{language === 'tr' ? 'Bölüm Listesi' : 'Episode List'}</span>
-              <span>
-                {language === 'tr'
-                  ? `(${episodes.length} Bölüm)`
-                  : `(${episodes.length} Episode${episodes.length > 1 ? 's' : ''})`}
+            <div className="flex items-center justify-between px-1 mb-1 shrink-0">
+              <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40">
+                {language === 'tr' ? 'Bölüm Listesi' : 'Episode List'}
+                <span className="ml-2 text-white/20">
+                  {language === 'tr'
+                    ? `${episodes.length} Bölüm`
+                    : `${episodes.length} Episode${episodes.length > 1 ? 's' : ''}`}
+                </span>
               </span>
+              {(() => {
+                const seasonDownloading = episodes.some(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saving);
+                const allSeasonSaved = episodes.length > 0 && episodes.every(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saved);
+                return (
+                  <button
+                    onClick={async () => {
+                      if ((seasonDownloading || allSeasonSaved) && onNavigateToDownloads) {
+                        onNavigateToDownloads();
+                      } else {
+                        for (const ep of episodes) {
+                          const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
+                          if (!saveState.saved && !saveState.saving) {
+                            await addDownload(ep.item);
+                          }
+                        }
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer active:scale-95 ${
+                      allSeasonSaved
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                        : seasonDownloading
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30'
+                        : 'bg-white text-black hover:bg-neutral-200 shadow-lg shadow-white/10'
+                    }`}
+                    title={allSeasonSaved
+                      ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
+                      : seasonDownloading
+                      ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
+                      : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
+                    }
+                  >
+                    {allSeasonSaved
+                      ? <CheckCircle2 size={14} strokeWidth={2.5} />
+                      : <Download size={14} strokeWidth={2.5} className={seasonDownloading ? 'animate-bounce' : ''} />}
+                    <span className="text-[11px] font-black tracking-wide">
+                      {allSeasonSaved
+                        ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
+                        : seasonDownloading
+                        ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
+                        : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
+                      }
+                    </span>
+                  </button>
+                );
+              })()}
             </div>
 
             <div className="flex flex-col gap-3">
@@ -460,6 +624,10 @@ export const SeriesModal = ({
                 const progressText = progress !== undefined && progress > 0
                   ? `${Math.round(progress)}%`
                   : null;
+                const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
+                const episodeSaved = saveState.saved;
+                const episodeSaving = saveState.saving;
+                const saveProgress = saveState.progress;
 
                 return (
                   <div
@@ -530,17 +698,38 @@ export const SeriesModal = ({
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        onClose();
-                        onPlay(ep.item);
-                      }}
-                      className="w-8 h-8 rounded-lg bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-all duration-200 active:scale-90 shadow-md cursor-pointer shrink-0"
-                      title={language === 'tr' ? 'Oynat' : 'Play'}
-                    >
-                      <Play size={12} fill="#000" className="ml-0.5" />
-                    </button>
-
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if ((episodeSaving || episodeSaved) && onNavigateToDownloads) {
+                            onNavigateToDownloads();
+                          } else {
+                            await addDownload(ep.item);
+                          }
+                        }}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 active:scale-90 shadow-md cursor-pointer ${
+                          episodeSaved
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                            : episodeSaving
+                            ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30 animate-pulse'
+                            : 'bg-white/10 hover:bg-white/20 text-neutral-400 hover:text-white border border-white/10'
+                        }`}
+                        title={episodeSaved
+                          ? (language === 'tr' ? 'Kaydedildi' : 'Saved')
+                          : episodeSaving
+                            ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
+                            : (language === 'tr' ? 'Kaydet' : 'Save')}
+                      >
+                        {episodeSaved ? (
+                          <CheckCircle2 size={14} strokeWidth={2.5} />
+                        ) : episodeSaving ? (
+                          <CircularSaveProgress progress={saveProgress} />
+                        ) : (
+                          <Download size={14} strokeWidth={2.5} />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 );
               })}

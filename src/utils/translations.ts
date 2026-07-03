@@ -135,7 +135,13 @@ export const translations = {
         internal: "Dahili Oynatıcı (HLS.js / HTML5 - Önerilen)",
         external: "Harici Oynatıcı (Sistem MPV/VLC entegrasyonu)",
         ffplay: "FFplay (Hafif ve Hızlı)",
-        saveSuccess: "Varsayılan oynatıcı güncellendi."
+        saveSuccess: "Varsayılan oynatıcı güncellendi.",
+        transcodeMode: "Transcode Modu",
+        transcodeModeDesc: "Ses formatı uyumsuzluğunda FFmpeg kodlama davranışını belirler.",
+        transcodeAuto: "Otomatik (H.264 ise Hızlı Kopyala - Önerilen)",
+        transcodeCopy: "Sadece Ses (Kopyalama - Düşük CPU)",
+        transcodeFull: "Tam Transcode (Yüksek CPU, Maksimum Uyumluluk)",
+        transcodeSaveSuccess: "Transcode modu güncellendi."
       },
       playlists: {
         title: "Çalma Listesi Yönetimi",
@@ -254,6 +260,34 @@ export const translations = {
         fullscreen: "Tam Ekran",
         back: "Oynatıcıdan Çık"
       }
+    },
+    downloads: {
+      title: "Kaydedilenler",
+      empty: "Henüz kaydedilen yok",
+      emptyDesc: "Film veya dizi kaydetmek için içerik kartındaki Kaydet seçeneğini kullanın.",
+      downloading: "Kaydediliyor",
+      completed: "Kaydedildi",
+      failed: "Kaydetme Başarısız",
+      paused: "Duraklatıldı",
+      pending: "Bekliyor",
+      cancel: "Kaydetmeyi İptal Et",
+      retry: "Tekrar Dene",
+      delete: "Sil",
+      play: "Oynat",
+      pause: "Duraklat",
+      resume: "Devam Et",
+      size: "Boyut",
+      progress: "İlerleme",
+      speed: "Hız",
+      timeLeft: "Kalan Süre",
+      startDownload: "Kaydetmeyi Başlat",
+      downloadStarted: "Kaydetme başladı",
+      downloadCompleted: "Kaydetme tamamlandı",
+      downloadFailed: "Kaydetme başarısız oldu",
+      downloadCancelled: "Kaydetme iptal edildi",
+      deleteConfirm: "Bu dosyayı silmek istediğinizden emin misiniz?",
+      storageUsed: "Kullanılan Alan",
+      clearAll: "Tümünü Temizle"
     }
   },
   en: {
@@ -390,7 +424,13 @@ export const translations = {
         internal: "Internal Player (HLS.js / HTML5 - Recommended)",
         external: "External Player (System MPV/VLC Integration)",
         ffplay: "FFplay (Lightweight & Fast)",
-        saveSuccess: "Default player updated."
+        saveSuccess: "Default player updated.",
+        transcodeMode: "Transcode Mode",
+        transcodeModeDesc: "Determines FFmpeg encoding behavior when the audio format is incompatible.",
+        transcodeAuto: "Auto (Copy Fast if H.264 - Recommended)",
+        transcodeCopy: "Audio Only (Copy Video - Low CPU)",
+        transcodeFull: "Full Transcode (High CPU, Max Compatibility)",
+        transcodeSaveSuccess: "Transcode mode updated."
       },
       playlists: {
         title: "Playlist Management",
@@ -509,6 +549,34 @@ export const translations = {
         fullscreen: "Fullscreen",
         back: "Exit Player"
       }
+    },
+    downloads: {
+      title: "Saved",
+      empty: "Nothing saved yet",
+      emptyDesc: "Use the Save option on a movie or series card to keep it in the app library.",
+      downloading: "Saving",
+      completed: "Saved",
+      failed: "Save Failed",
+      paused: "Paused",
+      pending: "Pending",
+      cancel: "Cancel Save",
+      retry: "Retry",
+      delete: "Delete",
+      play: "Play",
+      pause: "Pause",
+      resume: "Resume",
+      size: "Size",
+      progress: "Progress",
+      speed: "Speed",
+      timeLeft: "Time Left",
+      startDownload: "Start Saving",
+      downloadStarted: "Save started",
+      downloadCompleted: "Save completed",
+      downloadFailed: "Save failed",
+      downloadCancelled: "Save cancelled",
+      deleteConfirm: "Are you sure you want to delete this file?",
+      storageUsed: "Storage Used",
+      clearAll: "Clear All"
     }
   }
 } as const;
