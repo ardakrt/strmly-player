@@ -191,16 +191,20 @@ function Write-AtomicEvidence([string]$Reason) {
 
 function Invoke-WriterAssert([switch]$RequireClean) {
   $assert = Join-Path $PSScriptRoot "assert-writer-stopped.ps1"
-  $args = @(
+  $argList = @(
     "-NoProfile", "-ExecutionPolicy", "Bypass",
     "-File", $assert,
     "-ScratchDir", $ScratchDir,
-    "-SamplesRequired", $WriterSamples,
-    "-SampleIntervalSeconds", $WriterIntervalSeconds
+    "-SamplesRequired", "$WriterSamples",
+    "-SampleIntervalSeconds", "$WriterIntervalSeconds"
   )
-  if ($RequireClean) { $args += "-RequireClean" }
-  & powershell @args
-  return $LASTEXITCODE
+  if ($RequireClean) { $argList += "-RequireClean" }
+  # Start-Process for reliable exit codes from nested powershell
+  $p = Start-Process -FilePath "powershell.exe" -ArgumentList $argList -Wait -PassThru -NoNewWindow
+  $code = $p.ExitCode
+  if ($null -eq $code) { $code = 1 }
+  Write-Host "assert-writer-stopped rawExit=$code requireClean=$RequireClean"
+  return [int]$code
 }
 
 function Stop-CompetingCodex {
@@ -223,30 +227,37 @@ Ensure-CleanupLock
 
 if (-not $SkipWriterAssert) {
   $retry = 0
-  while ($true) {
-    $code = Invoke-WriterAssert
+  $done = $false
+  while (-not $done) {
+    $code = [int](Invoke-WriterAssert)
     Write-Host "assert-writer-stopped exit=$code"
     if ($code -eq 0) {
-      # already clean and quiet
+      Write-Host "Product clean and writer quiet"
+      $done = $true
       break
     }
     if ($code -eq 2) {
-      # stable dirty: ONE bulk absorb, then require clean
       Write-Host "Writer paused (stable dirty) - single bulk absorb"
       [void](Invoke-BulkAbsorbOnce)
-      $code2 = Invoke-WriterAssert -RequireClean
+      $code2 = [int](Invoke-WriterAssert -RequireClean)
       Write-Host "assert after absorb exit=$code2"
-      if ($code2 -eq 0) { break }
-      if ($code2 -eq 2) {
-        # still dirty stable - absorb again once more max
-        [void](Invoke-BulkAbsorbOnce)
-        $code3 = Invoke-WriterAssert -RequireClean
-        if ($code3 -eq 0) { break }
+      if ($code2 -eq 0) {
+        $done = $true
+        break
       }
-      # fall through to retry logic
+      if ($code2 -eq 2) {
+        [void](Invoke-BulkAbsorbOnce)
+        $code3 = [int](Invoke-WriterAssert -RequireClean)
+        Write-Host "assert after second absorb exit=$code3"
+        if ($code3 -eq 0) {
+          $done = $true
+          break
+        }
+      }
+      # not clean yet - treat as need retry
       $code = 1
     }
-    # active writer or still dirty
+    # active writer (exit 1) or residual
     $retry++
     Clear-BrokenCodexRefs
     Ensure-CleanupLock
@@ -257,10 +268,9 @@ if (-not $SkipWriterAssert) {
       exit 1
     }
     Write-Host "Writer active - retry $retry/$MaxWriterRetries after stop attempt"
-    Start-Sleep -Seconds 3
+    Start-Sleep -Seconds 5
   }
 } else {
-  # emergency: absorb once then evidence
   $dirty = @(Get-ProductPorcelain)
   if ($dirty.Count -gt 0) { [void](Invoke-BulkAbsorbOnce) }
 }

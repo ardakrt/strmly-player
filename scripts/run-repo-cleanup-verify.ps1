@@ -14,13 +14,21 @@ $env:GROK_SCRATCH = $ScratchDir
 
 Write-Host "======== run-repo-cleanup-verify START ========"
 
+function Invoke-PsFile([string]$File, [string[]]$ExtraArgs) {
+  $argList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $File) + $ExtraArgs
+  $p = Start-Process -FilePath "powershell.exe" -ArgumentList $argList -Wait -PassThru -NoNewWindow
+  if ($null -eq $p.ExitCode) { return 1 }
+  return [int]$p.ExitCode
+}
+
 # 1) Gate (includes writer assert, single absorb, atomic evidence)
 $gate = Join-Path $PSScriptRoot "repo-cleanup-gate.ps1"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $gate `
-  -ScratchDir $ScratchDir `
-  -WriterSamples $WriterSamples `
-  -WriterIntervalSeconds $WriterIntervalSeconds
-$gateCode = $LASTEXITCODE
+$gateCode = Invoke-PsFile $gate @(
+  "-ScratchDir", $ScratchDir,
+  "-WriterSamples", "$WriterSamples",
+  "-WriterIntervalSeconds", "$WriterIntervalSeconds",
+  "-MaxWriterRetries", "12"
+)
 Write-Host "gate_exit=$gateCode"
 if ($gateCode -ne 0) {
   Write-Host "VERIFY_FAIL gate"
@@ -29,28 +37,29 @@ if ($gateCode -ne 0) {
 
 # 2) Post-check: writer still quiet and product clean (RequireClean)
 $assert = Join-Path $PSScriptRoot "assert-writer-stopped.ps1"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $assert `
-  -ScratchDir $ScratchDir `
-  -SamplesRequired $WriterSamples `
-  -SampleIntervalSeconds $WriterIntervalSeconds `
-  -RequireClean
-$assertCode = $LASTEXITCODE
+$assertCode = Invoke-PsFile $assert @(
+  "-ScratchDir", $ScratchDir,
+  "-SamplesRequired", "$WriterSamples",
+  "-SampleIntervalSeconds", "$WriterIntervalSeconds",
+  "-RequireClean"
+)
 Write-Host "post_assert_exit=$assertCode"
 if ($assertCode -ne 0) {
-  Write-Host "VERIFY_FAIL post-assert (writer returned or product dirty)"
-  # Do not hand-edit evidence; re-run gate once
-  & powershell -NoProfile -ExecutionPolicy Bypass -File $gate `
-    -ScratchDir $ScratchDir `
-    -WriterSamples $WriterSamples `
-    -WriterIntervalSeconds $WriterIntervalSeconds
-  $gateCode2 = $LASTEXITCODE
+  Write-Host "VERIFY_FAIL post-assert (writer returned or product dirty) - re-run gate once"
+  $gateCode2 = Invoke-PsFile $gate @(
+    "-ScratchDir", $ScratchDir,
+    "-WriterSamples", "$WriterSamples",
+    "-WriterIntervalSeconds", "$WriterIntervalSeconds",
+    "-MaxWriterRetries", "12"
+  )
   if ($gateCode2 -ne 0) { exit $gateCode2 }
-  & powershell -NoProfile -ExecutionPolicy Bypass -File $assert `
-    -ScratchDir $ScratchDir `
-    -SamplesRequired 3 `
-    -SampleIntervalSeconds 2 `
-    -RequireClean
-  if ($LASTEXITCODE -ne 0) { exit 1 }
+  $assertCode2 = Invoke-PsFile $assert @(
+    "-ScratchDir", $ScratchDir,
+    "-SamplesRequired", "4",
+    "-SampleIntervalSeconds", "2",
+    "-RequireClean"
+  )
+  if ($assertCode2 -ne 0) { exit 1 }
 }
 
 # 3) Refresh inventory/evidence companion files from LIVE status (same moment)
