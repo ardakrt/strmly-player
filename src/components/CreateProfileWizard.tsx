@@ -60,6 +60,22 @@ const contentPreferenceOptions = [
   { id: 'kids', label: 'Çocuk', icon: Baby }
 ] as const;
 
+const renderAvatarHelper = (value: string, className: string) => {
+  if (!value) {
+    return (
+      <div className={`${className} flex items-center justify-center bg-neutral-950`}>
+        <UserRound size={42} className="text-neutral-600" />
+      </div>
+    );
+  }
+
+  return value.startsWith('linear-gradient') ? (
+    <div className={className} style={{ background: value }} />
+  ) : (
+    <img src={value} className={`${className} object-cover`} alt="" />
+  );
+};
+
 export function CreateProfileWizard({
   name,
   avatar,
@@ -108,21 +124,7 @@ export function CreateProfileWizard({
     || (playlistType === 'xtream' && xtreamUrl.trim().length > 0 && xtreamUser.trim().length > 0 && xtreamPass.trim().length > 0);
   const canContinue = step === 1 ? identityReady : step === 2 ? connectionReady : true;
 
-  const renderAvatar = (value: string, className: string) => {
-    if (!value) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-neutral-950`}>
-          <UserRound size={42} className="text-neutral-600" />
-        </div>
-      );
-    }
 
-    return value.startsWith('linear-gradient') ? (
-      <div className={className} style={{ background: value }} />
-    ) : (
-      <img src={value} className={`${className} object-cover`} alt="" />
-    );
-  };
 
   const seriesCatalog = avatarSearchResults.length > 0 ? avatarSearchResults : localSeries.map(series => ({
     id: series.id,
@@ -343,7 +345,7 @@ export function CreateProfileWizard({
               <div className="grid lg:grid-cols-[240px_1fr] gap-10 items-center min-h-[400px] animate-fade-in">
                 <div className="flex flex-col items-center">
                   <button type="button" onClick={() => setAvatarPickerOpen(true)} className="group relative w-48 h-48 rounded-[38px] overflow-hidden border-2 border-white/15 hover:border-white/50 bg-neutral-950 shadow-[0_28px_80px_rgba(0,0,0,0.55)] transition-all hover:-translate-y-1" title={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'} aria-label={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'}>
-                    {avatar ? renderAvatar(avatar, 'w-full h-full') : <div className="w-full h-full flex items-center justify-center"><UserRound size={46} className="text-neutral-600" /></div>}
+                    {avatar ? renderAvatarHelper(avatar, 'w-full h-full') : <div className="w-full h-full flex items-center justify-center"><UserRound size={46} className="text-neutral-600" /></div>}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 h-14 flex items-center justify-center gap-2 text-[10px] font-black text-white opacity-80 group-hover:opacity-100">
                       <Search size={14} /> {avatar ? (language === 'tr' ? 'Resmi değiştir' : 'Change avatar') : (language === 'tr' ? 'İsteğe bağlı' : 'Optional')}
@@ -455,7 +457,7 @@ export function CreateProfileWizard({
             {step === 3 && (
               <div className="max-w-2xl mx-auto animate-fade-in">
                 <div className="flex flex-col items-center text-center">
-                  <div className="w-28 h-28 rounded-[28px] overflow-hidden border-2 border-white/20 shadow-[0_24px_70px_rgba(0,0,0,0.55)]">{renderAvatar(avatar, 'w-full h-full')}</div>
+                  <div className="w-28 h-28 rounded-[28px] overflow-hidden border-2 border-white/20 shadow-[0_24px_70px_rgba(0,0,0,0.55)]">{renderAvatarHelper(avatar, 'w-full h-full')}</div>
                   <h3 className="mt-5 text-2xl font-black text-white">{name.trim()}</h3>
                   <p className="mt-2 text-xs text-neutral-500">{language === 'tr' ? 'Profilin oluşturulmaya hazır.' : 'Your profile is ready to be created.'}</p>
                 </div>

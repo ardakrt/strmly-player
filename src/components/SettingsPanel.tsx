@@ -196,11 +196,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     }
   };
 
-  const handleInstallUpdate = () => {
-    if (window.electronAPI && window.electronAPI.installUpdate) {
-      window.electronAPI.installUpdate();
-    }
-  };
+
 
   const [autoPlayNext, setAutoPlayNext] = useState(() => {
     try { return localStorage.getItem('strmly_auto_play_next') === 'true'; } catch { return false; }
@@ -297,13 +293,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
 
 
-  const saveLocalSetting = (key: string, value: string) => {
-    try {
-      localStorage.setItem(key, value);
-    } catch (e) {
-      console.warn('localStorage save error:', e);
-    }
-  };
+
 
   const exportSettings = () => {
     try {
@@ -1289,7 +1279,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     onClick={() => {
                       const next = !autoPlayNext;
                       setAutoPlayNext(next);
-                      saveLocalSetting('strmly_auto_play_next', String(next));
+                      saveLocalSettingHelper('strmly_auto_play_next', String(next));
                     }}
                     className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
                       autoPlayNext
@@ -1313,7 +1303,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       onClick={() => {
                         const next = !bufferEnabled;
                         setBufferEnabled(next);
-                        saveLocalSetting('strmly_buffer_enabled', String(next));
+                        saveLocalSettingHelper('strmly_buffer_enabled', String(next));
                       }}
                       className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none shrink-0 cursor-pointer ${
                         bufferEnabled
@@ -1339,7 +1329,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                           value={bufferSize}
                           onChange={(e) => {
                             setBufferSize(e.target.value);
-                            saveLocalSetting('strmly_buffer_size', e.target.value);
+                            saveLocalSettingHelper('strmly_buffer_size', e.target.value);
                           }}
                         />
                         <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Saniye</span>
@@ -1409,7 +1399,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       value={connectionTimeout}
                       onChange={(e) => {
                         setConnectionTimeout(e.target.value);
-                        saveLocalSetting('strmly_connection_timeout', e.target.value);
+                        saveLocalSettingHelper('strmly_connection_timeout', e.target.value);
                       }}
                     />
                     <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Saniye</span>
@@ -1425,7 +1415,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       value={retryCount}
                       onChange={(e) => {
                         setRetryCount(e.target.value);
-                        saveLocalSetting('strmly_retry_count', e.target.value);
+                        saveLocalSettingHelper('strmly_retry_count', e.target.value);
                       }}
                     />
                     <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Deneme</span>
@@ -1577,7 +1567,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
                   {updateState.status === 'downloaded' && (
                     <button type="button"
-                      onClick={handleInstallUpdate}
+                      onClick={handleInstallUpdateHelper}
                       className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs uppercase rounded-full shadow-lg transition-all active:scale-95 transform cursor-pointer animate-pulse mt-1"
                     >
                       {language === 'tr' ? 'Güncellemeyi Kur ve Yeniden Başlat' : 'Install Update & Restart'}

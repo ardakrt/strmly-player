@@ -187,6 +187,10 @@ export const MovieCard = React.memo(({
   );
 });
 
+const handleDragOverHelper = (e: React.DragEvent) => {
+  e.preventDefault();
+};
+
 export const MoviesView = React.memo(function MoviesView({
   selectedGroup,
   activeMovieCategory,
@@ -218,9 +222,7 @@ export const MoviesView = React.memo(function MoviesView({
     setContextMenu({ x: event.clientX, y: event.clientY, item });
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+
 
   const otherCategories = movieCat.filteredOtherCategories;
 
@@ -274,7 +276,7 @@ export const MoviesView = React.memo(function MoviesView({
                   className={`relative flex items-center group transition-transform ${movieCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${movieCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                   draggable={movieCat.editMode}
                   onDragStart={(e) => movieCat.handleDragStart(e, group)}
-                  onDragOver={handleDragOver}
+                  onDragOver={handleDragOverHelper}
                   onDrop={(e) => movieCat.handleDrop(e, group)}
                 >
                   <button type="button"
@@ -324,7 +326,7 @@ export const MoviesView = React.memo(function MoviesView({
                 className={`relative flex items-center group transition-transform ${movieCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${movieCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 draggable={movieCat.editMode}
                 onDragStart={(e) => movieCat.handleDragStart(e, group)}
-                onDragOver={handleDragOver}
+                onDragOver={handleDragOverHelper}
                 onDrop={(e) => movieCat.handleDrop(e, group)}
               >
                 <button type="button"

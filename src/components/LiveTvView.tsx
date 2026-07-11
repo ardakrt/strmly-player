@@ -256,6 +256,10 @@ export const LiveChannelGridCard = React.memo(({
   );
 });
 
+const handleDragOverHelper = (e: React.DragEvent) => {
+  e.preventDefault();
+};
+
 export const LiveTvView = React.memo(function LiveTvView({
   selectedGroup,
   activeLiveCategory,
@@ -315,9 +319,7 @@ export const LiveTvView = React.memo(function LiveTvView({
     setContextMenu({ x: event.clientX, y: event.clientY, item });
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+
 
   const otherCategories = liveCat.filteredOtherCategories;
 
@@ -384,7 +386,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                   className={`relative flex items-center group transition-transform ${liveCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${liveCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                   draggable={liveCat.editMode}
                   onDragStart={(e) => liveCat.handleDragStart(e, group)}
-                  onDragOver={handleDragOver}
+                  onDragOver={handleDragOverHelper}
                   onDrop={(e) => liveCat.handleDrop(e, group)}
                 >
                   <button type="button"
@@ -436,7 +438,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                 className={`relative flex items-center group transition-transform ${liveCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${liveCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 draggable={liveCat.editMode}
                 onDragStart={(e) => liveCat.handleDragStart(e, group)}
-                onDragOver={handleDragOver}
+                onDragOver={handleDragOverHelper}
                 onDrop={(e) => liveCat.handleDrop(e, group)}
               >
                 <button type="button"

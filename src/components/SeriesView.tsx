@@ -184,6 +184,10 @@ export const SeriesCard = React.memo(({
   );
 });
 
+const handleDragOverHelper = (e: React.DragEvent) => {
+  e.preventDefault();
+};
+
 export const SeriesView = React.memo(function SeriesView({
   selectedGroup,
   activeSeriesCategory,
@@ -213,9 +217,7 @@ export const SeriesView = React.memo(function SeriesView({
     setContextMenu({ x: event.clientX, y: event.clientY, item });
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+
 
   const otherCategories = seriesCat.filteredOtherCategories;
 
@@ -269,7 +271,7 @@ export const SeriesView = React.memo(function SeriesView({
                   className={`relative flex items-center group transition-transform ${seriesCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${seriesCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                   draggable={seriesCat.editMode}
                   onDragStart={(e) => seriesCat.handleDragStart(e, group)}
-                  onDragOver={handleDragOver}
+                  onDragOver={handleDragOverHelper}
                   onDrop={(e) => seriesCat.handleDrop(e, group)}
                 >
                   <button type="button"
@@ -319,7 +321,7 @@ export const SeriesView = React.memo(function SeriesView({
                 className={`relative flex items-center group transition-transform ${seriesCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${seriesCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 draggable={seriesCat.editMode}
                 onDragStart={(e) => seriesCat.handleDragStart(e, group)}
-                onDragOver={handleDragOver}
+                onDragOver={handleDragOverHelper}
                 onDrop={(e) => seriesCat.handleDrop(e, group)}
               >
                 <button type="button"
