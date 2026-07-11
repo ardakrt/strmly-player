@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { SavedPlaylist } from '../types';
 import { useCategoryManager } from './useCategoryManager';
@@ -82,23 +82,26 @@ export function useAppCategories({
   const [visibleSeriesCategoryLimit, setVisibleSeriesCategoryLimit] = useState(40);
   const [visibleMovieCategoryLimit, setVisibleMovieCategoryLimit] = useState(40);
 
-  useEffect(() => {
+  const [prevSelectedGroup, setPrevSelectedGroup] = useState(selectedGroup);
+  const [prevCategorySearchQuery, setPrevCategorySearchQuery] = useState(categorySearchQuery);
+  const [prevPlaylistsLength, setPrevPlaylistsLength] = useState(playlists.length);
+
+  if (selectedGroup !== prevSelectedGroup || categorySearchQuery !== prevCategorySearchQuery) {
+    setPrevSelectedGroup(selectedGroup);
+    setPrevCategorySearchQuery(categorySearchQuery);
     setVisibleLiveCategoryLimit(24);
     setVisibleSeriesCategoryLimit(40);
     setVisibleMovieCategoryLimit(40);
-  }, [selectedGroup, categorySearchQuery]);
+  }
 
-  // Keep active category selections valid when the active playlist is removed
-  // or still loading. Do not clear persisted hidden/favorite category settings
-  // here; profile boot briefly reports zero playlists before profile data is
-  // loaded, and saving empty arrays would erase the user's category edits.
-  useEffect(() => {
+  if (playlists.length !== prevPlaylistsLength) {
+    setPrevPlaylistsLength(playlists.length);
     if (playlists.length === 0) {
       setActiveLiveCategory('Tümü');
       setActiveSeriesCategory('Tümü');
       setActiveMovieCategory('Tümü');
     }
-  }, [playlists.length]);
+  }
 
   const liveCat = useCategoryManager({
     domain: 'live',
