@@ -45,7 +45,7 @@ export function SpotlightSearch({
   // Recent Searches state
   const [recentSearches, setRecentSearches] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem('strmly_recent_searches');
+      const saved = localStorage.getItem('strmly_recent_searches:v1');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -73,7 +73,7 @@ export function SpotlightSearch({
     setRecentSearches(prev => {
       const filtered = prev.filter(x => x.item.id !== match.item.id);
       const updated = [match, ...filtered].slice(0, 6);
-      localStorage.setItem('strmly_recent_searches', JSON.stringify(updated));
+      localStorage.setItem('strmly_recent_searches:v1', JSON.stringify(updated));
       return updated;
     });
   };
@@ -82,14 +82,14 @@ export function SpotlightSearch({
     e.stopPropagation();
     setRecentSearches(prev => {
       const updated = prev.filter(x => x.item.id !== id);
-      localStorage.setItem('strmly_recent_searches', JSON.stringify(updated));
+      localStorage.setItem('strmly_recent_searches:v1', JSON.stringify(updated));
       return updated;
     });
   };
 
   const clearAllRecent = () => {
     setRecentSearches([]);
-    localStorage.removeItem('strmly_recent_searches');
+    localStorage.removeItem('strmly_recent_searches:v1');
   };
 
   const handleSelectResult = (match: any) => {

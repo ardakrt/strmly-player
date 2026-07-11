@@ -60,12 +60,18 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
   const [tmdbPoster, setTmdbPoster] = useState<string | null>(cachedPoster || null);
   const [imgLoaded, setImgLoaded] = useState(!!cachedPoster);
 
-  useEffect(() => {
+  const [prevSrc, setPrevSrc] = useState(src);
+  const [prevCachedPoster, setPrevCachedPoster] = useState(cachedPoster);
+
+  if (src !== prevSrc || cachedPoster !== prevCachedPoster) {
+    setPrevSrc(src);
+    setPrevCachedPoster(cachedPoster);
     setError(false);
     setFailedImageSrc(null);
-    // Cache'de varsa imgLoaded'ı sıfırlama
-    if (!cachedPoster) setImgLoaded(false);
-  }, [src, cachedPoster]);
+    if (!cachedPoster) {
+      setImgLoaded(false);
+    }
+  }
 
   // Timeout for src images
   useEffect(() => {

@@ -574,8 +574,10 @@ export const LiveTvView = React.memo(function LiveTvView({
                 <img 
                   src={previewChannel.logo} 
                   alt=""
+                  decoding="async"
+                  loading="lazy"
                   className="max-h-[55%] max-w-[55%] object-contain z-10 transition-transform duration-500 group-hover:scale-105" 
-                  onError={(e) => { (e.target as HTMLImageElement).src = ''; }}
+                  onError={(e) => { e.currentTarget.hidden = true; }}
                 />
               ) : (
                 <Tv size={32} className="text-neutral-500 z-10" />
