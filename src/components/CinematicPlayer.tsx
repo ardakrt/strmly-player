@@ -928,7 +928,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             >
                               {language === 'tr' ? 'Otomatik' : 'Auto'}
                             </button>
-                            {[...qualityLevels].sort((a, b) => (b.height || 0) - (a.height || 0)).map(level => (
+                            {qualityLevels.toSorted((a, b) => (b.height || 0) - (a.height || 0)).map(level => (
                               <button type="button"
                                 key={level.id}
                                 onClick={() => { onQualityChange(level.id); setShowSettingsMenu(false); }}
