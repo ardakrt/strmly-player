@@ -17,7 +17,7 @@ interface CinematicPlayerProps {
   playerMuted: boolean;
   showControls: boolean;
   videoReady: boolean;
-  playbackStatus: 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
+  playbackStatus: 'loading' | 'playing' | 'recovering' | 'transcoding' | 'seeking' | 'error';
   playbackMessage: string;
   playbackSpeed: number;
   showSpeedMenu: boolean;
@@ -52,6 +52,8 @@ interface CinematicPlayerProps {
   onMouseLeave?: () => void;
   channels: PlaylistItem[];
   onChannelChange: (channel: PlaylistItem) => void;
+  showIntroSkip?: boolean;
+  onSkipIntro?: () => void;
 }
 
 export const CinematicPlayer = (props: CinematicPlayerProps) => {
@@ -75,7 +77,9 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     onHideControls,
     formatTime,
     onMouseMove, onMouseLeave,
-    channels, onChannelChange
+    channels, onChannelChange,
+    showIntroSkip,
+    onSkipIntro
   } = props;
 
   const isLive = channel.type === 'live';
@@ -85,7 +89,9 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       ? (language === 'tr' ? 'Film' : 'Movie')
       : (language === 'tr' ? 'Dizi bölümü' : 'Episode');
   const isPlaybackError = playbackStatus === 'error';
-  const shouldShowPlaybackOverlay = isPlaybackError || !videoReady || playbackMessage;
+  const isSeeking = playbackStatus === 'seeking';
+  // Seek uses a light overlay so the scrub position stays visible; don't blank the whole player.
+  const shouldShowPlaybackOverlay = isPlaybackError || (!isSeeking && (!videoReady || !!playbackMessage));
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [currentSubmenu, setCurrentSubmenu] = useState<'main' | 'speed' | 'quality' | 'subtitles' | 'scale' | 'audio'>('main');
@@ -374,6 +380,15 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
         return;
       }
 
+      // I -> Skip Intro
+      if (key === 'i') {
+        if (showIntroSkip) {
+          e.preventDefault();
+          onSkipIntro?.();
+          return;
+        }
+      }
+
       // ArrowLeft -> Skip Back 10s
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
@@ -415,7 +430,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [playerMuted, playerVolume, onVolumeChange, onTogglePlay, onToggleMute, onToggleFullscreen, onClose, onMouseMove, handleSkipBackward, handleSkipForward]);
+  }, [playerMuted, playerVolume, onVolumeChange, onTogglePlay, onToggleMute, onToggleFullscreen, onClose, onMouseMove, handleSkipBackward, handleSkipForward, onSkipIntro, showIntroSkip]);
 
   return (
     <div
@@ -473,7 +488,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <button type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onChannelChange(nextEpisode);
@@ -484,7 +499,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 {language === 'tr' ? 'Şimdi Oynat' : 'Play Now'}
               </button>
               {autoPlayNext && (
-                <button
+                <button type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsAutoplayCancelled(true);
@@ -505,6 +520,21 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             onHideControls();
           }}
         />
+        {isSeeking && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center animate-fade-in">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-black/55 px-5 py-3 shadow-2xl backdrop-blur-md">
+              <LoaderCircle size={22} className="animate-spin text-white/85" />
+              <div className="flex flex-col items-start gap-0.5">
+                <span className="text-sm font-bold tracking-wide text-white/90">
+                  {language === 'tr' ? 'İleri sarılıyor' : 'Seeking'}
+                </span>
+                {playbackMessage && (
+                  <span className="text-[11px] text-white/50">{playbackMessage}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {shouldShowPlaybackOverlay && (
           <div className="absolute inset-0 bg-black/75 backdrop-blur-2xl flex flex-col items-center justify-center gap-4 z-30 animate-fade-in px-6 text-center">
             {isPlaybackError ? (
@@ -527,7 +557,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               </span>
             </div>
             {isPlaybackError && (
-              <button
+              <button type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClose();
@@ -545,7 +575,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
           }`}
         >
           {!isLive && (
-            <button
+            <button type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleSkipBackward();
@@ -561,7 +591,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               </svg>
             </button>
           )}
-          <button
+          <button type="button"
             onClick={(e) => {
               e.stopPropagation();
               onTogglePlay();
@@ -577,7 +607,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             )}
           </button>
           {!isLive && (
-            <button
+            <button type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleSkipForward();
@@ -595,7 +625,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
           )}
         </div>
         <div className={`absolute top-8 left-8 right-8 flex items-center justify-between z-20 transform-gpu will-change-[opacity,transform] transition-all duration-100 ease-out ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
-          <button
+          <button type="button"
             className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white backdrop-blur-3xl shadow-[0_4px_30px_rgba(0,0,0,0.1)] transition-all active:scale-90"
             onClick={(e) => {
               e.stopPropagation();
@@ -627,7 +657,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
           >
             {channel.type === 'series' && (
               <div className="group/episode-nav relative shrink-0">
-                <button
+                <button type="button"
                   disabled={!prevEpisode}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -647,7 +677,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 )}
               </div>
             )}
-            <button
+            <button type="button"
               className="w-10 h-10 shrink-0 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
               onClick={onTogglePlay}
             >
@@ -655,7 +685,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             </button>
             {channel.type === 'series' && (
               <div className="group/episode-nav relative shrink-0">
-                <button
+                <button type="button"
                   disabled={!nextEpisode}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -676,7 +706,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               </div>
             )}
             <div className="flex items-center shrink-0 group/vol">
-              <button
+              <button type="button"
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0"
                 onClick={onToggleMute}
                 title={language === 'tr' ? 'Sessiz (M)' : 'Mute (M)'}
@@ -760,7 +790,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
 
             <div className="flex items-center gap-1.5 shrink-0 px-1">
               <div ref={settingsRef} className="relative">
-                <button
+                <button type="button"
                   className={`w-8 h-8 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors ${
                     showSettingsMenu ? 'bg-white/20 text-white' : 'text-white'
                   }`}
@@ -782,7 +812,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-white">{t('settings.title')}</div>
                             <div className="mt-0.5 text-[9px] font-medium text-white/35">{language === 'tr' ? 'Oynatma tercihleri' : 'Playback preferences'}</div>
                           </div>
-                          <button
+                          <button type="button"
                             onClick={() => setShowSettingsMenu(false)}
                             className="flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.06] text-white/50 transition-colors hover:bg-white/10 hover:text-white"
                             title={language === 'tr' ? 'Kapat' : 'Close'}
@@ -797,31 +827,31 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <button onClick={() => setCurrentSubmenu('speed')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
+                          <button type="button" onClick={() => setCurrentSubmenu('speed')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Gauge size={14} /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{language === 'tr' ? 'Oynatma Hızı' : 'Playback Speed'}</span><span className="mt-0.5 block text-[9px] text-white/35">{language === 'tr' ? 'Video hızını değiştir' : 'Change playback rate'}</span></span>
                             <span className="flex items-center gap-1 rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{playbackSpeed}x <ChevronRight size={10} /></span>
                           </button>
 
-                          <button onClick={() => setCurrentSubmenu('quality')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
+                          <button type="button" onClick={() => setCurrentSubmenu('quality')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Gauge size={14} /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{language === 'tr' ? 'Kalite' : 'Quality'}</span><span className="mt-0.5 block text-[9px] text-white/35">{sourceTypeLabel}</span></span>
                             <span className="flex max-w-[82px] items-center gap-1 truncate rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{sourceQualityLabel} <ChevronRight size={10} className="shrink-0" /></span>
                           </button>
 
-                          <button onClick={() => setCurrentSubmenu('subtitles')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
+                          <button type="button" onClick={() => setCurrentSubmenu('subtitles')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Subtitles size={14} /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{t('player.subtitles')}</span><span className="mt-0.5 block truncate text-[9px] text-white/35">{language === 'tr' ? 'Dil veya yerel dosya seç' : 'Choose language or local file'}</span></span>
                             <span className="flex max-w-[72px] items-center gap-1 truncate rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{activeSubtitle === -1 ? (language === 'tr' ? 'Kapalı' : 'Off') : (subtitleTracks[activeSubtitle]?.label || (language === 'tr' ? 'Açık' : 'On'))} <ChevronRight size={10} className="shrink-0" /></span>
                           </button>
 
-                          <button onClick={() => setCurrentSubmenu('scale')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
+                          <button type="button" onClick={() => setCurrentSubmenu('scale')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Scan size={14} /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{language === 'tr' ? 'Görüntü Oranı' : 'Aspect Ratio'}</span><span className="mt-0.5 block text-[9px] text-white/35">{language === 'tr' ? 'Sığdır, doldur veya kırp' : 'Fit, fill, or crop'}</span></span>
                             <span className="flex items-center gap-1 rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{videoScaleMode === 'fit' ? (language === 'tr' ? 'Orijinal' : 'Original') : videoScaleMode === 'fill' ? (language === 'tr' ? 'Sığdır' : 'Fit') : videoScaleMode === 'zoom' ? (language === 'tr' ? 'Kırp' : 'Crop') : videoScaleMode} <ChevronRight size={10} /></span>
                           </button>
 
-                          <button onClick={() => setCurrentSubmenu('audio')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
+                          <button type="button" onClick={() => setCurrentSubmenu('audio')} className="group/menu flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors hover:bg-white/[0.07]">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55 transition-colors group-hover/menu:bg-white/10 group-hover/menu:text-white"><Volume2 size={14} /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-white/90">{t('player.audio')}</span><span className="mt-0.5 block text-[9px] text-white/35">{language === 'tr' ? 'Ses kanalını değiştir' : 'Change audio track'}</span></span>
                             <span className="flex max-w-[76px] items-center gap-1 truncate rounded-md bg-white/[0.07] px-2 py-1 text-[9px] font-bold text-white/65">{displayAudioTracks[activeAudioTrack]?.name || (language === 'tr' ? `Parça ${activeAudioTrack + 1}` : `Track ${activeAudioTrack + 1}`)} <ChevronRight size={10} className="shrink-0" /></span>
@@ -830,7 +860,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
 
                         <div className="my-2 h-px bg-white/[0.07]" />
                         {channel.type === 'series' && (
-                          <button
+                          <button type="button"
                             onClick={() => setAutoPlayNext(prev => !prev)}
                             className="group/autoplay flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.07]"
                           >
@@ -841,7 +871,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             </span>
                           </button>
                         )}
-                        <button
+                        <button type="button"
                           onClick={() => { onPiP(); setShowSettingsMenu(false); }}
                           className="group/pip flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.07]"
                         >
@@ -855,7 +885,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     {currentSubmenu === 'speed' && (
                       <div className="absolute bottom-full right-0 z-30 mb-3 w-[240px] rounded-[20px] border border-white/10 bg-[#09090b]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-scale-in">
                         <div className="mb-2 flex items-center gap-2 border-b border-white/[0.07] px-1 pb-2">
-                          <button
+                          <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
                           >
@@ -865,7 +895,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         </div>
                         <div className="grid grid-cols-3 gap-1.5">
                           {SPEED_OPTIONS.map(optSpeed => (
-                            <button
+                            <button type="button"
                               key={optSpeed}
                               onClick={() => { onSpeedChange(optSpeed); setShowSettingsMenu(false); }}
                               className={`rounded-xl px-2 py-2.5 text-[10px] font-bold transition-all ${playbackSpeed === optSpeed ? 'bg-white text-black shadow-lg' : 'bg-white/[0.05] text-white/65 hover:bg-white/10 hover:text-white'}`}
@@ -880,7 +910,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     {currentSubmenu === 'quality' && (
                       <div className="absolute bottom-full right-0 z-30 mb-3 w-[240px] rounded-[20px] border border-white/10 bg-[#09090b]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-scale-in">
                         <div className="mb-2 flex items-center gap-2 border-b border-white/[0.07] px-1 pb-2">
-                          <button
+                          <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
                           >
@@ -890,7 +920,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                         </div>
                         {qualityLevels.length > 0 ? (
                           <div className="flex flex-col gap-0.5">
-                            <button
+                            <button type="button"
                               onClick={() => { onQualityChange(-1); setShowSettingsMenu(false); }}
                               className={`w-full px-3 py-2 rounded-xl text-xs font-semibold text-left transition-colors ${
                                 activeQualityLevel === -1 ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10 hover:text-white'
@@ -899,7 +929,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                               {language === 'tr' ? 'Otomatik' : 'Auto'}
                             </button>
                             {[...qualityLevels].sort((a, b) => (b.height || 0) - (a.height || 0)).map(level => (
-                              <button
+                              <button type="button"
                                 key={level.id}
                                 onClick={() => { onQualityChange(level.id); setShowSettingsMenu(false); }}
                                 className={`w-full px-3 py-2 rounded-xl text-xs font-semibold text-left transition-colors ${
@@ -922,7 +952,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     {currentSubmenu === 'subtitles' && (
                       <div className="absolute bottom-full right-0 mb-3 bg-[#09090b]/95 backdrop-blur-2xl border border-white/10 rounded-[20px] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-scale-in w-[240px] z-30 flex flex-col gap-0.5">
                         <div className="flex items-center gap-2 px-1 py-1.5 border-b border-white/5 mb-1">
-                          <button
+                          <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
                           >
@@ -930,7 +960,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           </button>
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{t('player.subtitles')}</span>
                         </div>
-                        <button
+                        <button type="button"
                           onClick={() => {
                             onSubtitleChange(-1);
                             setShowSettingsMenu(false);
@@ -942,7 +972,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           {language === 'tr' ? 'Altyazı Yok' : 'No Subtitles'}
                         </button>
                         {subtitleTracks.map((track, idx) => (
-                          <button
+                          <button type="button"
                             key={idx}
                             onClick={() => {
                               onSubtitleChange(idx);
@@ -968,7 +998,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     {currentSubmenu === 'scale' && (
                       <div className="absolute bottom-full right-0 mb-3 bg-[#09090b]/95 backdrop-blur-2xl border border-white/10 rounded-[20px] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-scale-in w-[240px] z-30 flex flex-col gap-0.5">
                         <div className="flex items-center gap-2 px-1 py-1.5 border-b border-white/5 mb-1">
-                          <button
+                          <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
                           >
@@ -983,7 +1013,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           { mode: '16:9', label: language === 'tr' ? '16:9 Oranı' : '16:9 Ratio' },
                           { mode: '4:3', label: language === 'tr' ? '4:3 Oranı' : '4:3 Ratio' }
                         ].map(opt => (
-                          <button
+                          <button type="button"
                             key={opt.mode}
                             onClick={() => {
                               setVideoScaleMode(opt.mode as any);
@@ -1002,7 +1032,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     {currentSubmenu === 'audio' && (
                       <div className="absolute bottom-full right-0 mb-3 bg-[#09090b]/95 backdrop-blur-2xl border border-white/10 rounded-[20px] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-scale-in w-[240px] z-30 flex flex-col gap-0.5">
                         <div className="flex items-center gap-2 px-1 py-1.5 border-b border-white/5 mb-1">
-                          <button
+                          <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
                           >
@@ -1011,7 +1041,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{t('player.audio')}</span>
                         </div>
                         {displayAudioTracks.map((track) => (
-                          <button
+                          <button type="button"
                             key={track.id}
                             disabled={audioTracks.length <= 1}
                             onClick={() => {
@@ -1030,7 +1060,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                   </>
                 )}
               </div>
-              <button
+              <button type="button"
                 className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition-colors"
                 onClick={onToggleFullscreen}
                 title={language === 'tr' ? 'Tam Ekran (F)' : 'Fullscreen (F)'}
@@ -1040,6 +1070,19 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             </div>
           </div>
         </div>
+
+        {showIntroSkip && (
+          <button type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSkipIntro?.();
+            }}
+            className="absolute bottom-28 right-8 z-30 flex items-center gap-2 rounded-lg border border-white/20 bg-black/75 px-5 py-2.5 text-sm font-bold text-white shadow-2xl backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 hover:border-[var(--accent-color)]/50 hover:bg-black/90 group animate-scale-in"
+          >
+            <Play size={14} className="fill-white group-hover:scale-110 transition-transform" />
+            <span>{language === 'tr' ? 'Girişi Atla' : 'Skip Intro'}</span>
+          </button>
+        )}
       </div>
     </div>
   );

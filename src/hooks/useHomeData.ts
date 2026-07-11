@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
@@ -52,18 +52,23 @@ export function useHomeData({
   const [activeFeaturedIndex, setActiveFeaturedIndex] = useState<number>(0);
   const [isHomeReady, setIsHomeReady] = useState(false);
 
+  const isFirstLoadRef = useRef(true);
+
   // Select highly-rated VOD items (movies/series) for Hero Showcase Carousel from cache/network
   useEffect(() => {
     if (items.length === 0) {
       setShowcaseItems([]);
       setActiveFeaturedIndex(0);
       setIsHomeReady(true);
+      isFirstLoadRef.current = true;
       return;
     }
 
     let active = true;
     let worker: Worker | null = null;
-    setIsHomeReady(false);
+    if (isFirstLoadRef.current) {
+      setIsHomeReady(false);
+    }
 
     const selectShowcaseItems = async () => {
       const getDayOfYear = () => {
@@ -262,6 +267,7 @@ export function useHomeData({
         setShowcaseItems(finalSelected);
         setActiveFeaturedIndex(0);
         setIsHomeReady(true);
+        isFirstLoadRef.current = false;
       }
     };
 

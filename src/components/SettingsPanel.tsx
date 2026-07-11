@@ -1,9 +1,7 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
-  BarChart3,
   Check,
-  ChevronDown,
   Database,
   Eye,
   EyeOff,
@@ -31,169 +29,7 @@ import { useSettings } from '../context/SettingsContext';
 import type { SavedPlaylist } from '../types';
 import { useDownloads } from '../hooks/useDownloads';
 
-const ACCENT_COLORS = [
-  { color: '#FFFFFF', name: 'Beyaz' },
-  { color: '#3b82f6', name: 'Mavi' },
-  { color: '#10b981', name: 'Yeşil' },
-  { color: '#f59e0b', name: 'Sarı' },
-  { color: '#8b5cf6', name: 'Mor' },
-  { color: '#f43f5e', name: 'Kırmızı' },
-  { color: '#06b6d4', name: 'Cyan' },
-  { color: '#ec4899', name: 'Pembe' }
-];
-
-const THEMES = [
-  { id: 'space-black', label: 'OLED Siyah' },
-  { id: 'deep-space', label: 'Gece Mavisi' },
-  { id: 'slate-dark', label: 'Koyu Slate' },
-  { id: 'forest-mint', label: 'Orman Yeşili' },
-  { id: 'sunset-orange', label: 'Günbatımı Kızılı' },
-  { id: 'midnight-purple', label: 'Gece Yarısı Moru' }
-];
-
-const UPDATE_OPTIONS = [
-  { value: 6, label: '6 Saat' },
-  { value: 12, label: '12 Saat' },
-  { value: 24, label: '1 Gün' },
-  { value: 168, label: '7 Gün' }
-] as const;
-
-const fieldStyle = 'h-9 w-full md:w-64 rounded-lg border border-white/5 bg-white/[0.02] px-3 text-xs text-white outline-none transition-all placeholder:text-neutral-600 focus:border-[var(--accent-color)] focus:bg-white/[0.04]';
-const labelStyle = 'text-[13px] font-bold text-neutral-100 tracking-wide';
-const helpStyle = 'text-xs leading-relaxed text-neutral-400 mt-1 font-light';
-const primaryButton = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent-color)] px-4 text-xs font-black uppercase tracking-wider text-black transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
-const secondaryButton = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.02] px-4 text-xs font-bold uppercase tracking-wider text-neutral-200 transition-all hover:bg-white/[0.06] hover:text-white active:scale-[0.98] disabled:opacity-50 cursor-pointer';
-const dangerButton = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-red-500/15 bg-red-950/15 px-3 text-xs font-bold uppercase tracking-wider text-red-300 transition-all hover:bg-red-900/20 active:scale-[0.98] cursor-pointer';
-const EMPTY_ARRAY: never[] = [];
-
-interface CustomSelectProps {
-  value: string;
-  onChange: (val: string) => void;
-  options: { value: string; label: string }[];
-  className?: string;
-}
-
-function CustomSelect({ value, onChange, options, className = '' }: CustomSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const selectedOption = options.find(o => o.value === value) || options[0];
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div ref={containerRef} className={`relative w-full md:w-64 select-none ${className}`}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 pr-9 text-xs text-white outline-none flex items-center justify-between transition-all hover:bg-white/[0.04] hover:border-white/20 active:scale-[0.98] text-left"
-      >
-        <span className="truncate">{selectedOption?.label}</span>
-        <ChevronDown size={14} className={`text-neutral-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-[100] max-h-60 overflow-y-auto rounded-lg border border-white/10 bg-neutral-950 p-1 backdrop-blur-xl shadow-2xl animate-fade-in scrollbar-thin">
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-md transition-colors flex items-center justify-between ${
-                  isSelected
-                    ? 'bg-[var(--accent-color)] text-black font-black'
-                    : 'text-neutral-300 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <span className="truncate pr-2">{option.label}</span>
-                {isSelected && <Check size={12} strokeWidth={3} />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PageHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mb-6 border-b border-white/5 pb-4">
-      <h2 className="text-lg font-black tracking-tight text-white">{title}</h2>
-      <p className="mt-1 text-xs leading-relaxed text-neutral-400 font-medium">{description}</p>
-    </div>
-  );
-}
-
-function SettingRow({
-  title,
-  description,
-  children,
-  vertical = false
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  vertical?: boolean;
-}) {
-  if (vertical) {
-    return (
-      <div className="flex flex-col gap-3 py-5 border-b border-white/[0.04] last:border-b-0">
-        <div>
-          <div className={labelStyle}>{title}</div>
-          {description && <p className={helpStyle}>{description}</p>}
-        </div>
-        <div className="w-full mt-1">{children}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-5 border-b border-white/[0.04] last:border-b-0">
-      <div className="max-w-xl">
-        <div className={labelStyle}>{title}</div>
-        {description && <p className={helpStyle}>{description}</p>}
-      </div>
-      <div className="w-full md:w-auto shrink-0 flex justify-end">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function StatBox({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.01] p-3 text-center hover:bg-white/[0.02] transition-all duration-200 select-none">
-      <div className="text-xl font-black text-white leading-none tracking-tight">{value}</div>
-      <div className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-500">{label}</div>
-    </div>
-  );
-}
-
-function EmptyState({ icon: Icon, title, description }: { icon: React.ComponentType<{ size?: number; className?: string }>; title: string; description: string }) {
-  return (
-    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.01] p-6 text-center">
-      <div className="p-3 rounded-full bg-white/[0.02] border border-white/5 text-neutral-500 mb-3">
-        <Icon size={20} />
-      </div>
-      <div className="text-xs font-bold text-neutral-200">{title}</div>
-      <div className="mt-1 max-w-xs text-[11px] leading-relaxed text-neutral-500">{description}</div>
-    </div>
-  );
-}
+import { ACCENT_COLORS, CustomSelect, dangerButton, EMPTY_ARRAY, EmptyState, fieldStyle, labelStyle, PageHeader, primaryButton, secondaryButton, SettingRow, StatBox, THEMES, UPDATE_OPTIONS } from './SettingsControls';
 
 export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => void }) => {
   const {
@@ -216,12 +52,11 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     isParsing,
     hiddenCategories, hiddenSeriesCategories, hiddenMovieCategories,
     itemStats, recentlyWatched, globalFavorites,
-    items, isCheckingHealth, checkerLog, runPlaylistDiagnostics,
     onPlaylistLoadFromUrl, onPlaylistLoadLocal, onXtreamLoad,
     onSelectPlaylist, onDeletePlaylist,
     onRestoreCategory, onRestoreSeriesCategory, onRestoreMovieCategory,
     onResetHiddenCategories, onResetHiddenSeriesCategories, onResetHiddenMovieCategories,
-    onSaveSetting, onShowToast,
+    onSaveSetting, onLoadSetting, onShowToast,
     onClearRecentlyWatched, onClearFavorites,
     onRefreshPlaylist,
     onUpdatePlaylistAutoUpdateInterval
@@ -233,8 +68,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
   const safeHiddenCategories = Array.isArray(hiddenCategories) ? hiddenCategories : EMPTY_ARRAY;
   const safeHiddenSeriesCategories = Array.isArray(hiddenSeriesCategories) ? hiddenSeriesCategories : EMPTY_ARRAY;
   const safeHiddenMovieCategories = Array.isArray(hiddenMovieCategories) ? hiddenMovieCategories : EMPTY_ARRAY;
-  const safeItems = Array.isArray(items) ? items : EMPTY_ARRAY;
-  const safeCheckerLog = Array.isArray(checkerLog) ? checkerLog : EMPTY_ARRAY;
+
   const safeRecentlyWatched = Array.isArray(recentlyWatched) ? recentlyWatched : EMPTY_ARRAY;
   const safeGlobalFavorites = Array.isArray(globalFavorites) ? globalFavorites : EMPTY_ARRAY;
 
@@ -252,6 +86,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
   const [downloadsFolder, setDownloadsFolder] = useState<string>('');
   const [showMoveDownloadsPrompt, setShowMoveDownloadsPrompt] = useState<boolean>(false);
   const [pendingDownloadsFolder, setPendingDownloadsFolder] = useState<string>('');
+  const [pendingDownloadsFolderToken, setPendingDownloadsFolderToken] = useState<string>('');
   const [moveExistingDownloads, setMoveExistingDownloads] = useState<boolean>(true);
   const [isMovingDownloads, setIsMovingDownloads] = useState<boolean>(false);
   const [moveProgress, setMoveProgress] = useState<{
@@ -260,6 +95,27 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     filesMoved: number;
     totalFiles: number;
   } | null>(null);
+  const [segmentConcurrency, setSegmentConcurrency] = useState<number>(6);
+  const [downloadMaxHeight, setDownloadMaxHeight] = useState<number>(1080);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const conc = await onLoadSetting?.('cinema_download_segment_concurrency');
+        const height = await onLoadSetting?.('cinema_download_max_height');
+        const concNum = Number(conc);
+        const heightNum = Number(height);
+        if (Number.isFinite(concNum) && concNum >= 1 && concNum <= 8) {
+          setSegmentConcurrency(Math.floor(concNum));
+        }
+        if (Number.isFinite(heightNum) && [480, 720, 1080, 2160].includes(heightNum)) {
+          setDownloadMaxHeight(heightNum);
+        }
+      } catch {
+        // defaults
+      }
+    })();
+  }, [onLoadSetting]);
 
   useEffect(() => {
     if (window.electronAPI?.getDownloadsFolder) {
@@ -425,7 +281,6 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     { id: 'appearance', label: t('settings.tabs.appearance'), icon: Palette },
     { id: 'playback', label: t('settings.tabs.playback'), icon: Check },
     { id: 'network', label: t('settings.tabs.network'), icon: UploadCloud },
-    { id: 'stats', label: t('settings.tabs.stats'), icon: BarChart3 },
     { id: 'data', label: t('settings.tabs.data'), icon: HardDrive },
     { id: 'about', label: t('settings.tabs.about'), icon: Info }
   ];
@@ -440,14 +295,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
   const categoryTotal = safeHiddenCategories.length + safeHiddenSeriesCategories.length + safeHiddenMovieCategories.length;
 
-  const topGroups = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const item of safeItems) {
-      const group = item.group || (language === 'tr' ? 'Diğer' : 'Other');
-      counts[group] = (counts[group] || 0) + 1;
-    }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  }, [safeItems, language]);
+
 
   const saveLocalSetting = (key: string, value: string) => {
     try {
@@ -464,14 +312,25 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
         const key = localStorage.key(i);
         if (key) settings[key] = localStorage.getItem(key);
       }
-      const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `strmly-settings-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onShowToast(language === 'tr' ? 'Ayarlar dışa aktarıldı.' : 'Settings exported.');
+
+      const worker = new Worker(new URL('../utils/settings.worker.ts', import.meta.url), { type: 'module' });
+      worker.onmessage = (e) => {
+        const { success, result } = e.data;
+        if (success) {
+          const blob = new Blob([result], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `strmly-settings-${new Date().toISOString().slice(0, 10)}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          onShowToast(language === 'tr' ? 'Ayarlar dışa aktarıldı.' : 'Settings exported.');
+        } else {
+          onShowToast(language === 'tr' ? 'Dışa aktarma hatası.' : 'Export error.');
+        }
+        worker.terminate();
+      };
+      worker.postMessage({ type: 'export', payload: settings });
     } catch {
       onShowToast(language === 'tr' ? 'Dışa aktarma hatası.' : 'Export error.');
     }
@@ -482,11 +341,20 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const settings = JSON.parse(reader.result as string);
-        Object.entries(settings).forEach(([key, value]) => {
-          localStorage.setItem(key, String(value));
-        });
-        onShowToast(language === 'tr' ? 'Ayarlar içe aktarıldı. Uygulamayı yenileyin.' : 'Settings imported. Please refresh the app.');
+        const worker = new Worker(new URL('../utils/settings.worker.ts', import.meta.url), { type: 'module' });
+        worker.onmessage = (e) => {
+          const { success, result, error } = e.data;
+          if (success) {
+            Object.entries(result).forEach(([key, value]) => {
+              localStorage.setItem(key, String(value));
+            });
+            onShowToast(language === 'tr' ? 'Ayarlar içe aktarıldı. Uygulamayı yenileyin.' : 'Settings imported. Please refresh the app.');
+          } else {
+            onShowToast(language === 'tr' ? `İçe aktarma hatası: ${error}` : `Import error: ${error}`);
+          }
+          worker.terminate();
+        };
+        worker.postMessage({ type: 'import', payload: reader.result as string });
       } catch {
         onShowToast(language === 'tr' ? 'İçe aktarma hatası.' : 'Import error.');
       }
@@ -506,7 +374,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
         }`}
       >
         <div className="flex items-center justify-between gap-4">
-          <button className="min-w-0 text-left cursor-pointer flex-1 group/play" onClick={() => onSelectPlaylist(playlist.id)}>
+          <button type="button" className="min-w-0 text-left cursor-pointer flex-1 group/play" onClick={() => onSelectPlaylist(playlist.id)}>
             <div className="flex items-center gap-2">
               <span className="truncate text-[14px] font-bold text-white group-hover/play:text-[var(--accent-color)] transition-colors">{playlist.name}</span>
               {isActive && (
@@ -520,7 +388,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
             </div>
           </button>
           <div className="flex shrink-0 gap-1.5">
-            <button
+            <button type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.02] text-neutral-300 hover:bg-white/[0.08] hover:text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               disabled={isParsing}
               onClick={() => onRefreshPlaylist(playlist)}
@@ -528,7 +396,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
             >
               <RefreshCw size={12} className={isParsing && isActive ? 'animate-spin text-[var(--accent-color)]' : ''} />
             </button>
-            <button
+            <button type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/15 bg-red-950/15 text-red-300 hover:bg-red-900/20 transition-all active:scale-95 cursor-pointer"
               onClick={() => onDeletePlaylist(playlist.id)}
               title={language === 'tr' ? 'Listeyi Sil' : 'Delete Playlist'}
@@ -542,7 +410,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
           <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Otomatik Güncelleme' : 'Auto Update'}</div>
           <div className="grid grid-cols-4 gap-1.5">
             {UPDATE_OPTIONS.map(option => (
-              <button
+              <button type="button"
                 key={option.value}
                 className={`h-7.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                   (playlist.autoUpdateIntervalHours || 24) === option.value
@@ -615,7 +483,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       {group}
                     </span>
                   </div>
-                  <button
+                  <button type="button"
                     onClick={() => restore(group)}
                     className="inline-flex h-7.5 items-center justify-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400 hover:text-white hover:border-[var(--accent-color)]/30 hover:bg-[var(--accent-color)]/10 transition-all cursor-pointer shrink-0"
                     title={language === 'tr' ? 'Kategoriyi Göster' : 'Show Category'}
@@ -661,7 +529,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
             const Icon = tab.icon;
             const selected = activeTab.id === tab.id;
             return (
-              <button
+              <button type="button"
                 key={tab.id}
                 onClick={() => setActiveSettingsTab(tab.id)}
                 className={`flex h-10 items-center gap-3 rounded-lg px-3 text-left text-xs font-bold transition-all duration-200 cursor-pointer border ${
@@ -713,6 +581,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     ]}
                   />
                 </SettingRow>
+
  
               </div>
             </>
@@ -754,7 +623,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     </div>
                   )}
 
-                  <button
+                  <button type="button"
                     onClick={() => onNavigate?.('İndirilenler')}
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[var(--accent-color)] px-6 text-xs font-black uppercase tracking-wider text-black transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-lg shadow-[var(--accent-color)]/10"
                   >
@@ -781,12 +650,13 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     <div className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/5 text-xs text-neutral-300 font-mono select-text truncate">
                       {downloadsFolder || (language === 'tr' ? 'Yükleniyor...' : 'Loading...')}
                     </div>
-                    <button
+                    <button type="button"
                       onClick={async () => {
                         if (!window.electronAPI?.selectDownloadsFolder) return;
                         const res = await window.electronAPI.selectDownloadsFolder();
-                        if (!res.canceled && res.filePath) {
+                        if (!res.canceled && res.filePath && res.selectionToken) {
                           setPendingDownloadsFolder(res.filePath);
+                          setPendingDownloadsFolderToken(res.selectionToken);
                           setShowMoveDownloadsPrompt(true);
                         }
                       }}
@@ -794,6 +664,70 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     >
                       <span>{language === 'tr' ? 'Konumu Değiştir' : 'Change Location'}</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* HLS download tuning */}
+                <div className="p-6 rounded-2xl border border-white/5 bg-white/[0.01] backdrop-blur-md shadow-xl flex flex-col gap-5 text-left animate-fade-in">
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-black text-white tracking-wide flex items-center gap-2">
+                      <Activity size={16} className="text-[var(--accent-color)]" />
+                      <span>{language === 'tr' ? 'İndirme Performansı' : 'Download Performance'}</span>
+                    </h4>
+                    <p className="text-xs text-neutral-400 font-medium leading-relaxed">
+                      {language === 'tr'
+                        ? 'HLS indirmelerde eşzamanlı segment sayısı ve tercih edilen maksimum kalite. Aynı anda yalnızca bir indirme işi çalışır (IPTV hesabı güvenliği).'
+                        : 'Concurrent HLS segments and preferred max quality. Only one download job runs at a time (IPTV account safety).'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+                        {language === 'tr' ? 'Segment paralelliği' : 'Segment concurrency'}
+                      </span>
+                      <CustomSelect
+                        value={String(segmentConcurrency)}
+                        onChange={(v) => {
+                          const n = Math.min(8, Math.max(1, Number(v) || 6));
+                          setSegmentConcurrency(n);
+                          onSaveSetting('cinema_download_segment_concurrency', n);
+                          onShowToast(
+                            language === 'tr'
+                              ? `Segment paralelliği: ${n}`
+                              : `Segment concurrency: ${n}`,
+                          );
+                        }}
+                        options={[1, 2, 3, 4, 6, 8].map((n) => ({
+                          value: String(n),
+                          label: language === 'tr' ? `${n} bağlantı` : `${n} connections`,
+                        }))}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+                        {language === 'tr' ? 'Maks. kalite (master HLS)' : 'Max quality (master HLS)'}
+                      </span>
+                      <CustomSelect
+                        value={String(downloadMaxHeight)}
+                        onChange={(v) => {
+                          const n = Number(v) || 1080;
+                          setDownloadMaxHeight(n);
+                          onSaveSetting('cinema_download_max_height', n);
+                          onShowToast(
+                            language === 'tr'
+                              ? `İndirme kalitesi: ${n}p`
+                              : `Download quality: ${n}p`,
+                          );
+                        }}
+                        options={[
+                          { value: '480', label: '480p' },
+                          { value: '720', label: '720p' },
+                          { value: '1080', label: '1080p' },
+                          { value: '2160', label: language === 'tr' ? 'En iyi (4K’ya kadar)' : 'Best (up to 4K)' },
+                        ]}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -807,7 +741,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                 description={language === 'tr' ? 'M3U ve Xtream kaynaklarını ekleyin, aktif listeyi seçin ve otomatik güncelleme aralığını belirleyin.' : 'Add M3U and Xtream sources, select the active playlist, and set the auto-update interval.'} 
               />
               <div className="mb-5 flex justify-end">
-                <button className={showAddPlaylistForm ? secondaryButton : primaryButton} onClick={() => setShowAddPlaylistForm(!showAddPlaylistForm)}>
+                <button type="button" className={showAddPlaylistForm ? secondaryButton : primaryButton} onClick={() => setShowAddPlaylistForm(!showAddPlaylistForm)}>
                   {showAddPlaylistForm ? <X size={14} /> : <Plus size={14} />}
                   {showAddPlaylistForm ? t('common.close') : t('settings.playlists.addPlaylist')}
                 </button>
@@ -816,7 +750,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               {showAddPlaylistForm && (
                 <div className="rounded-2xl border border-white/5 p-5 mb-5 bg-white/[0.005] animate-scale-in">
                   <div className="mb-4 inline-grid grid-cols-2 w-full max-w-[200px] rounded-lg border border-white/8 bg-black/40 p-0.5">
-                    <button
+                    <button type="button"
                       className={`h-7.5 rounded text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                         playlistMode === 'xtream'
                           ? 'bg-white text-black shadow-sm font-black'
@@ -826,7 +760,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     >
                       Xtream
                     </button>
-                    <button
+                    <button type="button"
                       className={`h-7.5 rounded text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                         playlistMode === 'm3u'
                           ? 'bg-white text-black shadow-sm'
@@ -851,7 +785,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                           <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={m3uUrl} onChange={(e) => setM3uUrl(e.target.value)} placeholder="http://example.com/playlist.m3u" />
                         </label>
                         <div className="flex flex-col gap-2.5 md:col-span-2 sm:flex-row mt-1">
-                          <button className={primaryButton} disabled={isParsing || !m3uUrl.trim()} onClick={onPlaylistLoadFromUrl}>
+                          <button type="button" className={primaryButton} disabled={isParsing || !m3uUrl.trim()} onClick={onPlaylistLoadFromUrl}>
                             {isParsing ? t('common.loading') : (language === 'tr' ? 'URL İndir' : 'Download URL')}
                           </button>
                           <label className={secondaryButton}>
@@ -874,7 +808,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                           <div className={labelStyle}>{t('profiles.xtreamPass')}</div>
                           <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} type="password" value={xtreamPass} onChange={(e) => setXtreamPass(e.target.value)} placeholder={language === 'tr' ? 'Şifre' : 'Password'} />
                         </label>
-                        <button className={`${primaryButton} md:col-span-2 mt-1`} disabled={isParsing || !xtreamUrl.trim() || !xtreamUser.trim() || !xtreamPass.trim()} onClick={onXtreamLoad}>
+                        <button type="button" className={`${primaryButton} md:col-span-2 mt-1`} disabled={isParsing || !xtreamUrl.trim() || !xtreamUser.trim() || !xtreamPass.trim()} onClick={onXtreamLoad}>
                           {isParsing ? (language === 'tr' ? 'Bağlanılıyor...' : 'Connecting...') : (language === 'tr' ? 'Xtream ile Giriş Yap' : 'Login with Xtream')}
                         </button>
                       </>
@@ -901,7 +835,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               
               {/* Kategori İstatistik Kartları */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <button
+                <button type="button"
                   onClick={() => setCategorySubTab(categorySubTab === 'live' ? 'all' : 'live')}
                   className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
                     categorySubTab === 'live'
@@ -926,7 +860,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-indigo-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
                 </button>
 
-                <button
+                <button type="button"
                   onClick={() => setCategorySubTab(categorySubTab === 'series' ? 'all' : 'series')}
                   className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
                     categorySubTab === 'series'
@@ -951,7 +885,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-pink-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
                 </button>
 
-                <button
+                <button type="button"
                   onClick={() => setCategorySubTab(categorySubTab === 'movie' ? 'all' : 'movie')}
                   className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
                     categorySubTab === 'movie'
@@ -980,7 +914,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               {/* Filtre ve Arama Araç Çubuğu */}
               <div className="mb-6 flex flex-col lg:flex-row gap-4 items-center justify-between bg-white/[0.01] border border-white/5 p-4 rounded-2xl select-none">
                 <div className="flex items-center gap-1.5 w-full lg:w-auto overflow-x-auto hide-scrollbar shrink-0">
-                  <button
+                  <button type="button"
                     onClick={() => setCategorySubTab('all')}
                     className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
                       categorySubTab === 'all'
@@ -990,7 +924,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   >
                     {language === 'tr' ? 'Tümü' : 'All'} ({categoryTotal})
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => setCategorySubTab('live')}
                     className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
                       categorySubTab === 'live'
@@ -1000,7 +934,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   >
                     {language === 'tr' ? 'Canlı TV' : 'Live TV'} ({safeHiddenCategories.length})
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => setCategorySubTab('series')}
                     className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
                       categorySubTab === 'series'
@@ -1010,7 +944,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   >
                     {language === 'tr' ? 'Diziler' : 'Series'} ({safeHiddenSeriesCategories.length})
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => setCategorySubTab('movie')}
                     className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
                       categorySubTab === 'movie'
@@ -1033,7 +967,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       className="w-full h-9 pl-9.5 pr-4 rounded-xl border border-white/5 bg-black/25 text-xs font-semibold text-white placeholder-neutral-500 focus:outline-none focus:border-white/12 focus:bg-black/35 transition-all"
                     />
                     {categorySearch && (
-                      <button 
+                      <button type="button" 
                         onClick={() => setCategorySearch('')}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
                       >
@@ -1042,7 +976,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     )}
                   </div>
 
-                  <button
+                  <button type="button"
                     className={`${secondaryButton} h-9 w-full sm:w-auto flex items-center justify-center gap-2`}
                     onClick={() => {
                       if (categorySubTab === 'all' || categorySubTab === 'live') onResetHiddenCategories();
@@ -1113,10 +1047,26 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                         bgGradientClass = 'from-black via-[#0f052d] to-[#2e1065]';
                         sidebarBgClass = 'bg-[#0b0321]/70';
                         glowClass = 'bg-pink-500';
+                      } else if (theme.id === 'nordic-frost') {
+                        bgGradientClass = 'from-black via-[#020617] to-[#0f172a]';
+                        sidebarBgClass = 'bg-[#0b0f19]/70';
+                        glowClass = 'bg-sky-400';
+                      } else if (theme.id === 'rose-gold') {
+                        bgGradientClass = 'from-black via-[#11050a] to-[#2d121c]';
+                        sidebarBgClass = 'bg-[#14050b]/70';
+                        glowClass = 'bg-rose-400';
+                      } else if (theme.id === 'crimson-tide') {
+                        bgGradientClass = 'from-black via-[#110104] to-[#3f0712]';
+                        sidebarBgClass = 'bg-[#140105]/70';
+                        glowClass = 'bg-rose-600';
+                      } else if (theme.id === 'ocean-abyss') {
+                        bgGradientClass = 'from-black via-[#021a1b] to-[#042f2e]';
+                        sidebarBgClass = 'bg-[#011819]/70';
+                        glowClass = 'bg-teal-600';
                       }
                       
                       return (
-                        <button
+                        <button type="button"
                           key={theme.id}
                           onClick={() => {
                             setActiveTheme(theme.id);
@@ -1164,7 +1114,11 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                              theme.id === 'slate-dark' ? (language === 'tr' ? 'Koyu Slate' : 'Slate Dark') :
                              theme.id === 'forest-mint' ? (language === 'tr' ? 'Orman Yeşili' : 'Forest Mint') :
                              theme.id === 'sunset-orange' ? (language === 'tr' ? 'Günbatımı Kızılı' : 'Sunset Orange') :
-                             theme.id === 'midnight-purple' ? (language === 'tr' ? 'Gece Yarısı Moru' : 'Midnight Purple') : theme.label}
+                             theme.id === 'midnight-purple' ? (language === 'tr' ? 'Gece Yarısı Moru' : 'Midnight Purple') :
+                             theme.id === 'nordic-frost' ? (language === 'tr' ? 'Kutup Esintisi' : 'Nordic Frost') :
+                             theme.id === 'rose-gold' ? (language === 'tr' ? 'Sakura Pembesi' : 'Sakura Blossom') :
+                             theme.id === 'crimson-tide' ? (language === 'tr' ? 'Kozmik Kızıl' : 'Cyberpunk Crimson') :
+                             theme.id === 'ocean-abyss' ? (language === 'tr' ? 'Okyanus Derinliği' : 'Ocean Abyss') : theme.label}
                           </span>
                         </button>
                       );
@@ -1175,7 +1129,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                 <SettingRow title={t('settings.appearance.accentColor')} description={t('settings.appearance.accentDesc')} vertical={true}>
                   <div className="flex flex-wrap gap-2">
                     {ACCENT_COLORS.map(item => (
-                      <button
+                      <button type="button"
                         key={item.color}
                         className={`flex h-9 items-center gap-2 rounded-full border px-3 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                           activeAccent === item.color
@@ -1207,7 +1161,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     {['low', 'medium', 'high'].map(level => {
                       const isActive = glassIntensity === level;
                       return (
-                        <button
+                        <button type="button"
                           key={level}
                           onClick={() => {
                             setGlassIntensity(level);
@@ -1237,7 +1191,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     ].map(size => {
                       const isActive = cardLayoutSize === size.id;
                       return (
-                        <button
+                        <button type="button"
                           key={size.id}
                           onClick={() => {
                             setCardLayoutSize(size.id);
@@ -1265,7 +1219,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     ].map(size => {
                       const isActive = uiScale === size.id;
                       return (
-                        <button
+                        <button type="button"
                           key={size.id}
                           onClick={() => changeUiScale(size.id as 'small' | 'medium' | 'large')}
                           className={`h-7 px-3.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
@@ -1282,7 +1236,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                 </SettingRow>
 
                 <SettingRow title={t('settings.appearance.neon')} description={t('settings.appearance.neonDesc')}>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       const next = !neonGlowEnabled;
                       setNeonGlowEnabled(next);
@@ -1305,7 +1259,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                 </SettingRow>
 
                 <SettingRow title={language === 'tr' ? 'Sinematik Film Greni' : 'Cinematic Film Grain'} description={language === 'tr' ? 'Arka plana hafif, hareketli hissettiren pürüzlü film dokusu katmanı ekler.' : 'Adds a subtle, moving textured film grain overlay to the background.'}>
-                  <button
+                  <button type="button"
                     onClick={() => toggleGrainOverlay(!backgroundGrain)}
                     className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
                       backgroundGrain
@@ -1331,7 +1285,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               <PageHeader title="Oynatma Seçenekleri" description="Oynatıcı davranışları, ara bellek süreleri ve izleme akış ayarları." />
               <div>
                 <SettingRow title="Sonraki Bölümü Otomatik Oynat" description="Dizi bölümü bittiğinde sıradaki bölüme otomatik geçmeyi dener.">
-                  <button
+                  <button type="button"
                     onClick={() => {
                       const next = !autoPlayNext;
                       setAutoPlayNext(next);
@@ -1355,7 +1309,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                 
                 <SettingRow title="Ek Ön Bellek (Buffer)" description="Zayıf internet bağlantılarında takılmaları önlemek için daha uzun süre ara belleğe alma sağlar.">
                   <div className="flex items-center gap-3.5">
-                    <button
+                    <button type="button"
                       onClick={() => {
                         const next = !bufferEnabled;
                         setBufferEnabled(next);
@@ -1400,7 +1354,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     ? "Menülerde akıcılığı ve video oynatma performansını artırır. Ekran kartınızla ilgili çökme, donma veya siyah ekran sorunları yaşıyorsanız kapatmayı deneyin."
                     : "Improves UI smoothness and video playback performance. Try turning this off if you experience GPU driver crashes, freezes, or black screens."}
                 >
-                  <button
+                  <button type="button"
                     onClick={async () => {
                       const next = !hwAccelerationEnabled;
                       setHwAccelerationEnabled(next);
@@ -1481,80 +1435,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
             </>
           )}
 
-          {activeTab.id === 'stats' && (
-            <>
-              <PageHeader title="Sağlık ve Analiz" description="Çalma listenizdeki içerik dağılımını görün ve yayınların erişilebilirlik testlerini yapın." />
-              <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr] items-start">
-                <div className="rounded-2xl border border-white/5 bg-white/[0.005]">
-                  <div className="grid grid-cols-3 gap-2 p-3 border-b border-white/5">
-                    <StatBox label="Canlı" value={itemStats.live} />
-                    <StatBox label="Film" value={itemStats.movie} />
-                    <StatBox label="Dizi" value={itemStats.series} />
-                  </div>
-                  <div className="p-4.5">
-                    <div className="mb-3.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400">En Yoğun Kategoriler</div>
-                    <div className="space-y-3.5">
-                      {topGroups.map(([group, count]) => (
-                        <div key={group}>
-                          <div className="flex justify-between gap-3 text-xs font-medium">
-                            <span className="truncate text-neutral-300">{group}</span>
-                            <span className="text-neutral-500 font-bold">{count}</span>
-                          </div>
-                          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/5">
-                            <div
-                              className="h-full rounded-full bg-[var(--accent-color)] transition-all duration-500"
-                              style={{ width: `${Math.max(8, (count / (topGroups[0]?.[1] || 1)) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="rounded-2xl border border-white/5 bg-white/[0.005] overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-white/5 p-4.5 bg-black/15">
-                    <div>
-                      <div className="text-xs font-bold text-white tracking-wide">Yayın Kontrolü</div>
-                      <div className={helpStyle}>Çalma listenizdeki ilk 20 kanalın bağlantı testini yapar.</div>
-                    </div>
-                    <button className={primaryButton} disabled={isCheckingHealth} onClick={runPlaylistDiagnostics}>
-                      {isCheckingHealth ? 'Test Ediliyor' : 'Testi Başlat'}
-                    </button>
-                  </div>
-                  
-                  <div className="p-4.5">
-                    <div className="overflow-hidden rounded-xl border border-white/5 bg-[#000]/40">
-                      <div className="flex items-center gap-1.5 bg-black/30 px-3.5 py-2 border-b border-white/5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-500/80" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500/80" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500/80" />
-                        <span className="text-[8px] uppercase font-bold tracking-widest text-neutral-500 ml-1 select-none">Tanılama Terminali</span>
-                      </div>
-                      <div className="max-h-[180px] min-h-[140px] overflow-y-auto p-3.5 font-mono text-[10px] leading-5 text-neutral-400 bg-neutral-950/20 hide-scrollbar">
-                        {safeCheckerLog.length === 0 ? (
-                          <div className="text-neutral-600 italic select-none">// Test başlatıldığında çıktılar burada görünecektir...</div>
-                        ) : (
-                          safeCheckerLog.map((line, index) => {
-                            let colorClass = 'text-neutral-400';
-                            if (line.includes('✓') || line.includes('EVRİMİÇİ') || line.includes('ONLINE')) colorClass = 'text-emerald-400 font-medium';
-                            else if (line.includes('HATA') || line.includes('EVRİMDIŞI') || line.includes('OFFLINE')) colorClass = 'text-rose-400 font-medium';
-                            else if (line.includes('test ediliyor') || line.includes('başlatılıyor')) colorClass = 'text-cyan-400';
-                            return (
-                              <div key={index} className={`flex items-start gap-1.5 ${colorClass}`}>
-                                <span className="text-neutral-600 select-none">{'>'}</span>
-                                <span>{line}</span>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
 
           {activeTab.id === 'data' && (
             <>
@@ -1566,14 +1447,14 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               </div>
               <div>
                 <SettingRow title="İzleme Geçmişi" description="Daha önce izlediğiniz veya kaldığınız yer bilgisi kaydedilen tüm içerikleri siler.">
-                  <button className={dangerButton} onClick={onClearRecentlyWatched}>Geçmişi Temizle</button>
+                  <button type="button" className={dangerButton} onClick={onClearRecentlyWatched}>Geçmişi Temizle</button>
                 </SettingRow>
                 <SettingRow title="Favorilerim" description="Favoriler listenize eklediğiniz tüm kanal, dizi ve film kayıtlarını sıfırlar.">
-                  <button className={dangerButton} onClick={onClearFavorites}>Favorileri Temizle</button>
+                  <button type="button" className={dangerButton} onClick={onClearFavorites}>Favorileri Temizle</button>
                 </SettingRow>
                 <SettingRow title="Yerel Ayar Yedekleme" description="Strmly ayarlarını JSON dosyası olarak dışarı aktarın veya geri yükleyin.">
                   <div className="flex items-center gap-2">
-                    <button className={secondaryButton} onClick={exportSettings}>Yedeği Dışa Aktar</button>
+                    <button type="button" className={secondaryButton} onClick={exportSettings}>Yedeği Dışa Aktar</button>
                     <label className={secondaryButton}>
                       Yedeği İçe Aktar
                       <input type="file" accept=".json" className="hidden" onChange={(e) => importSettings(e.target.files?.[0])} />
@@ -1664,7 +1545,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   </div>
 
                   {updateState.status === 'idle' && (
-                    <button
+                    <button type="button"
                       onClick={handleCheckUpdates}
                       className="px-6 py-2.5 bg-white hover:bg-neutral-200 text-black font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
                     >
@@ -1677,7 +1558,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   )}
 
                   {updateState.status === 'available' && (
-                    <button
+                    <button type="button"
                       onClick={handleDownloadUpdate}
                       className="min-w-[220px] px-6 py-2.5 bg-white hover:bg-neutral-200 text-neutral-950 font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
                     >
@@ -1695,7 +1576,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   )}
 
                   {updateState.status === 'downloaded' && (
-                    <button
+                    <button type="button"
                       onClick={handleInstallUpdate}
                       className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs uppercase rounded-full shadow-lg transition-all active:scale-95 transform cursor-pointer animate-pulse mt-1"
                     >
@@ -1704,7 +1585,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   )}
 
                   {(updateState.status === 'not-available' || updateState.status === 'error') && (
-                    <button
+                    <button type="button"
                       onClick={handleCheckUpdates}
                       className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs uppercase rounded-full shadow-md transition-transform active:scale-95 transform cursor-pointer"
                     >
@@ -1778,7 +1659,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       : 'Automatically moves all existing downloads from the old directory to the new directory.'}
                   </span>
                 </div>
-                <button
+                <button type="button"
                   onClick={() => setMoveExistingDownloads(!moveExistingDownloads)}
                   className={`w-12 h-6.5 rounded-full p-[3px] transition-all duration-300 relative cursor-pointer border ${
                     moveExistingDownloads
@@ -1803,16 +1684,17 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
             {!isMovingDownloads ? (
               <div className="flex items-center gap-3 mt-2">
-                <button
+                <button type="button"
                   onClick={() => {
                     setShowMoveDownloadsPrompt(false);
                     setPendingDownloadsFolder('');
+                    setPendingDownloadsFolderToken('');
                   }}
                   className="flex-1 py-3 border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-xs font-bold text-white rounded-xl transition-all cursor-pointer text-center"
                 >
                   {language === 'tr' ? 'İptal' : 'Cancel'}
                 </button>
-                <button
+                <button type="button"
                   onClick={async () => {
                     if (!window.electronAPI?.setDownloadsFolder) return;
                     setIsMovingDownloads(true);
@@ -1820,7 +1702,8 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     try {
                       const res = await window.electronAPI.setDownloadsFolder({
                         folderPath: pendingDownloadsFolder,
-                        moveExisting: moveExistingDownloads
+                        moveExisting: moveExistingDownloads,
+                        selectionToken: pendingDownloadsFolderToken
                       });
                       if (res?.success) {
                         setDownloadsFolder(pendingDownloadsFolder);
@@ -1834,6 +1717,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       setIsMovingDownloads(false);
                       setShowMoveDownloadsPrompt(false);
                       setPendingDownloadsFolder('');
+                      setPendingDownloadsFolderToken('');
                       setMoveProgress(null);
                     }
                   }}

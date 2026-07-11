@@ -9,7 +9,7 @@ export interface SearchableMediaItem {
   clNameLower?: string;
 }
 
-const excludedCatalogMarkers = ['seÃ§izle', 'seÃ§ izle', 'secizle', 'sec izle', 'seÃ§-izle', 'sec-izle'];
+const excludedCatalogMarkers = ['seçizle', 'seç izle', 'secizle', 'sec izle', 'seç-izle', 'sec-izle'];
 const unavailableMarkers = ['bakim', 'test', 'yedek', 'bakimda'];
 const adultMarkers = ['adult', 'xxx'];
 
@@ -221,5 +221,5 @@ export function getStableMatchPercentage(title: string, preferences?: string[], 
     }
   }
 
-  return `${baseScore}% Eşleşme`;
+  return String(baseScore);
 }

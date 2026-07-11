@@ -145,7 +145,7 @@ export const SeriesCard = React.memo(({
               <Play size={15} fill="#000" className="ml-0.5" />
             </div>
             {onDownload && (
-              <button
+              <button type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!isDownloading) onDownload(series);
@@ -164,7 +164,7 @@ export const SeriesCard = React.memo(({
         </div>
 
         {/* Favorite Button */}
-        <button
+        <button type="button"
           onClick={(e) => {
             e.stopPropagation();
             onToggleFavorite(series.id, e);
@@ -225,7 +225,7 @@ export const SeriesView = React.memo(function SeriesView({
       <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
         <div className="flex items-center justify-between px-2 mb-2">
           <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
-          <button
+          <button type="button"
             onClick={() => seriesCat.setEditMode(!seriesCat.editMode)}
             className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors focusable-item ${seriesCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
           >
@@ -244,7 +244,7 @@ export const SeriesView = React.memo(function SeriesView({
         </div>
 
         {/* All Series Button */}
-        <button
+        <button type="button"
           onClick={() => { setActiveSeriesCategory('Tümü'); setVisibleCount(100); }}
           className={`flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${
             activeSeriesCategory === 'Tümü'
@@ -272,7 +272,7 @@ export const SeriesView = React.memo(function SeriesView({
                   onDragOver={handleDragOver}
                   onDrop={(e) => seriesCat.handleDrop(e, group)}
                 >
-                  <button
+                  <button type="button"
                     onClick={() => { setActiveSeriesCategory(group); setVisibleCount(100); }}
                     className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${
                       isCatActive
@@ -285,14 +285,14 @@ export const SeriesView = React.memo(function SeriesView({
                   </button>
                   {seriesCat.editMode && (
                     <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                      <button
+                      <button type="button"
                         onClick={(e) => seriesCat.toggleFavorite(group, e)}
                         className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                         title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
                       >
                         <Heart size={11} fill="currentColor" />
                       </button>
-                      <button
+                      <button type="button"
                         onClick={(e) => seriesCat.handleHide(group, e)}
                         className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                         title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
@@ -322,7 +322,7 @@ export const SeriesView = React.memo(function SeriesView({
                 onDragOver={handleDragOver}
                 onDrop={(e) => seriesCat.handleDrop(e, group)}
               >
-                <button
+                <button type="button"
                   onClick={() => { setActiveSeriesCategory(group); setVisibleCount(100); }}
                   className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${
                     isCatActive
@@ -335,14 +335,14 @@ export const SeriesView = React.memo(function SeriesView({
                 </button>
                 {seriesCat.editMode && (
                   <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                    <button
+                    <button type="button"
                       onClick={(e) => seriesCat.toggleFavorite(group, e)}
                       className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
                     >
                       <Heart size={11} />
                     </button>
-                    <button
+                    <button type="button"
                       onClick={(e) => seriesCat.handleHide(group, e)}
                       className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
@@ -355,7 +355,7 @@ export const SeriesView = React.memo(function SeriesView({
             );
           })}
           {otherCategories.length > visibleSeriesCategoryLimit && (
-            <button
+            <button type="button"
               onClick={() => setVisibleSeriesCategoryLimit(prev => prev + 50)}
               className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item cursor-pointer"
             >

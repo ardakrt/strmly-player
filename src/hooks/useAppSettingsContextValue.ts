@@ -1,16 +1,19 @@
 import { useMemo } from "react";
-import type { SavedPlaylist } from "../types";
+import type { PlaylistItem, SavedPlaylist } from "../types";
+import type { useAppSettings } from "./useAppSettings";
+import type { useCategoryManager } from "./useCategoryManager";
+import type { usePlayerState } from "./usePlayerState";
+import type { usePlaylists } from "./usePlaylists";
 
 interface UseAppSettingsContextValueProps {
-  appSettings: any;
-  playlistsHook: any;
-  playerState: any;
-  diagnostics: any;
-  liveCat: any;
-  seriesCat: any;
-  movieCat: any;
-  items: any[];
-  itemStats: any;
+  appSettings: ReturnType<typeof useAppSettings>;
+  playlistsHook: ReturnType<typeof usePlaylists>;
+  playerState: ReturnType<typeof usePlayerState>;
+  liveCat: ReturnType<typeof useCategoryManager>;
+  seriesCat: ReturnType<typeof useCategoryManager>;
+  movieCat: ReturnType<typeof useCategoryManager>;
+  items: PlaylistItem[];
+  itemStats: { total: number; live: number; movie: number; series: number };
   activeProfileId: string | null;
 }
 
@@ -18,7 +21,6 @@ export function useAppSettingsContextValue({
   appSettings,
   playlistsHook,
   playerState,
-  diagnostics,
   liveCat,
   seriesCat,
   movieCat,
@@ -87,8 +89,6 @@ export function useAppSettingsContextValue({
     setGlobalFavorites,
   } = playerState;
 
-  const { isCheckingHealth, checkerLog, runPlaylistDiagnostics } = diagnostics;
-
   const hiddenCategories = liveCat.hidden;
   const hiddenSeriesCategories = seriesCat.hidden;
   const hiddenMovieCategories = movieCat.hidden;
@@ -141,9 +141,6 @@ export function useAppSettingsContextValue({
       items,
       recentlyWatched,
       globalFavorites,
-      isCheckingHealth,
-      checkerLog,
-      runPlaylistDiagnostics,
       onPlaylistLoadFromUrl: handlePlaylistLoadFromUrl,
       onPlaylistLoadLocal: handlePlaylistLoadLocal,
       onXtreamLoad: handleXtreamLoad,
@@ -181,9 +178,6 @@ export function useAppSettingsContextValue({
     }),
     [
       items,
-      isCheckingHealth,
-      checkerLog,
-      runPlaylistDiagnostics,
       activeSettingsTab,
       defaultPlayer,
       tmdbApiKey,

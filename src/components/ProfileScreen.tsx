@@ -184,7 +184,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       return (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 max-h-[440px] overflow-y-auto pr-1 hide-scrollbar border border-white/5 rounded-2xl p-2.5 bg-black/40 animate-fade-in">
           {seriesCast.map((actor, idx) => (
-            <button
+            <button type="button"
               key={idx}
               onClick={() => setProfileFormAvatar(actor.avatarUrl)}
               className={`flex flex-col items-center gap-1.5 p-1.5 rounded-xl border transition-all duration-200 transform hover:scale-103 cursor-pointer ${
@@ -209,7 +209,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       return (
         <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3 max-h-[440px] overflow-y-auto pr-1 hide-scrollbar border border-white/5 rounded-2xl p-2.5 bg-black/40 animate-fade-in">
           {avatarSearchResults.map((item) => (
-            <button
+            <button type="button"
               key={item.id}
               onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)}
               className="group aspect-[2/3] rounded-xl overflow-hidden border border-transparent hover:border-white/20 transition-all duration-300 transform hover:scale-105 cursor-pointer relative shadow-lg"
@@ -237,7 +237,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     return (
       <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3 max-h-[440px] overflow-y-auto pr-1 hide-scrollbar border border-white/5 rounded-2xl p-2.5 bg-black/40 animate-fade-in">
         {localSeries.map((series) => (
-          <button
+          <button type="button"
             key={series.id}
             onClick={() => onFetchSeriesCast(series.id, series.name, 'tv')}
             className="group aspect-[2/3] rounded-xl overflow-hidden border border-transparent hover:border-white/20 transition-all duration-300 transform hover:scale-105 cursor-pointer relative shadow-lg"
@@ -461,14 +461,14 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         <div className="relative min-h-full w-full max-w-[1480px] mx-auto px-6 md:px-12 py-10 md:py-14 flex flex-col items-center justify-center">
           <div className="absolute top-8 right-8 md:top-10 md:right-12">
             {profileSelectMode === 'select' ? (
-              <button
+              <button type="button"
                 onClick={() => setProfileSelectMode('manage')}
                 className="h-10 px-4 rounded-full border border-white/10 bg-black/30 hover:bg-white/10 text-[10px] font-black text-neutral-400 hover:text-white tracking-widest uppercase transition-all backdrop-blur-xl flex items-center gap-2"
               >
                 <Settings2 size={14} /> {t('profiles.editProfiles')}
               </button>
             ) : (
-              <button
+              <button type="button"
                 onClick={() => setProfileSelectMode('select')}
                 className="h-10 px-5 rounded-full bg-white hover:bg-neutral-200 text-black text-[10px] font-black tracking-widest uppercase transition-all"
               >
@@ -499,7 +499,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
               const isGradient = profile.avatarUrl.startsWith('linear-gradient');
               const isFocused = focusedProfileId === profile.id;
               return (
-                <button
+                <button type="button"
                   key={profile.id}
                   onMouseEnter={() => setFocusedProfileId(profile.id)}
                   onFocus={() => setFocusedProfileId(profile.id)}
@@ -546,7 +546,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             })}
 
             {profiles.length < 5 && profileSelectMode === 'select' && (
-              <button
+              <button type="button"
                 onMouseEnter={() => setFocusedProfileId(null)}
                 onClick={() => {
                   setProfileFormName('');
@@ -665,7 +665,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                     </p>
                   </div>
                 </div>
-                <button
+                <button type="button"
                   onClick={() => {
                     setProfileSelectMode(editingProfileId ? 'manage' : 'select');
                     setEditingProfileId(null);
@@ -683,7 +683,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                     : 'w-full'
                 }`}>
                   <div className="relative group/avatar mt-1">
-                    <button
+                    <button type="button"
                       onClick={() => setIsAvatarPickerOpen(!isAvatarPickerOpen)}
                       className="relative w-24 h-24 md:w-28 md:h-28 rounded-[28px] p-1.5 border border-white/12 hover:border-white/35 bg-white/[0.04] shadow-[0_22px_70px_rgba(0,0,0,0.42)] overflow-hidden transition-all duration-300 hover:scale-[1.025] active:scale-[0.98] cursor-pointer block"
                       title={language === 'tr' ? 'Profil resmi seç / değiştir' : 'Select / change profile picture'}
@@ -705,7 +705,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                         </div>
                       </div>
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => setIsAvatarPickerOpen(!isAvatarPickerOpen)}
                       className={`absolute -bottom-1 -right-1 w-8 h-8 rounded-full border border-white/10 shadow-lg flex items-center justify-center transition-all duration-300 cursor-pointer ${
                         isAvatarPickerOpen
@@ -846,7 +846,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                           className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-white/[0.025] border border-white/8 text-xs outline-none text-white placeholder-neutral-600 focus:border-white/25 transition-all font-medium"
                         />
                       </div>
-                      <button
+                      <button type="button"
                         onClick={() => onAvatarSearch(avatarSearchQuery)}
                         disabled={avatarSearchLoading}
                         className="h-11 px-5 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-white/20 text-black text-[10px] font-black uppercase transition-all duration-200 shrink-0 cursor-pointer flex items-center justify-center"
@@ -864,7 +864,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                               : (language === 'tr' ? 'Yerli Diziler (Oyuncu seçmek için tıklayın)' : 'Local Series (Click to choose actor)')}
                         </span>
                         {selectedSeriesForCast && (
-                          <button
+                          <button type="button"
                             onClick={() => {
                               setSelectedSeriesForCast(null);
                               setSeriesCast([]);
@@ -892,7 +892,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
               </div>
               <div className="flex items-center gap-3 border-t border-white/6 pt-4 mt-0">
                 {profileSelectMode === 'edit' && (
-                  <button
+                  <button type="button"
                     onClick={() => setShowDeleteConfirm(true)}
                     className="px-4.5 h-11 bg-red-950/40 hover:bg-red-900/40 border border-red-500/20 hover:border-red-500/40 text-red-400 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer shrink-0"
                     title={language === 'tr' ? 'Profili Sil' : 'Delete Profile'}
@@ -901,7 +901,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                   </button>
                 )}
 
-                <button
+                <button type="button"
                   onClick={() => {
                     setProfileSelectMode(editingProfileId ? 'manage' : 'select');
                     setEditingProfileId(null);
@@ -912,7 +912,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                   {language === 'tr' ? 'Vazgeç' : 'Cancel'}
                 </button>
 
-                <button
+                <button type="button"
                   onClick={onSaveProfile}
                   disabled={isParsing}
                   className="flex-1 h-11 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-700 disabled:text-neutral-400 disabled:cursor-wait text-black text-xs font-black tracking-wider uppercase transition-all duration-200 cursor-pointer shadow-[0_14px_38px_rgba(255,255,255,0.10)] flex items-center justify-center gap-2"
@@ -951,13 +951,13 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             </p>
 
             <div className="mt-7 flex gap-3 w-full">
-              <button
+              <button type="button"
                 onClick={() => setShowDeleteConfirm(false)}
                 className="flex-1 h-11 rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/[0.035] text-xs font-bold tracking-wider uppercase transition-all duration-200 cursor-pointer text-white hover:text-white"
               >
                 {t('common.cancel')}
               </button>
-              <button
+              <button type="button"
                 onClick={handleDeleteConfirm}
                 className="flex-1 h-11 rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white text-xs font-black tracking-wider uppercase transition-all duration-200 cursor-pointer shadow-[0_14px_38px_rgba(239,68,68,0.15)] flex items-center justify-center gap-2"
               >

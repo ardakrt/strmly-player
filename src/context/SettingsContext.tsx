@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from "react";
-import type { SavedPlaylist } from "../types";
+import type { PlaylistItem, SavedPlaylist } from "../types";
 import type { Language } from "../utils/translations";
 
 export interface SettingsContextType {
@@ -12,6 +12,7 @@ export interface SettingsContextType {
   setDefaultPlayer: (player: string) => void;
   transcodeMode: "auto" | "copy" | "full";
   setTranscodeMode: (mode: "auto" | "copy" | "full") => void;
+
   tmdbApiKey: string;
   setTmdbApiKey: (key: string) => void;
   activeTheme: string;
@@ -46,12 +47,9 @@ export interface SettingsContextType {
   hiddenSeriesCategories: string[];
   hiddenMovieCategories: string[];
   itemStats: { total: number; live: number; movie: number; series: number };
-  items: any[];
-  recentlyWatched: any[];
+  items: PlaylistItem[];
+  recentlyWatched: PlaylistItem[];
   globalFavorites: string[];
-  isCheckingHealth: boolean;
-  checkerLog: string[];
-  runPlaylistDiagnostics: () => void;
   onPlaylistLoadFromUrl: () => void;
   onPlaylistLoadLocal: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onXtreamLoad: () => void;
@@ -63,8 +61,8 @@ export interface SettingsContextType {
   onResetHiddenCategories: () => void;
   onResetHiddenSeriesCategories: () => void;
   onResetHiddenMovieCategories: () => void;
-  onSaveSetting: (key: string, value: any) => void;
-  onLoadSetting: (key: string, isJson?: boolean) => Promise<any>;
+  onSaveSetting: (key: string, value: unknown) => void;
+  onLoadSetting: (key: string, isJson?: boolean) => Promise<unknown>;
   onShowToast: (message: string) => void;
   onClearRecentlyWatched: () => void;
   onClearFavorites: () => void;

@@ -37,7 +37,7 @@
   --accent-hover: #d1d1d6;
   --accent-glow: rgba(255, 255, 255, 0.15);
   
-  --bg-main: radial-gradient(circle at 50% 0%, #161622 0%, #07070a 65%, #000000 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #161622) 0%, var(--bg-surface, #07070a) 65%, var(--bg-surface, #07070a) 100%);
   --bg-surface: #0a0a0c;
   --bg-surface-glass: rgba(10, 10, 12, 0.35);
   --bg-card: rgba(255, 255, 255, 0.03);
@@ -60,74 +60,118 @@
   --shadow-md: 0 12px 50px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.8);
 
-  --bg-glow-1: radial-gradient(circle, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 70%);
-  --bg-glow-2: radial-gradient(circle, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0) 70%);
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(255, 255, 255, 0.035)) 0%, transparent 70%);
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(255, 255, 255, 0.015)) 0%, transparent 70%);
 }
 
 .app-wrapper.space-black {
-  --bg-main: radial-gradient(circle at 50% 0%, #161622 0%, #07070a 65%, #000000 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #161622) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
   --bg-surface: #07070a;
   --bg-surface-glass: rgba(7, 7, 10, 0.4);
   --bg-card: rgba(255, 255, 255, 0.025);
   --bg-card-hover: rgba(255, 255, 255, 0.05);
   --bg-modal: rgba(5, 5, 6, 0.96);
-  --bg-glow-1: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 70%);
-  --bg-glow-2: radial-gradient(circle, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0) 70%);
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(255, 255, 255, 0.04)) 0%, transparent 70%);
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(255, 255, 255, 0.02)) 0%, transparent 70%);
 }
 
 .app-wrapper.deep-space {
-  --bg-main: radial-gradient(circle at 50% 0%, #131545 0%, #040411 65%, #000002 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #131545) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
   --bg-surface: #060616;
   --bg-surface-glass: rgba(6, 6, 22, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(5, 5, 18, 0.96);
-  --bg-glow-1: radial-gradient(circle, rgba(147, 51, 234, 0.12) 0%, rgba(147, 51, 234, 0) 70%); /* Purple/Violet */
-  --bg-glow-2: radial-gradient(circle, rgba(59, 130, 246, 0.09) 0%, rgba(59, 130, 246, 0) 70%); /* Blue */
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(147, 51, 234, 0.12)) 0%, transparent 70%); /* Purple/Violet */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(59, 130, 246, 0.09)) 0%, transparent 70%); /* Blue */
 }
 
 .app-wrapper.slate-dark {
-  --bg-main: radial-gradient(circle at 50% 0%, #1e293b 0%, #090d16 65%, #030408 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #1e293b) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
   --bg-surface: #0b1122;
   --bg-surface-glass: rgba(11, 17, 34, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(10, 15, 30, 0.96);
-  --bg-glow-1: radial-gradient(circle, rgba(20, 184, 166, 0.1) 0%, rgba(20, 184, 166, 0) 70%); /* Teal */
-  --bg-glow-2: radial-gradient(circle, rgba(79, 70, 229, 0.09) 0%, rgba(79, 70, 229, 0) 70%); /* Indigo/Indigo */
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(20, 184, 166, 0.1)) 0%, transparent 70%); /* Teal */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(79, 70, 229, 0.09)) 0%, transparent 70%); /* Indigo/Indigo */
 }
 
 .app-wrapper.forest-mint {
-  --bg-main: radial-gradient(circle at 50% 0%, #064e3b 0%, #022c22 65%, #000000 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #064e3b) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
   --bg-surface: #022c22;
   --bg-surface-glass: rgba(2, 44, 34, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(2, 35, 27, 0.96);
-  --bg-glow-1: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0) 70%); /* Mint */
-  --bg-glow-2: radial-gradient(circle, rgba(52, 211, 153, 0.08) 0%, rgba(52, 211, 153, 0) 70%); /* Emerald */
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(16, 185, 129, 0.12)) 0%, transparent 70%); /* Mint */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(52, 211, 153, 0.08)) 0%, transparent 70%); /* Emerald */
 }
 
 .app-wrapper.sunset-orange {
-  --bg-main: radial-gradient(circle at 50% 0%, #451a03 0%, #1c0c02 65%, #000000 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #451a03) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
   --bg-surface: #140801;
   --bg-surface-glass: rgba(20, 8, 1, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(15, 6, 1, 0.96);
-  --bg-glow-1: radial-gradient(circle, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0) 70%); /* Orange */
-  --bg-glow-2: radial-gradient(circle, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0) 70%); /* Red */
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(249, 115, 22, 0.12)) 0%, transparent 70%); /* Orange */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(239, 68, 68, 0.08)) 0%, transparent 70%); /* Red */
 }
 
 .app-wrapper.midnight-purple {
-  --bg-main: radial-gradient(circle at 50% 0%, #2e1065 0%, #0f052d 65%, #000000 100%);
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #2e1065) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
   --bg-surface: #0b0321;
   --bg-surface-glass: rgba(11, 3, 33, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(8, 2, 25, 0.96);
-  --bg-glow-1: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, rgba(168, 85, 247, 0) 70%); /* Violet */
-  --bg-glow-2: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, rgba(236, 72, 153, 0) 70%); /* Pink */
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(168, 85, 247, 0.12)) 0%, transparent 70%); /* Violet */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(236, 72, 153, 0.08)) 0%, transparent 70%); /* Pink */
+}
+
+.app-wrapper.nordic-frost {
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #0f172a) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-surface: #0b0f19;
+  --bg-surface-glass: rgba(11, 15, 25, 0.45);
+  --bg-card: rgba(255, 255, 255, 0.025);
+  --bg-card-hover: rgba(255, 255, 255, 0.055);
+  --bg-modal: rgba(8, 12, 20, 0.96);
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(56, 189, 248, 0.1)) 0%, transparent 70%); /* Light blue */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(14, 165, 233, 0.08)) 0%, transparent 70%); /* Blue */
+}
+
+.app-wrapper.rose-gold {
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #2d121c) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-surface: #14050b;
+  --bg-surface-glass: rgba(20, 5, 11, 0.45);
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-hover: rgba(255, 255, 255, 0.06);
+  --bg-modal: rgba(16, 4, 9, 0.96);
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(251, 113, 133, 0.12)) 0%, transparent 70%); /* Rose */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(244, 63, 94, 0.08)) 0%, transparent 70%); /* Pink-Red */
+}
+
+.app-wrapper.crimson-tide {
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #3f0712) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-surface: #140105;
+  --bg-surface-glass: rgba(20, 1, 5, 0.45);
+  --bg-card: rgba(255, 255, 255, 0.035);
+  --bg-card-hover: rgba(255, 255, 255, 0.065);
+  --bg-modal: rgba(16, 1, 4, 0.96);
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(225, 29, 72, 0.12)) 0%, transparent 70%); /* Crimson */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(159, 18, 57, 0.08)) 0%, transparent 70%); /* Dark Ruby */
+}
+
+.app-wrapper.ocean-abyss {
+  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #042f2e) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-surface: #011819;
+  --bg-surface-glass: rgba(1, 24, 25, 0.45);
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-hover: rgba(255, 255, 255, 0.06);
+  --bg-modal: rgba(1, 20, 21, 0.96);
+  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(13, 148, 136, 0.12)) 0%, transparent 70%); /* Teal */
+  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(6, 182, 212, 0.08)) 0%, transparent 70%); /* Cyan */
 }
 
 @keyframes floatGlow1 {
@@ -143,15 +187,18 @@
 .bg-glow-one {
   background: var(--bg-glow-1);
   animation: floatGlow1 16s ease-in-out infinite alternate;
+  transition: background 1.5s ease-in-out, background-color 1.5s ease-in-out;
 }
 
 .bg-glow-two {
   background: var(--bg-glow-2);
   animation: floatGlow2 20s ease-in-out infinite alternate;
+  transition: background 1.5s ease-in-out, background-color 1.5s ease-in-out;
 }
 
 .app-wrapper {
   background: var(--bg-main) !important;
+  transition: background 1.5s ease-in-out, background-color 1.5s ease-in-out;
 }
 
 * {
@@ -687,14 +734,20 @@ button.focusable-item:focus-visible {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
+.home-hero-fullbleed {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+
 .home-hero-left-scrim {
   background:
     linear-gradient(90deg,
-      rgba(5, 5, 7, 0.97) 0%,
-      rgba(5, 5, 7, 0.86) 24%,
-      rgba(5, 5, 7, 0.5) 45%,
-      rgba(5, 5, 7, 0.08) 67%,
-      transparent 78%);
+      rgba(5, 5, 7, 0.96) 0%,
+      rgba(5, 5, 7, 0.82) 24%,
+      rgba(5, 5, 7, 0.42) 48%,
+      rgba(5, 5, 7, 0.08) 72%,
+      transparent 90%);
 }
 
 .home-hero-title {
@@ -953,3 +1006,26 @@ div.focusable-item:focus-visible .premium-card {
   animation: shimmer 1.8s infinite linear;
 }
 
+/* Premium VOD Hover Preview Grow/Shrink Animations */
+@keyframes previewGrow {
+  0% {
+    transform: scale(0.63);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-preview-grow {
+  animation: previewGrow 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+  transform-origin: center center;
+}
+
+.preview-shrink {
+  transition: transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform: scale(0.63) !important;
+  opacity: 0 !important;
+  transform-origin: center center;
+}

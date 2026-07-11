@@ -18,10 +18,10 @@ import { useTmdbCrawler } from "./useTmdbCrawler";
 import { usePlaylistIndex } from "./usePlaylistIndex";
 import { useAppCategories } from "./useAppCategories";
 import { useDetailModal } from "./useDetailModal";
-import { useDiagnostics } from "./useDiagnostics";
 import { useGroupedSeriesReady } from "./useGroupedSeriesReady";
 import { useDynamicIslandToast } from "./useDynamicIslandToast";
 import { usePlaybackNavigation } from "./usePlaybackNavigation";
+import { getHashColors, extractColorsFromImage, type AmbientColors } from "../utils/themeExtractor";
 
 export function useAppProvider() {
   const appSettings = useAppSettings();
@@ -310,16 +310,7 @@ export function useAppProvider() {
     getFavoriteIdForItem,
   } = detailModal;
 
-  const {
-    checkerLog,
-    checkedStatusMap,
-    isCheckingHealth,
-    runPlaylistDiagnostics,
-  } = useDiagnostics({
-    items,
-    language,
-    showToast,
-  });
+
 
   const itemStats = useMemo(
     () => ({
@@ -370,6 +361,16 @@ export function useAppProvider() {
       qualityFilter,
     });
 
+  const favChannels = useMemo(() =>
+    filteredDisplayItems.filter(item => item.type === 'live' || item.type === undefined),
+    [filteredDisplayItems]
+  );
+
+  const favMovies = useMemo(() =>
+    filteredDisplayItems.filter(item => item.type === 'movie'),
+    [filteredDisplayItems]
+  );
+
   const [hasInitialBooted, setHasInitialBooted] = useState(false);
 
   useEffect(() => {
@@ -396,6 +397,39 @@ export function useAppProvider() {
     () => (!isPlaylistHero ? HERO_BACKDROPS[activeFeaturedIndex] : null),
     [isPlaylistHero, activeFeaturedIndex],
   );
+
+  const [heroAmbientColors, setHeroAmbientColors] = useState<AmbientColors>(() => {
+    return getHashColors('Strmly');
+  });
+
+  useEffect(() => {
+    const activeItemName = currentHeroItem
+      ? currentHeroItem.name
+      : fallbackHeroItem
+        ? fallbackHeroItem.title
+        : 'Strmly';
+
+    const backdropUrl = currentHeroItem
+      ? (featuredTmdbData?.backdrop || currentHeroItem.logo)
+      : fallbackHeroItem
+        ? fallbackHeroItem.img
+        : undefined;
+
+    const initialColors = getHashColors(activeItemName);
+    setHeroAmbientColors(initialColors);
+
+    if (backdropUrl) {
+      let active = true;
+      extractColorsFromImage(backdropUrl).then((extractedColors) => {
+        if (active && extractedColors) {
+          setHeroAmbientColors(extractedColors);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }
+  }, [currentHeroItem, fallbackHeroItem, featuredTmdbData]);
 
   useEffect(() => {
     setVisibleCount(100);
@@ -488,11 +522,6 @@ export function useAppProvider() {
     appSettings,
     playlistsHook,
     playerState,
-    diagnostics: {
-      isCheckingHealth,
-      checkerLog,
-      runPlaylistDiagnostics,
-    },
     liveCat,
     seriesCat,
     movieCat,
@@ -570,13 +599,12 @@ export function useAppProvider() {
       activePlaylistId,
       favItems: filteredDisplayItems,
       favSeries: favoriteSeriesList,
+      favChannels,
+      favMovies,
       groupedSeriesList,
       allGroupedSeries,
       itemStats,
-      checkedStatusMap,
-      isCheckingHealth,
-      checkerLog,
-      runPlaylistDiagnostics,
+      checkedStatusMap: {},
       liveFavCatsToShow,
       seriesFavCatsToShow,
       movieFavCatsToShow,
@@ -639,6 +667,7 @@ export function useAppProvider() {
     isParsing,
     activeProfileId,
     currentProfile,
+    heroAmbientColors,
   };
 }
 

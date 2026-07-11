@@ -101,7 +101,7 @@ export const SeriesModal = ({
   onToggleFavorite,
   onNavigateToDownloads
 }: SeriesModalProps) => {
-  const { language } = useSettings();
+  const { t, language } = useSettings();
   const { downloads, addDownload, getDownloadByStreamUrl } = useDownloads();
   const [savedEpisodeUrls, setSavedEpisodeUrls] = useState<Set<string>>(() => new Set());
   const seasonsList = Object.keys(series.seasons).map(Number).sort((a, b) => a - b);
@@ -113,6 +113,12 @@ export const SeriesModal = ({
 
     const checkSavedEpisodes = async () => {
       const savedUrls = new Set<string>();
+      const needsDiskLookup: {
+        key: string;
+        type: 'series';
+        name: string;
+        streamUrl: string;
+      }[] = [];
 
       for (const episode of episodes) {
         const knownDownload = getDownloadByStreamUrl(episode.item.url);
@@ -124,7 +130,6 @@ export const SeriesModal = ({
           continue;
         }
 
-        // Try matching by name in downloads as fallback
         const matchingByName = downloads.find(
           d => d.type === 'series' && d.name.toLowerCase() === episode.item.name.toLowerCase()
         );
@@ -133,18 +138,29 @@ export const SeriesModal = ({
           continue;
         }
 
+        needsDiskLookup.push({
+          key: episode.item.url,
+          type: 'series',
+          name: episode.item.name,
+          streamUrl: episode.item.url,
+        });
+      }
+
+      if (needsDiskLookup.length > 0) {
         try {
-          if (window.electronAPI?.getSavedMediaInfo) {
-            const savedMedia = await window.electronAPI.getSavedMediaInfo({
-              type: 'series',
-              name: episode.item.name
-            });
-            if (savedMedia?.exists) {
-              savedUrls.add(episode.item.url);
+          if (window.electronAPI?.getSavedMediaInfoBatch) {
+            const batch = await window.electronAPI.getSavedMediaInfoBatch(needsDiskLookup);
+            for (const result of batch.results || []) {
+              if (result.exists && result.key) savedUrls.add(result.key);
+            }
+          } else if (window.electronAPI?.getSavedMediaInfo) {
+            for (const item of needsDiskLookup) {
+              const savedMedia = await window.electronAPI.getSavedMediaInfo(item);
+              if (savedMedia?.exists) savedUrls.add(item.key);
             }
           }
         } catch {
-          // Older Electron main processes may not expose this handler until restart.
+          // Older Electron builds may not expose batch/lookup handlers.
         }
       }
 
@@ -159,6 +175,25 @@ export const SeriesModal = ({
       active = false;
     };
   }, [downloads, episodes, getDownloadByStreamUrl]);
+
+  const playEpisode = (item: PlaylistItem) => {
+    const known =
+      getDownloadByStreamUrl(item.url) ||
+      downloads.find(
+        (d) => d.type === 'series' && d.name.toLowerCase() === item.name.toLowerCase(),
+      );
+    if (known?.status === 'completed' && known.playUrl) {
+      onClose();
+      onPlay({
+        ...item,
+        id: known.id,
+        url: known.playUrl,
+      });
+      return;
+    }
+    onClose();
+    onPlay(item);
+  };
 
   const getEpisodeSaveState = (url: string, name?: string) => {
     let download = getDownloadByStreamUrl(url);
@@ -323,7 +358,7 @@ export const SeriesModal = ({
     <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 md:p-8 select-none animate-fade-in">
       <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
       <div className="relative w-full max-w-5xl h-[85vh] max-h-[820px] bg-neutral-950 border border-white/10 rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-[0_32px_80px_rgba(0,0,0,0.85)] z-10 glass-modal-enter">
-        <button
+        <button type="button"
           onClick={onClose}
           className="absolute top-5 right-5 z-50 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-xl transition-all duration-300 hover:scale-105 shadow-lg cursor-pointer"
         >
@@ -353,7 +388,7 @@ export const SeriesModal = ({
               <h2 className="text-xl md:text-2xl font-black tracking-tight text-white leading-tight flex-1">
                 {series.name}
               </h2>
-              <button
+              <button type="button"
                 onClick={onToggleFavorite}
                 className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 transition-all duration-300 active:scale-90 shrink-0 shadow-md cursor-pointer"
                 title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
@@ -365,7 +400,7 @@ export const SeriesModal = ({
           <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-[11px] font-bold shrink-0">
             {tmdbData && (
               <>
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-300/20 text-emerald-300">{tmdbData.match}</span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-300/20 text-emerald-300">{t('common.matchScore').replace('{{score}}', (tmdbData.match || '95').replace(/[^0-9]/g, ''))}</span>
                 <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">{tmdbData.year}</span>
                 <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">★ {tmdbData.rating.replace('★ ', '')}</span>
               </>
@@ -428,21 +463,15 @@ export const SeriesModal = ({
           {firstEpisode && (
             <div className="flex flex-col gap-2 mt-auto shrink-0">
               {resumeEpisode ? (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onPlay(resumeEpisode.item);
-                  }}
+                <button type="button"
+                  onClick={() => playEpisode(resumeEpisode.item)}
                   className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
                 >
                   <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Devam Et' : 'Resume Watching'}
                 </button>
               ) : (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onPlay(firstEpisode.item);
-                  }}
+                <button type="button"
+                  onClick={() => playEpisode(firstEpisode.item)}
                   className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
                 >
                   <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Başla' : 'Start Watching'}
@@ -471,7 +500,7 @@ export const SeriesModal = ({
             </div>
             {seasonsList.length >= 3 ? (
               <div className="relative" ref={dropdownRef}>
-                <button
+                <button type="button"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   className="w-full md:w-56 px-5 py-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-white/10 text-xs font-bold text-white flex items-center justify-between transition-all duration-300 shadow-md active:scale-98 cursor-pointer"
                 >
@@ -486,7 +515,7 @@ export const SeriesModal = ({
                   <div className="absolute z-[100] left-0 mt-2 w-full md:w-64 max-h-64 overflow-y-auto bg-neutral-950/95 border border-white/15 rounded-2xl p-2.5 shadow-2xl backdrop-blur-2xl animate-scale-in hide-scrollbar">
                     <div className="grid grid-cols-2 gap-1.5 p-0.5">
                       {seasonsList.map(seasonNum => (
-                        <button
+                        <button type="button"
                           key={`season-${seasonNum}`}
                           onClick={() => {
                             onSetActiveSeason(seasonNum);
@@ -509,7 +538,7 @@ export const SeriesModal = ({
             ) : (
               <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
                 {seasonsList.map(seasonNum => (
-                  <button
+                  <button type="button"
                     key={`season-${seasonNum}`}
                     onClick={() => {
                       onSetActiveSeason(seasonNum);
@@ -540,18 +569,21 @@ export const SeriesModal = ({
               </span>
               {(() => {
                 const seasonDownloading = episodes.some(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saving);
-                const allSeasonSaved = episodes.length > 0 && episodes.every(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saved);
+                const savedCount = episodes.filter(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saved).length;
+                const allSeasonSaved = episodes.length > 0 && savedCount === episodes.length;
+                const missingCount = episodes.length - savedCount;
                 return (
-                  <button
+                  <button type="button"
                     onClick={async () => {
-                      if ((seasonDownloading || allSeasonSaved) && onNavigateToDownloads) {
+                      if (allSeasonSaved && onNavigateToDownloads) {
                         onNavigateToDownloads();
-                      } else {
-                        for (const ep of episodes) {
-                          const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
-                          if (!saveState.saved && !saveState.saving) {
-                            await addDownload(ep.item);
-                          }
+                        return;
+                      }
+                      // Queue only missing / failed episodes (eksikleri indir)
+                      for (const ep of episodes) {
+                        const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
+                        if (!saveState.saved && !saveState.saving) {
+                          await addDownload(ep.item);
                         }
                       }
                     }}
@@ -565,8 +597,10 @@ export const SeriesModal = ({
                     title={allSeasonSaved
                       ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
                       : seasonDownloading
-                      ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
-                      : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
+                      ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
+                      : savedCount > 0
+                        ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
+                        : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
                     }
                   >
                     {allSeasonSaved
@@ -576,8 +610,10 @@ export const SeriesModal = ({
                       {allSeasonSaved
                         ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
                         : seasonDownloading
-                        ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
-                        : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
+                        ? (language === 'tr' ? `Kaydediliyor… ${savedCount}/${episodes.length}` : `Saving… ${savedCount}/${episodes.length}`)
+                        : savedCount > 0
+                          ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
+                          : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
                       }
                     </span>
                   </button>
@@ -645,10 +681,7 @@ export const SeriesModal = ({
                         stillPath={meta.stillPath}
                       />
                       <div
-                        onClick={() => {
-                          onClose();
-                          onPlay(ep.item);
-                        }}
+                        onClick={() => playEpisode(ep.item)}
                         className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
                       >
                         <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-lg">
@@ -699,14 +732,19 @@ export const SeriesModal = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button
+                      <button type="button"
                         onClick={async (e) => {
                           e.stopPropagation();
-                          if ((episodeSaving || episodeSaved) && onNavigateToDownloads) {
-                            onNavigateToDownloads();
-                          } else {
-                            await addDownload(ep.item);
+                          if (episodeSaved) {
+                            // Offline play when already downloaded
+                            playEpisode(ep.item);
+                            return;
                           }
+                          if (episodeSaving && onNavigateToDownloads) {
+                            onNavigateToDownloads();
+                            return;
+                          }
+                          await addDownload(ep.item);
                         }}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 active:scale-90 shadow-md cursor-pointer ${
                           episodeSaved
@@ -716,13 +754,13 @@ export const SeriesModal = ({
                             : 'bg-white/10 hover:bg-white/20 text-neutral-400 hover:text-white border border-white/10'
                         }`}
                         title={episodeSaved
-                          ? (language === 'tr' ? 'Kaydedildi' : 'Saved')
+                          ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
                           : episodeSaving
                             ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
                             : (language === 'tr' ? 'Kaydet' : 'Save')}
                       >
                         {episodeSaved ? (
-                          <CheckCircle2 size={14} strokeWidth={2.5} />
+                          <Play size={13} fill="currentColor" className="ml-0.5" />
                         ) : episodeSaving ? (
                           <CircularSaveProgress progress={saveProgress} />
                         ) : (
@@ -749,7 +787,7 @@ export const SeriesModal = ({
             className="w-full max-w-lg bg-neutral-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl relative animate-scale-in flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
+            <button type="button"
               onClick={() => setShowCastModal(false)}
               className="absolute top-4 right-4 z-50 w-8 h-8 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
             >

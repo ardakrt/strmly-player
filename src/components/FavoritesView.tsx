@@ -62,7 +62,7 @@ export function FavoritesView({
         </div>
         <div className="flex items-center gap-1.5 bg-neutral-950/45 p-1 border border-white/5 rounded-2xl self-start md:self-auto shadow-lg">
           {tabs.map(tab => (
-            <button
+            <button type="button"
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${

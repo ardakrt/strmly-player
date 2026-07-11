@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import type { AppProviderValue } from '../hooks/useAppProvider';
-import { APP_VIEWS, isDiagnosticsView, isLiveTvView } from '../navigation/views';
+import { APP_VIEWS, isLiveTvView } from '../navigation/views';
 import { FavoritesEmptyState } from './FavoritesEmptyState';
 
 const HomeView = lazy(() => import('./HomeView').then(m => ({ default: m.HomeView })));
@@ -8,7 +8,6 @@ const LiveTvView = lazy(() => import('./LiveTvView').then(m => ({ default: m.Liv
 const SeriesView = lazy(() => import('./SeriesView').then(m => ({ default: m.SeriesView })));
 const MoviesView = lazy(() => import('./MoviesView').then(m => ({ default: m.MoviesView })));
 const FavoritesView = lazy(() => import('./FavoritesView').then(m => ({ default: m.FavoritesView })));
-const DiagnosticsView = lazy(() => import('./DiagnosticsView').then(m => ({ default: m.DiagnosticsView })));
 const SettingsPanel = lazy(() => import('./SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const DownloadsView = lazy(() => import('./DownloadsView').then(m => ({ default: m.DownloadsView })));
 
@@ -74,8 +73,8 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
         <Suspense fallback={null}>
           <FavoritesView
             selectedGroup={selectedGroup}
-            favChannels={catalog.favItems.filter(item => item.type === 'live' || item.type === undefined)}
-            favMovies={catalog.favItems.filter(item => item.type === 'movie')}
+            favChannels={catalog.favChannels}
+            favMovies={catalog.favMovies}
             favSeries={catalog.favSeries}
             handlePlayStream={playback.handlePlayStream}
             handleOpenDetails={catalog.handleOpenDetails}
@@ -156,21 +155,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
         </Suspense>
       )}
 
-      {isDiagnosticsView(selectedGroup) && (
-        <Suspense fallback={null}>
-          <DiagnosticsView
-            selectedGroup={selectedGroup}
-            searchQuery={deferredSearchQuery}
-            items={catalog.items}
-            itemStats={catalog.itemStats}
-            playlists={catalog.playlists}
-            activePlaylistId={catalog.activePlaylistId}
-            isCheckingHealth={catalog.isCheckingHealth}
-            checkerLog={catalog.checkerLog}
-            runPlaylistDiagnostics={catalog.runPlaylistDiagnostics}
-          />
-        </Suspense>
-      )}
+
 
       {selectedGroup === APP_VIEWS.settings && !deferredSearchQuery.trim() && (
         <Suspense fallback={null}>

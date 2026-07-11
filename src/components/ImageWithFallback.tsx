@@ -6,11 +6,12 @@ import { getFallbackGradient } from '../utils/helpers';
 import { TMDB_CACHE_VERSION } from '../constants';
 import type { ImageWithFallbackProps } from '../types';
 
-export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType, isGenericLogo, aspect }: ImageWithFallbackProps) => {
+export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType, isGenericLogo, aspect, cover, lazy = true }: ImageWithFallbackProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(!lazy);
 
   useEffect(() => {
+    if (!lazy) return;
     const el = rootRef.current;
     if (!el) return;
     if (typeof IntersectionObserver === 'undefined') {
@@ -27,7 +28,7 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [lazy]);
 
   const cleanTitle = useMemo(() => {
     if (itemType === 'series') {
@@ -42,7 +43,7 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
 
   const cacheKey = useMemo(() => {
     if (itemType !== 'movie' && itemType !== 'series') return '';
-    return `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle}-${resolvedAspect}`;
+    return `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle.toLowerCase()}-${resolvedAspect}`;
   }, [cleanTitle, itemType, resolvedAspect]);
 
   const usesTmdbCover = itemType === 'movie' || itemType === 'series';
@@ -50,7 +51,8 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
   // Cache'den poster URL'sini al (sadece bir kez)
   const cachedPoster = useMemo(() => {
     if (!cacheKey) return undefined;
-    return globalSyncPosterMap.get(`resolved-poster-${cacheKey}`);
+    const cached = globalSyncPosterMap.get(`resolved-poster-${cacheKey}`);
+    return cached || undefined;
   }, [cacheKey]);
 
   const [error, setError] = useState(false);
@@ -92,30 +94,34 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
   // TMDB poster yükleme - sadece cache'de yoksa
   useEffect(() => {
     if (!isVisible || !usesTmdbCover || !cacheKey) return;
-    if (globalSyncPosterMap.has(`resolved-poster-${cacheKey}`)) return; // Zaten cache'de var (başarılı veya başarısız)
+    const memoryCacheKey = `resolved-poster-${cacheKey}`;
+    const existingPoster = globalSyncPosterMap.get(memoryCacheKey);
+    if (existingPoster) return; // Zaten başarılı şekilde cache'de var
 
     const apiKey = getTmdbApiKey();
     let cancelled = false;
 
     const fetchPoster = async () => {
       // Memory cache kontrol
-      if (globalSyncPosterMap.has(`resolved-poster-${cacheKey}`)) {
-        const memCached = globalSyncPosterMap.get(`resolved-poster-${cacheKey}`);
+      const memCached = globalSyncPosterMap.get(memoryCacheKey);
+      if (memCached) {
         if (!cancelled) {
-          setTmdbPoster(memCached || null);
+          setTmdbPoster(memCached);
           setImgLoaded(true);
         }
         return;
+      } else if (globalSyncPosterMap.has(memoryCacheKey)) {
+        globalSyncPosterMap.delete(memoryCacheKey);
       }
 
       // IndexedDB cache kontrol
       try {
-        const cachedResolved = await tmdbCache.get(`resolved-poster-${cacheKey}`);
-        if (cachedResolved !== null) {
-          if (cachedResolved === "" || !String(cachedResolved).startsWith('app-file://')) {
-            globalSyncPosterMap.set(`resolved-poster-${cacheKey}`, cachedResolved);
+        const cachedResolved = await tmdbCache.get(memoryCacheKey);
+        if (cachedResolved) {
+          if (!String(cachedResolved).startsWith('app-file://')) {
+            globalSyncPosterMap.set(memoryCacheKey, cachedResolved);
             if (!cancelled) {
-              setTmdbPoster(cachedResolved || null);
+              setTmdbPoster(cachedResolved);
               setImgLoaded(true);
             }
             return;
@@ -137,14 +143,17 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
           ? (result?.backdrop_path || result?.poster_path) 
           : (result?.poster_path || result?.backdrop_path);
         const posterPath = await resolveTmdbImageSrc(tmdbPath, 'w500') || null;
-        const finalPoster = posterPath || '';
-        globalSyncPosterMap.set(`resolved-poster-${cacheKey}`, finalPoster);
+        if (posterPath) {
+          globalSyncPosterMap.set(memoryCacheKey, posterPath);
+        } else {
+          globalSyncPosterMap.delete(memoryCacheKey);
+        }
 
         // Don't cache app-file:// URLs in IndexedDB — they are install-specific
         // and become stale when the app is reinstalled or disk cache is cleared.
-        if (finalPoster && !finalPoster.startsWith('app-file://')) {
+        if (posterPath && !posterPath.startsWith('app-file://')) {
           try {
-            await tmdbCache.set(`resolved-poster-${cacheKey}`, finalPoster);
+            await tmdbCache.set(memoryCacheKey, posterPath);
           } catch (e) {
             console.error("IndexedDB resolved-poster write error:", e);
           }
@@ -188,7 +197,7 @@ export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType
           alt=""
           onLoad={() => setImgLoaded(true)}
           className={`transition-opacity duration-500 ease-out ${imgLoaded ? 'opacity-100' : 'opacity-0'} ${
-            usesTmdbCover
+            usesTmdbCover || cover
               ? "w-full h-full object-cover z-10"
               : (size === 'lg'
                   ? "max-h-[60%] max-w-[60%] object-contain z-10"

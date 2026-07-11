@@ -294,14 +294,25 @@ export const fetchTmdbPath = async <T extends { error?: string }>(path: string, 
       }
 
       const responseData = await runWithTmdbConcurrencyLimit(async () => {
-        if (window.electronAPI?.fetchTmdb) {
-          return await window.electronAPI.fetchTmdb(path) as T;
+        if (typeof window !== 'undefined' && window.electronAPI?.fetchTmdb) {
+          const res = await window.electronAPI.fetchTmdb(path) as any;
+          if (res && (res.error || res.status_message || res.success === false)) {
+            throw new Error(res.status_message || res.error || 'TMDB API error');
+          }
+          return res as T;
         }
         const response = await fetch(`https://api.themoviedb.org${path}`);
-        return await response.json() as T;
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json() as any;
+        if (data && (data.success === false || data.status_message)) {
+          throw new Error(data.status_message || 'TMDB API error');
+        }
+        return data as T;
       });
 
-      if (responseData && !responseData.error) {
+      if (responseData && !responseData.error && !(responseData as any).status_message) {
         try {
           await tmdbCache.set(cacheKey, { value: responseData, cachedAt: Date.now() });
         } catch (e) {
@@ -384,7 +395,7 @@ export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', s
   const remoteUrl = getTmdbImageUrl(path, size);
 
   // Download to local disk (await it so we return local path directly)
-  if (window.electronAPI?.fetchTmdbImage) {
+  if (typeof window !== 'undefined' && window.electronAPI?.fetchTmdbImage) {
     try {
       const image = await window.electronAPI.fetchTmdbImage(path, size);
       const resultUrl = image.localUrl || image.dataUrl;

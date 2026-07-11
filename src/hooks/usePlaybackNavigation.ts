@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import type { Language } from '../utils/translations';
+import { pauseAllDownloads } from './useDownloads';
 
 interface UsePlaybackNavigationProps {
   selectedChannel: PlaylistItem | null;
@@ -37,8 +38,10 @@ export function usePlaybackNavigation({
     scrollTop: number;
   } | null>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
-
   const handlePlayStream = useCallback((item: PlaylistItem) => {
+    // Automatically pause any active downloads to avoid single-connection IPTV account conflicts
+    pauseAllDownloads();
+
     if (!selectedChannel) {
       playerReturnStateRef.current = {
         seriesModal: selectedSeriesForModal,

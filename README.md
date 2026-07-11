@@ -10,7 +10,7 @@ Strmly is a desktop IPTV player built with Electron, React, TypeScript, Vite, an
 - Favorites, recently watched items, and watch progress
 - TMDB metadata, posters, cast, and episode images
 - Built-in player with subtitles, audio tracks, speed controls, PiP, fullscreen, and external player support
-- Playlist diagnostics and auto-update intervals
+- Playlist auto-update intervals
 - Electron packaging with Windows NSIS support
 
 ## Legal Notice

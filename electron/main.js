@@ -12,8 +12,30 @@ const {
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const http = require("http");
+const { randomUUID } = require("crypto");
 const { migrateProfileData } = require("./migration");
+const {
+  isSafeConfiguredDownloadFolder,
+  isSafeDownloadFolderSelection,
+  redactSensitiveText,
+  redactSensitiveUrl,
+} = require("./security");
+const {
+  fetchHttpsFromHost,
+  registerTmdbHandlers,
+  resolveHostIp,
+} = require("./tmdb-service");
+const {
+  registerDownloadHandlers,
+  stopAllDownloads,
+  isInsideMediaLibrary,
+} = require("./download-manager");
+
+if (process.env.STRMLY_PERF_BENCH === "1") {
+  app.setPath("userData", path.join(os.tmpdir(), "strmly-performance-benchmark"));
+}
 
 // Check config for hardware acceleration setting
 let disableHW = process.env.STRMLY_DISABLE_HW_ACCELERATION === "1";
@@ -254,6 +276,7 @@ if (!gotSingleInstanceLock) {
 }
 
 function createWindow() {
+  const isPerformanceBenchmark = process.env.STRMLY_PERF_BENCH === "1";
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -268,8 +291,27 @@ function createWindow() {
       nodeIntegration: false,
       webSecurity: true, // Enabled for security. Custom app-file:// protocol and CORS header injector allow safe loading.
       devTools: !app.isPackaged || process.env.STRMLY_OPEN_DEVTOOLS === "1",
+      backgroundThrottling: !isPerformanceBenchmark,
     },
   });
+
+  if (isPerformanceBenchmark) {
+    mainWindow.webContents.once("did-finish-load", async () => {
+      try {
+        mainWindow.showInactive();
+        const { runPerformanceBenchmark } = require("./performance-benchmark");
+        const results = await runPerformanceBenchmark(mainWindow, {
+          iterations: Number(process.env.STRMLY_PERF_ITERATIONS) || 12,
+          warmups: Number(process.env.STRMLY_PERF_WARMUPS) || 2,
+        });
+        console.log(`STRMLY_PERF_RESULT=${JSON.stringify(results)}`);
+        app.exit(0);
+      } catch (error) {
+        console.error("STRMLY_PERF_ERROR", error);
+        app.exit(1);
+      }
+    });
+  }
 
   // Handle mouse side buttons (back/forward) globally on the window
   mainWindow.on("app-command", (e, cmd) => {
@@ -283,7 +325,7 @@ function createWindow() {
   // Show window when ready-to-show to prevent visual flash, with a 1s fallback
   let isShown = false;
   const showWindow = () => {
-    if (!isShown && mainWindow) {
+    if (!isPerformanceBenchmark && !isShown && mainWindow) {
       isShown = true;
       mainWindow.show();
       mainWindow.focus();
@@ -355,7 +397,7 @@ function createWindow() {
   // In development, load Vite dev server. In production, load build folder.
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.loadURL(process.env.STRMLY_DEV_SERVER_URL || "http://localhost:5173");
     if (process.env.STRMLY_OPEN_DEVTOOLS === "1") {
       mainWindow.webContents.openDevTools();
     }
@@ -567,45 +609,52 @@ app.on("will-quit", () => {
     }
   }
 
-  // Stop any in-flight downloads and clean up their partial output so a
-  // killed/orphaned ffmpeg process never keeps writing after the app exits,
-  // and so half-written files are never mistaken for completed downloads.
-  try {
-    for (const download of activeDownloads.values()) {
-      try {
-        download.process.kill("SIGKILL");
-      } catch {}
-      cleanupPartialDownload(download.outputPath);
-    }
-    activeDownloads.clear();
-  } catch (err) {
-    console.error("Failed to stop active downloads on quit:", err.message);
-  }
-
-  try {
-    for (const segDl of activeSegmentDownloads.values()) {
-      try {
-        segDl.abortController.abort();
-      } catch {}
-      try {
-        fs.rmSync(segDl.tempDir, { recursive: true, force: true });
-      } catch {}
-      cleanupPartialDownload(segDl.outputPath);
-    }
-    activeSegmentDownloads.clear();
-  } catch (err) {
-    console.error(
-      "Failed to stop active segment downloads on quit:",
-      err.message,
-    );
-  }
-
+  stopAllDownloads();
   stopFfmpegProxy();
 });
+
+function appFileOrFileUrlToPath(rawUrl) {
+  try {
+    const normalized = String(rawUrl || "").replace(/^app-file:/i, "file:");
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "file:") return null;
+    let filePath = decodeURIComponent(parsed.pathname || "");
+    if (process.platform === "win32") {
+      if (/^\/[a-zA-Z]:\//.test(filePath)) {
+        filePath = filePath.substring(1);
+      } else if (/^[a-zA-Z]\//.test(filePath)) {
+        filePath = filePath[0] + ":" + filePath.substring(1);
+      }
+    } else {
+      filePath = filePath.replace(/^\/+/, "/");
+    }
+    return path.normalize(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function isLocalMediaUrl(rawUrl) {
+  if (typeof rawUrl !== "string") return false;
+  return (
+    rawUrl.startsWith("app-file:") ||
+    rawUrl.startsWith("file:") ||
+    /^[a-zA-Z]:[\\/]/.test(rawUrl) ||
+    rawUrl.startsWith("\\\\")
+  );
+}
 
 function isAllowedMediaUrl(rawUrl) {
   if (typeof rawUrl !== "string") return false;
   try {
+    if (isLocalMediaUrl(rawUrl)) {
+      const localPath =
+        appFileOrFileUrlToPath(rawUrl) ||
+        (/^[a-zA-Z]:[\\/]/.test(rawUrl) || rawUrl.startsWith("\\\\")
+          ? path.normalize(rawUrl)
+          : null);
+      return !!(localPath && fs.existsSync(localPath) && isInsideMediaLibrary(localPath));
+    }
     const parsed = new URL(rawUrl);
     return ["http:", "https:", "rtmp:", "rtsp:"].includes(parsed.protocol);
   } catch {
@@ -630,7 +679,9 @@ function isSafeConfigEntries(entries) {
 
 // IPC Handler to run external players
 ipcMain.handle("play-external", async (event, { url, playerType }) => {
-  console.log(`Attempting to play URL: ${url} using ${playerType}`);
+  console.log(
+    `Attempting to play URL: ${redactSensitiveUrl(url)} using ${playerType}`,
+  );
 
   if (!isAllowedMediaUrl(url)) {
     return { success: false, message: "Geçersiz medya URL'si." };
@@ -912,274 +963,43 @@ ipcMain.handle("delete-playlist-items", async (event, { id }) => {
   }
 });
 
-// DNS over HTTPS (DoH) bypass resolver for TMDB API and image CDN
-const resolvedHostIps = {};
-
-async function resolveHostIp(hostname) {
-  if (resolvedHostIps[hostname]) return resolvedHostIps[hostname];
-
-  const providers = [
-    `https://dns.google/resolve?name=${hostname}&type=A`,
-    `https://cloudflare-dns.com/dns-query?name=${hostname}&type=A`,
-    `https://dns.quad9.net/dns-query?name=${hostname}&type=A`,
-  ];
-
-  const fetchWithTimeout = async (url, ms = 1500) => {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), ms);
-    try {
-      const response = await fetch(url, {
-        headers: { accept: "application/dns-json" },
-        signal: controller.signal,
-      });
-      clearTimeout(id);
-      if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-      const data = await response.json();
-      const ip = data.Answer?.find((ans) => ans.type === 1)?.data;
-      if (ip) return ip;
-      throw new Error("No A record found");
-    } catch (e) {
-      clearTimeout(id);
-      throw e;
-    }
-  };
-
-  try {
-    const ip = await Promise.any(
-      providers.map((url) => fetchWithTimeout(url, 1500)),
-    );
-    resolvedHostIps[hostname] = ip;
-    console.log(`Resolved ${hostname} to ${ip} via parallel DoH`);
-    return ip;
-  } catch (e) {
-    console.warn(`Parallel DoH resolution failed for ${hostname}:`, e.message);
-    return hostname;
-  }
-}
-
-const https = require("https");
-const apiAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 32,
-  keepAliveMsecs: 60000,
-});
-const imageAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 64,
-  keepAliveMsecs: 60000,
-});
-
-async function fetchHttpsFromHost(hostname, requestPath, asBuffer = false) {
-  const ip = await resolveHostIp(hostname);
-
-  return new Promise((resolve, reject) => {
-    const isIp = ip !== hostname;
-
-    const options = {
-      hostname: ip,
-      port: 443,
-      path: requestPath,
-      method: "GET",
-      headers: {
-        Host: hostname,
-        "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
-      },
-      servername: hostname,
-      rejectUnauthorized: !isIp,
-      agent: hostname === "image.tmdb.org" ? imageAgent : apiAgent,
-    };
-
-    const req = https.request(options, (res) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => {
-        const body = Buffer.concat(chunks);
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error(`Request failed with status ${res.statusCode}`));
-          return;
-        }
-
-        if (asBuffer) {
-          resolve({
-            buffer: body,
-            contentType: res.headers["content-type"] || "image/jpeg",
-          });
-          return;
-        }
-
-        try {
-          resolve(JSON.parse(body.toString("utf8")));
-        } catch (e) {
-          reject(new Error("Failed to parse TMDB response"));
-        }
-      });
-    });
-
-    req.on("error", (e) => reject(e));
-    req.end();
-  });
-}
-
-async function fetchFromTmdb(apiPath) {
-  return fetchHttpsFromHost("api.themoviedb.org", apiPath);
-}
-
-const tmdbMainRequests = new Map();
-const tmdbMainQueue = [];
-const MAX_TMDB_MAIN_REQUESTS = 8;
-let activeTmdbMainRequests = 0;
-
-function queueTmdbMainRequest(task) {
-  return new Promise((resolve, reject) => {
-    const run = () => {
-      activeTmdbMainRequests += 1;
-      task()
-        .then(resolve, reject)
-        .finally(() => {
-          activeTmdbMainRequests -= 1;
-          const next = tmdbMainQueue.shift();
-          if (next) next();
-        });
-    };
-    if (activeTmdbMainRequests < MAX_TMDB_MAIN_REQUESTS) run();
-    else tmdbMainQueue.push(run);
-  });
-}
-
-ipcMain.handle("fetch-tmdb", async (event, { path: apiPath }) => {
-  if (
-    typeof apiPath !== "string" ||
-    !apiPath.startsWith("/3/") ||
-    apiPath.length > 1200
-  ) {
-    return { error: "Invalid TMDB path" };
-  }
-
-  // Helper function to query the request queue / cache map
-  const executeFetch = async (pathToCheck) => {
-    const existing = tmdbMainRequests.get(pathToCheck);
-    if (existing) return existing;
-
-    const request = queueTmdbMainRequest(() =>
-      fetchFromTmdb(pathToCheck),
-    ).finally(() => tmdbMainRequests.delete(pathToCheck));
-    tmdbMainRequests.set(pathToCheck, request);
-    return await request;
-  };
-
-  try {
-    // 1. Try with the requested path (containing frontend/user's API key)
-    const result = await executeFetch(apiPath);
-    return result;
-  } catch (err) {
-    const errMsg = err.message || "";
-    // 2. If it fails with 401 (Unauthorized) or 403 (Forbidden), auto-retry with default key
-    if (errMsg.includes("status 401") || errMsg.includes("status 403")) {
-      console.warn(
-        `TMDB fetch failed (401/403) for path: ${apiPath}. Retrying with working default key...`,
-      );
-      try {
-        const urlObj = new URL("https://api.themoviedb.org" + apiPath);
-        urlObj.searchParams.set("api_key", "c7e12a2b1d8e1851399f4b92dc124332");
-        const fallbackPath = urlObj.pathname + urlObj.search;
-
-        const fallbackResult = await executeFetch(fallbackPath);
-        console.log(`TMDB fallback retry succeeded for path: ${fallbackPath}`);
-        return fallbackResult;
-      } catch (fallbackErr) {
-        console.error(
-          `TMDB fallback retry also failed for path ${apiPath}:`,
-          fallbackErr,
-        );
-        return { error: fallbackErr.message };
-      }
-    }
-
-    console.error(`TMDB fetch error for path ${apiPath}:`, err);
-    return { error: err.message };
-  }
-});
-
-ipcMain.handle(
-  "fetch-tmdb-image",
-  async (event, { path: imagePath, size = "w500" }) => {
-    try {
-      const allowedSizes = new Set([
-        "w92",
-        "w154",
-        "w185",
-        "w300",
-        "w342",
-        "w500",
-        "w780",
-        "original",
-      ]);
-      if (
-        !imagePath ||
-        typeof imagePath !== "string" ||
-        !imagePath.startsWith("/")
-      ) {
-        return { error: "Invalid TMDB image path" };
-      }
-      if (!allowedSizes.has(size)) {
-        return { error: "Invalid TMDB image size" };
-      }
-
-      const cacheDir = path.join(getTmdbCacheDir(), size);
-      if (!fs.existsSync(cacheDir)) {
-        fs.mkdirSync(cacheDir, { recursive: true });
-      }
-
-      // Replace slashes to create a safe flat filename
-      const safeFileName = imagePath.replace(/\//g, "_");
-      const localFilePath = path.join(cacheDir, safeFileName);
-
-      // If cached on disk, return the app-file:/// URL directly
-      if (fs.existsSync(localFilePath)) {
-        return { localUrl: appFileUrlFromPath(localFilePath) };
-      }
-
-      const data = await fetchHttpsFromHost(
-        "image.tmdb.org",
-        `/t/p/${size}${imagePath}`,
-        true,
-      );
-
-      // Save to cache directory asynchronously
-      await fs.promises.writeFile(localFilePath, data.buffer);
-
-      return {
-        localUrl: appFileUrlFromPath(localFilePath),
-      };
-    } catch (err) {
-      console.error("TMDB image fetch error:", err);
-      return { error: err.message };
-    }
-  },
-);
+registerTmdbHandlers({ ipcMain, getTmdbCacheDir, appFileUrlFromPath });
 
 // ── FFmpeg Audio Transcoding Proxy ──
 
 async function prepareFfmpegInput(rawUrl) {
   try {
+    // Local downloads (app-file:// / file:// / absolute path) → real filesystem path for FFmpeg.
+    if (isLocalMediaUrl(rawUrl)) {
+      const localPath =
+        appFileOrFileUrlToPath(rawUrl) ||
+        (/^[a-zA-Z]:[\\/]/.test(rawUrl) || rawUrl.startsWith("\\\\")
+          ? path.normalize(rawUrl)
+          : null);
+      if (localPath && fs.existsSync(localPath) && isInsideMediaLibrary(localPath)) {
+        return { inputUrl: localPath, hostHeader: null, isLocal: true };
+      }
+      return { inputUrl: rawUrl, hostHeader: null, isLocal: true };
+    }
+
     const parsedUrl = new URL(rawUrl);
     if (parsedUrl.protocol !== "http:") {
-      return { inputUrl: rawUrl, hostHeader: null };
+      return { inputUrl: rawUrl, hostHeader: null, isLocal: false };
     }
 
     const originalHostname = parsedUrl.hostname;
     const resolvedIp = await resolveHostIp(originalHostname);
     if (!resolvedIp || resolvedIp === originalHostname) {
-      return { inputUrl: rawUrl, hostHeader: null };
+      return { inputUrl: rawUrl, hostHeader: null, isLocal: false };
     }
 
     const hostHeader = parsedUrl.port
       ? `${originalHostname}:${parsedUrl.port}`
       : originalHostname;
     parsedUrl.hostname = resolvedIp;
-    return { inputUrl: parsedUrl.toString(), hostHeader };
+    return { inputUrl: parsedUrl.toString(), hostHeader, isLocal: false };
   } catch {
-    return { inputUrl: rawUrl, hostHeader: null };
+    return { inputUrl: rawUrl, hostHeader: null, isLocal: false };
   }
 }
 
@@ -1201,7 +1021,16 @@ function stopFfmpegProxy() {
 
 ipcMain.handle(
   "start-ffmpeg-proxy",
-  async (event, { url, startTime, audioStreamId, transcodeMode = "full" }) => {
+  async (
+    event,
+    {
+      url,
+      startTime,
+      audioStreamId,
+      transcodeMode = "full",
+      contentType = "movie",
+    },
+  ) => {
     if (!getFfmpegPath()) {
       return { success: false, error: "FFmpeg bulunamadı." };
     }
@@ -1211,6 +1040,15 @@ ipcMain.handle(
 
     stopFfmpegProxy();
     const { inputUrl, hostHeader } = await prepareFfmpegInput(url);
+    const isLive = contentType === "live";
+    const seekSeconds =
+      startTime && Number.isFinite(Number(startTime)) && Number(startTime) > 0
+        ? Math.floor(Number(startTime))
+        : 0;
+    // Mid-stream seeks already proved the source works — use a faster probe/encode path.
+    const isSeekRestart = seekSeconds > 0;
+    // Copy mode re-encodes audio only. Full mode re-encodes both for bad timestamps.
+    const mode = transcodeMode === "copy" ? "copy" : "full";
 
     return new Promise((resolve) => {
       let resolved = false;
@@ -1227,10 +1065,12 @@ ipcMain.handle(
       const MAX_BUFFER_SIZE = 4 * 1024 * 1024;
       let isFirstRequest = true;
 
-      const resolveSuccessIfReady = () => {
-        if (proxyReady && ffmpegOutputReady && !resolved) {
+      // Return the local URL as soon as the proxy is listening so the player can
+      // connect in parallel while FFmpeg seeks and produces the first fragment.
+      // Waiting for the first stdout byte was adding ~1-3s of pure serial delay.
+      const resolveProxyUrl = () => {
+        if (proxyReady && !resolved) {
           resolved = true;
-          if (startupTimer) clearTimeout(startupTimer);
           resolve({
             success: true,
             port: proxyPort,
@@ -1245,7 +1085,17 @@ ipcMain.handle(
           if (startupTimer) clearTimeout(startupTimer);
           stopFfmpegProxy();
           resolve({ success: false, error: message });
+          return;
         }
+        // URL already handed to the player — close any waiting HTTP client.
+        if (startupTimer) clearTimeout(startupTimer);
+        if (pendingRes && !pendingRes.destroyed) {
+          try {
+            pendingRes.destroy();
+          } catch {}
+          pendingRes = null;
+        }
+        stopFfmpegProxy();
       };
 
       function startProxyServer() {
@@ -1288,7 +1138,7 @@ ipcMain.handle(
           proxyPort = proxyServer.address().port;
           console.log(`[Proxy] Listening on port ${proxyPort}`);
           proxyReady = true;
-          resolveSuccessIfReady();
+          resolveProxyUrl();
         });
 
         proxyServer.on("error", (err) => {
@@ -1303,16 +1153,13 @@ ipcMain.handle(
       // Start proxy server immediately so we can resolve the URL instantly
       startProxyServer();
 
-      // Re-encode video and audio together in fallback mode or copy video.
-      // Copying video while re-encoding audio is faster (uses almost 0 CPU),
-      // but some IPTV/VOD files with bad timestamps play better in full transcode mode.
+      // VOD/series need larger probe windows and stable timestamps.
+      // Live keeps low-latency flags. Seek restarts use a lighter profile so
+      // jumping from e.g. 2:00 → 15:00 does not re-probe for several seconds.
       const args = [
+        "-hide_banner",
         "-loglevel",
         "warning",
-        "-fflags",
-        "+nobuffer+genpts+discardcorrupt",
-        "-flags",
-        "+low_delay",
         "-user_agent",
         "VLC/3.0.20 LibVLC/3.0.20",
         "-reconnect",
@@ -1322,66 +1169,117 @@ ipcMain.handle(
         "-reconnect_streamed",
         "1",
         "-reconnect_delay_max",
-        "2",
-        "-analyzeduration",
-        "100000",
-        "-probesize",
-        "150000",
+        isLive ? "2" : "5",
       ];
 
-      if (startTime && startTime > 0) {
-        args.push("-ss", Math.floor(startTime).toString());
+      if (isLive) {
+        args.push(
+          "-fflags",
+          "+nobuffer+genpts+discardcorrupt+fastseek",
+          "-flags",
+          "+low_delay",
+          "-analyzeduration",
+          "500000",
+          "-probesize",
+          "500000",
+        );
+      } else if (isSeekRestart) {
+        // Fast seek: keyframe-ish jump, small probe, low first-frame latency.
+        args.push(
+          "-fflags",
+          "+genpts+discardcorrupt+igndts+fastseek",
+          "-analyzeduration",
+          "1000000",
+          "-probesize",
+          "1000000",
+          "-thread_queue_size",
+          "512",
+          "-noaccurate_seek",
+        );
+      } else {
+        args.push(
+          // igndts helps broken IPTV VOD timestamps; genpts rebuilds a timeline.
+          "-fflags",
+          "+genpts+discardcorrupt+igndts",
+          "-analyzeduration",
+          "10000000",
+          "-probesize",
+          "10000000",
+          "-thread_queue_size",
+          "1024",
+        );
+      }
+
+      // Input-side seek is faster for long episodes. PTS is reset after decode.
+      if (seekSeconds > 0) {
+        args.push("-ss", String(seekSeconds));
       }
 
       if (hostHeader) {
         args.push("-headers", `Host: ${hostHeader}\r\n`);
       }
       args.push("-i", inputUrl);
-      args.push("-map", "0:v:0");
-      if (audioStreamId !== undefined && audioStreamId !== null) {
-        args.push("-map", `0:${audioStreamId}`);
+      args.push("-map", "0:v:0?");
+
+      const mappedAudioId = Number(audioStreamId);
+      if (Number.isFinite(mappedAudioId) && mappedAudioId >= 0) {
+        args.push("-map", `0:${mappedAudioId}?`);
       } else {
-        args.push("-map", "0:a?");
+        args.push("-map", "0:a:0?");
       }
 
-      if (transcodeMode === "full") {
+      if (mode === "full") {
+        // Seek restarts favor first-frame latency; cold start keeps slightly better quality.
+        const preset = isLive || isSeekRestart ? "ultrafast" : "veryfast";
+        const gop = isLive || isSeekRestart ? "30" : "48";
         args.push(
           "-vf",
           "setpts=PTS-STARTPTS,format=yuv420p",
           "-c:v",
           "libx264",
-          // This stream is consumed only by the local player. Favor first-frame
-          // latency and low CPU usage over compression efficiency.
           "-preset",
-          "ultrafast",
+          preset,
           "-tune",
           "zerolatency",
+          "-profile:v",
+          "baseline",
+          "-level",
+          "4.0",
+          "-pix_fmt",
+          "yuv420p",
           "-crf",
-          "23",
+          isSeekRestart ? "26" : "23",
           "-g",
-          "30",
+          gop,
           "-keyint_min",
-          "30",
+          gop,
           "-sc_threshold",
           "0",
+          "-bf",
+          "0",
+          "-fps_mode",
+          "cfr",
           "-threads",
           "0",
         );
       } else {
-        // 'copy' mode (default)
+        // Copy video, re-encode audio only (low CPU).
         args.push("-c:v", "copy");
       }
 
+      // AAC encoder priming delay (~20-50ms) lags audio when video is copied.
+      // Compensate in copy mode. Avoid aggressive min_comp values that stretch
+      // audio over time and sound like progressive delay on long episodes.
       const audioFilter =
-        transcodeMode === "full"
-          ? "asetpts=PTS-STARTPTS,aresample=async=1:min_comp=0.01:min_hard_comp=0.02"
-          : "aresample=async=1:min_comp=0.01:min_hard_comp=0.02";
+        mode === "full"
+          ? "asetpts=PTS-STARTPTS,aresample=async=1000:first_pts=0"
+          : "aresample=async=1000:first_pts=0,asetpts=PTS-STARTPTS-0.048/TB";
 
       args.push(
         "-c:a",
         "aac",
         "-b:a",
-        "128k",
+        isSeekRestart ? "128k" : "160k",
         "-ar",
         "48000",
         "-ac",
@@ -1390,35 +1288,57 @@ ipcMain.handle(
         audioFilter,
         "-avoid_negative_ts",
         "make_zero",
+        "-max_interleave_delta",
+        "0",
+        "-muxdelay",
+        "0",
+        "-muxpreload",
+        "0",
         "-max_muxing_queue_size",
-        "2048",
+        "9999",
         "-f",
         "mp4",
         "-movflags",
         "frag_keyframe+empty_moov+default_base_moof",
+        // Seek: smaller fragments → first playable chunk sooner.
         "-frag_duration",
-        "200000",
+        isLive || isSeekRestart ? "200000" : "500000",
         "-flush_packets",
         "1",
         "pipe:1",
       );
 
+      console.log(
+        `[Proxy] Starting FFmpeg mode=${mode} type=${contentType} seek=${seekSeconds}s fastSeek=${isSeekRestart}`,
+      );
+      console.log("[Proxy] FFmpeg args:", redactSensitiveText(args.join(" ")));
+
       ffmpegProcess = spawn(getFfmpegPath(), args, {
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
 
       ffmpegProcess.on("spawn", () => {
         console.log("FFmpeg spawned, waiting for output...");
       });
 
+      // Seek restarts should fail fast if the source never answers.
+      const startupMs = isLive ? 10000 : isSeekRestart ? 12000 : 20000;
       startupTimer = setTimeout(() => {
         failBeforeReady(
           `FFmpeg veri üretmedi. ${stderrTail || "Stream yanıt vermedi."}`,
         );
-      }, 10000);
+      }, startupMs);
 
       ffmpegProcess.stdout.on("data", (chunk) => {
-        ffmpegOutputReady = true;
+        if (!ffmpegOutputReady) {
+          ffmpegOutputReady = true;
+          if (startupTimer) {
+            clearTimeout(startupTimer);
+            startupTimer = null;
+          }
+          console.log("[Proxy] First FFmpeg output received");
+        }
         if (headerSize < MAX_HEADER_SIZE) {
           const remaining = MAX_HEADER_SIZE - headerSize;
           const toCopy =
@@ -1437,15 +1357,13 @@ ipcMain.handle(
             bufferBytes -= dropped ? dropped.length : 0;
           }
         }
-
-        resolveSuccessIfReady();
       });
 
       ffmpegProcess.stderr.on("data", (data) => {
         const msg = data.toString().trim();
         if (msg) {
           stderrTail = `${stderrTail}\n${msg}`.slice(-1200);
-          console.log("FFmpeg:", msg);
+          console.log("FFmpeg:", redactSensitiveText(msg));
         }
       });
 
@@ -1495,7 +1413,8 @@ ipcMain.handle("probe-audio-codec", async (event, { url }) => {
 
   return new Promise((resolve) => {
     let resolved = false;
-    const args = ["-analyzeduration", "1000000", "-probesize", "1000000"];
+    // Larger probe helps IPTV VOD series report accurate audio/video codecs.
+    const args = ["-analyzeduration", "5000000", "-probesize", "5000000"];
     if (hostHeader) {
       args.push("-headers", `Host: ${hostHeader}\r\n`);
     }
@@ -1503,95 +1422,75 @@ ipcMain.handle("probe-audio-codec", async (event, { url }) => {
 
     const proc = spawn(getFfmpegPath(), args, {
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stderrOutput = "";
+    let earlyResolveTimer = null;
+
+    const finish = (payload) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutId);
+      if (earlyResolveTimer) clearTimeout(earlyResolveTimer);
+      try {
+        proc.kill("SIGKILL");
+      } catch {}
+      resolve(payload);
+    };
+
+    const timeoutId = setTimeout(() => {
+      const parsed = parseFfmpegProbeOutput(stderrOutput);
+      if (parsed.success) {
+        finish(parsed);
+      } else {
+        finish({
+          success: false,
+          error: "Probe timeout",
+          codec: "unknown",
+          videoCodec: parsed.videoCodec,
+        });
+      }
+    }, 9000);
 
     proc.on("error", (err) => {
       console.error("Probe audio codec spawn error:", err);
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeoutId);
-        resolve({ success: false, error: err.message, codec: "unknown" });
-      }
+      finish({ success: false, error: err.message, codec: "unknown" });
     });
-
-    const timeoutId = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        try {
-          proc.kill("SIGKILL");
-        } catch {}
-
-        // Parse whatever we collected so far before resolving timeout
-        const match = stderrOutput.match(/Audio:\s+([a-zA-Z0-9_]+)/i);
-        const durationMatch = stderrOutput.match(
-          /Duration:\s*(\d+):(\d+):(\d+)/i,
-        );
-        let durationSec = 0;
-        if (durationMatch) {
-          durationSec =
-            parseInt(durationMatch[1], 10) * 3600 +
-            parseInt(durationMatch[2], 10) * 60 +
-            parseInt(durationMatch[3], 10);
-        }
-
-        if (match) {
-          resolve({
-            success: true,
-            codec: match[1].toLowerCase(),
-            duration: durationSec,
-            audioStreams: getAudioStreamsInfo(stderrOutput),
-          });
-        } else {
-          resolve({ success: false, error: "Probe timeout", codec: "unknown" });
-        }
-      }
-    }, 2500);
 
     proc.stderr.on("data", (chunk) => {
       stderrOutput += chunk.toString();
+
+      // Resolve once we have Input + Audio, and preferably Video too.
+      const hasInput = stderrOutput.includes("Input #0");
+      const hasAudio = /Audio:\s+[a-zA-Z0-9_]+/i.test(stderrOutput);
+      const hasVideo = /Video:\s+[a-zA-Z0-9_]+/i.test(stderrOutput);
+      if (!resolved && hasInput && hasAudio) {
+        if (earlyResolveTimer) clearTimeout(earlyResolveTimer);
+        // Wait a bit longer if video line has not arrived yet.
+        earlyResolveTimer = setTimeout(
+          () => {
+            const parsed = parseFfmpegProbeOutput(stderrOutput);
+            if (parsed.success) finish(parsed);
+          },
+          hasVideo ? 120 : 350,
+        );
+      }
     });
 
     proc.stdout.on("data", () => {});
 
     proc.on("close", () => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeoutId);
-        const match = stderrOutput.match(/Audio:\s+([a-zA-Z0-9_]+)/i);
-        const durationMatch = stderrOutput.match(
-          /Duration:\s*(\d+):(\d+):(\d+)/i,
-        );
-        let durationSec = 0;
-        if (durationMatch) {
-          durationSec =
-            parseInt(durationMatch[1], 10) * 3600 +
-            parseInt(durationMatch[2], 10) * 60 +
-            parseInt(durationMatch[3], 10);
-        }
-
-        if (match) {
-          resolve({
-            success: true,
-            codec: match[1].toLowerCase(),
-            duration: durationSec,
-            audioStreams: getAudioStreamsInfo(stderrOutput),
-          });
-        } else {
-          resolve({
-            success: false,
-            codec: "unknown",
-            error: "No audio stream found",
-          });
-        }
-      }
-    });
-
-    proc.on("error", (err) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeoutId);
-        resolve({ success: false, error: err.message, codec: "unknown" });
+      if (resolved) return;
+      const parsed = parseFfmpegProbeOutput(stderrOutput);
+      if (parsed.success) {
+        finish(parsed);
+      } else {
+        finish({
+          success: false,
+          codec: "unknown",
+          videoCodec: parsed.videoCodec,
+          error: "No audio stream found",
+        });
       }
     });
   });
@@ -1605,6 +1504,33 @@ function getAllAudioCodecs(stderrText) {
     codecs.push(match[1].toLowerCase());
   }
   return codecs;
+}
+
+function getVideoCodecFromProbe(stderrText) {
+  const match = stderrText.match(/Video:\s+([a-zA-Z0-9_]+)/i);
+  return match ? match[1].toLowerCase() : undefined;
+}
+
+function getDurationFromProbe(stderrText) {
+  const durationMatch = stderrText.match(/Duration:\s*(\d+):(\d+):(\d+)/i);
+  if (!durationMatch) return 0;
+  return (
+    parseInt(durationMatch[1], 10) * 3600 +
+    parseInt(durationMatch[2], 10) * 60 +
+    parseInt(durationMatch[3], 10)
+  );
+}
+
+function parseFfmpegProbeOutput(stderrOutput) {
+  const audioMatch = stderrOutput.match(/Audio:\s+([a-zA-Z0-9_]+)/i);
+  return {
+    success: !!audioMatch || !!getVideoCodecFromProbe(stderrOutput),
+    codec: audioMatch ? audioMatch[1].toLowerCase() : "unknown",
+    videoCodec: getVideoCodecFromProbe(stderrOutput),
+    duration: getDurationFromProbe(stderrOutput),
+    audioStreams: getAudioStreamsInfo(stderrOutput),
+    allCodecs: getAllAudioCodecs(stderrOutput),
+  };
 }
 
 function getAudioStreamsInfo(stderrText) {
@@ -1745,1315 +1671,24 @@ ipcMain.handle("install-update", async () => {
   }
 });
 
-// Download management
-const activeDownloads = new Map();
-const activeSegmentDownloads = new Map();
 
-function sanitizeFileName(name) {
-  const safeName = String(name || "")
-    .replace(/[<>:"/\\|?*]/g, "_")
-    .replace(/\s+/g, " ")
-    .trim()
-    .substring(0, 200);
-  return safeName || "Untitled";
-}
-
-function safeUnlink(filePath) {
-  try {
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch (err) {
-    console.error("[DOWNLOAD] Failed to remove file:", filePath, err.message);
-  }
-}
-
-function getPartMarkerPath(outputPath) {
-  return `${outputPath}.part`;
-}
-
-// Marks an output file as "in progress". Its presence is the source of truth
-// for whether a file on disk is a finished, playable download or a leftover
-// from an interrupted/crashed/killed download that should not be trusted.
-function markDownloadStarted(outputPath) {
-  try {
-    fs.writeFileSync(getPartMarkerPath(outputPath), String(Date.now()), "utf8");
-  } catch (err) {
-    console.error("[DOWNLOAD] Failed to write progress marker:", err.message);
-  }
-}
-
-function clearDownloadMarker(outputPath) {
-  safeUnlink(getPartMarkerPath(outputPath));
-}
-
-// Removes a partially-written output file (and its marker) after a
-// cancellation or failure so it can never be mistaken for a completed
-// download and never lingers on disk wasting space.
-function cleanupPartialDownload(outputPath) {
-  if (!outputPath) return;
-  safeUnlink(outputPath);
-  
-  const metaPath = getMetaPath(outputPath);
-  safeUnlink(metaPath);
-
-  clearDownloadMarker(outputPath);
-  cleanEmptyDirs(outputPath);
-}
-
-function cleanEmptyDirs(filePath) {
-  try {
-    const baseDir1 = getMediaLibraryBaseDir();
-    const baseDir2 = getLegacyDownloadsBaseDir();
-    
-    let currentDir = path.dirname(filePath);
-    
-    while (isInsideMediaLibrary(currentDir)) {
-      if (path.resolve(currentDir) === path.resolve(baseDir1) || 
-          path.resolve(currentDir) === path.resolve(baseDir2)) {
-        break;
-      }
-      
-      const files = fs.readdirSync(currentDir);
-      if (files.length === 0) {
-        fs.rmdirSync(currentDir);
-        logToFile("[DOWNLOAD] Cleaned empty directory:", currentDir);
-        currentDir = path.dirname(currentDir);
-      } else {
-        break;
-      }
-    }
-  } catch (err) {
-    console.error("[DOWNLOAD] Failed to clean empty dirs:", err.message);
-  }
-}
-
-function isMediaFileComplete(filePath) {
-  return fs.existsSync(filePath) && !fs.existsSync(getPartMarkerPath(filePath));
-}
-
-function getMetaPath(outputPath) {
-  return `${outputPath}.meta.json`;
-}
-
-function readDownloadMeta(outputPath) {
-  try {
-    const metaPath = getMetaPath(outputPath);
-    if (!fs.existsSync(metaPath)) return null;
-    return JSON.parse(fs.readFileSync(metaPath, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function writeDownloadMeta(outputPath, data) {
-  try {
-    fs.writeFileSync(getMetaPath(outputPath), JSON.stringify(data), "utf8");
-  } catch (err) {
-    console.error("[DOWNLOAD] Failed to write metadata:", err.message);
-  }
-}
-
-// Finds a free (or matching) output path for a given stream so two different
-// sources that happen to produce the same file name never overwrite each
-// other. If `basePath` is already occupied by a different stream (per its
-// metadata sidecar), a numbered suffix is used instead. Files saved before
-// this mechanism existed have no sidecar and are treated as a match so
-// existing libraries keep being recognized rather than being duplicated.
-function resolveOutputPathForStream(basePath, streamUrl) {
-  const ext = path.extname(basePath);
-  const withoutExt = ext ? basePath.slice(0, -ext.length) : basePath;
-  for (let n = 1; n < 100; n++) {
-    const candidate = n === 1 ? basePath : `${withoutExt} (${n})${ext}`;
-    if (
-      !fs.existsSync(candidate) &&
-      !fs.existsSync(getPartMarkerPath(candidate))
-    ) {
-      return candidate;
-    }
-    const meta = readDownloadMeta(candidate);
-    if (!meta || meta.streamUrl === streamUrl) {
-      return candidate;
-    }
-  }
-  return basePath;
-}
-
-async function downloadHlsSegmented(
-  downloadId,
-  streamUrl,
-  outputPath,
-  name,
-  prefLang,
-  event,
-) {
-  const tempDir = path.join(path.dirname(outputPath), `temp_${downloadId}`);
-  const abortController = new AbortController();
-  activeSegmentDownloads.set(downloadId, {
-    abortController,
-    tempDir,
-    outputPath,
-  });
-
-  try {
-    const response = await fetch(streamUrl, { signal: abortController.signal });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch stream: ${response.statusText}`);
-    }
-
-    let firstChunk = null;
-    if (response.body && typeof response.body.getReader === 'function') {
-      const reader = response.body.getReader();
-      try {
-        const { value } = await reader.read();
-        firstChunk = value;
-      } finally {
-        try { await reader.cancel(); } catch {}
-      }
-    } else if (response.body && typeof response.body[Symbol.asyncIterator] === 'function') {
-      for await (const chunk of response.body) {
-        firstChunk = chunk;
-        break;
-      }
-    }
-
-    if (!firstChunk) {
-      throw new Error('Empty response body');
-    }
-
-    const firstChunkText = new TextDecoder().decode(firstChunk);
-    if (!firstChunkText.includes('#EXTM3U')) {
-      throw new Error('FALLBACK_NOT_HLS');
-    }
-
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    const hlsRes = await fetch(streamUrl, { signal: abortController.signal });
-    if (!hlsRes.ok) {
-      throw new Error(`Failed to fetch HLS playlist: ${hlsRes.statusText}`);
-    }
-    const text = await hlsRes.text();
-
-    if (text.includes("#EXT-X-KEY") && text.includes("AES-128")) {
-      throw new Error("FALLBACK_ENCRYPTED");
-    }
-
-    const lines = text.split("\n");
-    const segments = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith("#EXTINF:")) {
-        const nextLine = lines[i + 1]?.trim();
-        if (nextLine && !nextLine.startsWith("#")) {
-          let segmentUrl = nextLine;
-          if (
-            !segmentUrl.startsWith("http://") &&
-            !segmentUrl.startsWith("https://")
-          ) {
-            segmentUrl = new URL(segmentUrl, streamUrl).href;
-          }
-          segments.push({ url: segmentUrl, index: segments.length });
-        }
-      }
-    }
-
-    if (segments.length === 0) {
-      throw new Error("No segment files found in HLS playlist");
-    }
-
-    console.log(`[HLS DOWNLOAD] Found ${segments.length} segments for ${name}`);
-    logToFile(`[HLS DOWNLOAD] Found ${segments.length} segments for ${name}`);
-
-    const MAX_CONCURRENT = 6;
-    let activeCount = 0;
-    let nextIndex = 0;
-    let completedCount = 0;
-    let totalBytesDownloaded = 0;
-    let lastProgressTime = Date.now();
-    let speedBytes = 0;
-    let currentSpeed = "0 Mbps";
-
-    await new Promise((resolve, reject) => {
-      const startNextTask = async () => {
-        if (abortController.signal.aborted) {
-          reject(new Error("ABORTED"));
-          return;
-        }
-
-        if (completedCount === segments.length) {
-          resolve();
-          return;
-        }
-
-        while (activeCount < MAX_CONCURRENT && nextIndex < segments.length) {
-          const task = segments[nextIndex++];
-          activeCount++;
-
-          (async (segment) => {
-            const partPath = path.join(tempDir, `part_${segment.index}.ts`);
-            let attempt = 0;
-            const maxAttempts = 3;
-            let success = false;
-
-            while (
-              attempt < maxAttempts &&
-              !success &&
-              !abortController.signal.aborted
-            ) {
-              try {
-                attempt++;
-                const segRes = await fetch(segment.url, {
-                  signal: abortController.signal,
-                });
-                if (!segRes.ok) throw new Error(`Status ${segRes.status}`);
-
-                const buffer = await segRes.arrayBuffer();
-                fs.writeFileSync(partPath, Buffer.from(buffer));
-                totalBytesDownloaded += buffer.byteLength;
-                speedBytes += buffer.byteLength;
-
-                success = true;
-              } catch (err) {
-                if (attempt >= maxAttempts) {
-                  reject(
-                    new Error(
-                      `Failed segment ${segment.index} after ${maxAttempts} attempts: ${err.message}`,
-                    ),
-                  );
-                  return;
-                }
-                await new Promise((r) => setTimeout(r, 1000));
-              }
-            }
-
-            activeCount--;
-            completedCount++;
-
-            const now = Date.now();
-            const timeDiff = now - lastProgressTime;
-            if (timeDiff >= 1000) {
-              const mbps = (speedBytes * 8) / (1024 * 1024 * (timeDiff / 1000));
-              currentSpeed = `${mbps.toFixed(1)} Mbps`;
-              speedBytes = 0;
-              lastProgressTime = now;
-
-              const progress = Math.min(
-                99,
-                Math.round((completedCount / segments.length) * 100),
-              );
-              const sizeMB = (totalBytesDownloaded / (1024 * 1024)).toFixed(1);
-
-              if (event && event.sender) {
-                event.sender.send("download-progress", {
-                  downloadId,
-                  progress,
-                  speed: currentSpeed,
-                  timeLeft:
-                    completedCount > 0
-                      ? `${Math.round(((segments.length - completedCount) * (timeDiff / 1000)) / (completedCount - (completedCount - MAX_CONCURRENT)))}s`
-                      : "--",
-                  size: `${sizeMB} MB`,
-                  downloader: "segmented",
-                });
-              }
-            }
-
-            startNextTask();
-          })(task);
-        }
-      };
-
-      startNextTask();
-    });
-
-    const listPath = path.join(tempDir, "list.txt");
-    const listLines = segments
-      .map((s) => `file 'part_${s.index}.ts'`)
-      .join("\n");
-    fs.writeFileSync(listPath, listLines);
-
-    const ffmpegPath = getFfmpegPath();
-    const args = [
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      listPath,
-      "-c",
-      "copy",
-      "-movflags",
-      "+faststart",
-      "-y",
-      outputPath,
-    ];
-
-    console.log("[HLS CONCAT] Command:", ffmpegPath, args.join(" "));
-    logToFile("[HLS CONCAT] Command: " + ffmpegPath + " " + args.join(" "));
-
-    await new Promise((resolveConcat, rejectConcat) => {
-      const proc = spawn(ffmpegPath, args, { windowsHide: true });
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolveConcat();
-        } else {
-          rejectConcat(new Error(`FFmpeg concat exited with code ${code}`));
-        }
-      });
-      proc.on("error", (err) => {
-        rejectConcat(err);
-      });
-    });
-
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {}
-
-    activeSegmentDownloads.delete(downloadId);
-    return { success: true, filePath: outputPath };
-  } catch (err) {
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {}
-    activeSegmentDownloads.delete(downloadId);
-
-    if (err.message === "FALLBACK_ENCRYPTED" || err.message === "FALLBACK_NOT_HLS") {
-      throw err;
-    }
-
-    if (err.message === "ABORTED" || abortController.signal.aborted) {
-      return { success: false, error: "CANCELLED" };
-    }
-
-    throw err;
-  }
-}
-
-async function probeStreamTracks(streamUrl, ffmpegPath) {
-  return new Promise((resolve) => {
-    const args = ["-i", streamUrl];
-    const proc = spawn(ffmpegPath, args, { windowsHide: true });
-
-    let stderr = "";
-    const timeout = setTimeout(() => {
-      try {
-        proc.kill("SIGKILL");
-      } catch {}
-    }, 4500);
-
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on("close", () => {
-      clearTimeout(timeout);
-
-      const tracks = [];
-      const lines = stderr.split("\n");
-      const streamRegex =
-        /Stream #0:(\d+)(?:\(([^)]+)\))?:\s*(Audio|Video|Subtitle)/i;
-
-      for (const line of lines) {
-        const match = line.match(streamRegex);
-        if (match) {
-          tracks.push({
-            index: `0:${match[1]}`,
-            lang: match[2] ? match[2].toLowerCase() : null,
-            type: match[3].toLowerCase(),
-          });
-        }
-      }
-      resolve(tracks);
-    });
-
-    proc.on("error", () => {
-      clearTimeout(timeout);
-      resolve([]);
-    });
-  });
-}
-
-function getMediaLibraryBaseDir() {
-  if (configCache && configCache.customDownloadsPath) {
-    return configCache.customDownloadsPath;
-  }
-  return path.join(app.getPath("videos"), "Strmly");
-}
-
-function getLegacyDownloadsBaseDir() {
-  return path.join(app.getPath("downloads"), "Strmly");
-}
-
-function ensureDir(dir) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  return dir;
-}
-
-function getDownloadsDir(type, name, season, create = true) {
-  const baseDir = getMediaLibraryBaseDir();
-
-  if (type === "series") {
-    const seriesName = sanitizeFileName(name);
-    const seasonDir = season ? `Sezon ${season}` : "Sezon 1";
-    const dir = path.join(baseDir, "Diziler", seriesName, seasonDir);
-    return create ? ensureDir(dir) : dir;
-  }
-
-  const dir = path.join(baseDir, "Filmler");
-  return create ? ensureDir(dir) : dir;
-}
-
-function isInsideDir(baseDir, filePath) {
-  try {
-    const resolvedBase = path.resolve(baseDir);
-    const resolvedTarget = path.resolve(filePath);
-    const relative = path.relative(resolvedBase, resolvedTarget);
-    return (
-      relative === "" ||
-      (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative))
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isInsideMediaLibrary(filePath) {
-  return (
-    isInsideDir(getMediaLibraryBaseDir(), filePath) ||
-    isInsideDir(getLegacyDownloadsBaseDir(), filePath)
-  );
-}
-
-function parseDownloadMediaInfo(name) {
-  const rawName = String(name || "").trim();
-  const patterns = [
-    /^(.*?)\s*[-_. ]\s*S(\d{1,2})\s*E(\d{1,3})(?:\D.*)?$/i,
-    /^(.*?)\s*S(\d{1,2})\s*E(\d{1,3})(?:\D.*)?$/i,
-    /^(.*?)\s*(\d{1,2})\.?\s*Sezon\s*(\d{1,3})\.?\s*BÃ¶lÃ¼m(?:\D.*)?$/i,
-    /^(.*?)\s*(\d{1,2})x(\d{1,3})(?:\D.*)?$/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = rawName.match(pattern);
-    if (match) {
-      return {
-        title: sanitizeFileName(match[1].replace(/[-_.]+$/g, "").trim()),
-        season: parseInt(match[2], 10),
-        episode: parseInt(match[3], 10),
-      };
-    }
-  }
-
-  return { title: sanitizeFileName(rawName), season: 1, episode: 1 };
-}
-
-function getDownloadTarget(type, name, downloadId, createDirs = true) {
-  const downloadType = type || "movie";
-  const sourceName = sanitizeFileName(
-    name ||
-      String(downloadId || "")
-        .replace("download-", "")
-        .replace(/-\d+$/, ""),
-  );
-  const mediaInfo =
-    downloadType === "series"
-      ? parseDownloadMediaInfo(name || sourceName)
-      : { title: sourceName, season: 1, episode: 1 };
-  const downloadsDir = getDownloadsDir(
-    downloadType,
-    mediaInfo.title,
-    mediaInfo.season,
-    createDirs,
-  );
-  const fileName =
-    downloadType === "series"
-      ? `${mediaInfo.title} - S${String(mediaInfo.season).padStart(2, "0")}E${String(mediaInfo.episode).padStart(2, "0")}.mp4`
-      : `${mediaInfo.title}.mp4`;
-  const outputPath = path.join(downloadsDir, fileName);
-  return { downloadType, sourceName, mediaInfo, outputPath };
-}
-
-function getDownloadTargetCandidates(type, name, downloadId, streamUrl) {
-  const target = getDownloadTarget(type, name, downloadId, false);
-  const resolvedPrimary = streamUrl
-    ? resolveOutputPathForStream(target.outputPath, streamUrl)
-    : target.outputPath;
-  const candidates = [resolvedPrimary];
-  if (resolvedPrimary !== target.outputPath) {
-    candidates.push(target.outputPath);
-  }
-
-  if (target.downloadType === "series") {
-    const fallbackDir = path.join(
-      getMediaLibraryBaseDir(),
-      "Diziler",
-      target.mediaInfo.title,
-    );
-    candidates.push(
-      path.join(fallbackDir, target.outputPath.split(path.sep).pop()),
-    );
-    const legacyDir = path.join(
-      getLegacyDownloadsBaseDir(),
-      "Diziler",
-      target.mediaInfo.title,
-      `Sezon ${target.mediaInfo.season}`,
-    );
-    candidates.push(
-      path.join(legacyDir, target.outputPath.split(path.sep).pop()),
-    );
-  } else {
-    const legacyDir = path.join(getLegacyDownloadsBaseDir(), "Filmler");
-    candidates.push(
-      path.join(legacyDir, target.outputPath.split(path.sep).pop()),
-    );
-  }
-
-  return { outputPath: resolvedPrimary, candidates };
-}
-
-async function checkFreeSpace(dirPath) {
-  try {
-    let checkPath = dirPath;
-    while (checkPath && !fs.existsSync(checkPath)) {
-      const parent = path.dirname(checkPath);
-      if (parent === checkPath) break;
-      checkPath = parent;
-    }
-    if (fs.promises.statfs) {
-      const stats = await fs.promises.statfs(checkPath);
-      return stats.bavail * stats.bsize;
-    }
-  } catch (err) {
-    console.error("Free space check failed:", err);
-  }
-  return Number.MAX_SAFE_INTEGER;
-}
-
-ipcMain.handle(
-  "get-saved-media-info",
-  async (event, { downloadId, type, name, streamUrl }) => {
-    try {
-      const { candidates } = getDownloadTargetCandidates(
-        type,
-        name,
-        downloadId,
-        streamUrl,
-      );
-      const existingPath = candidates.find(
-        (candidate) =>
-          isInsideMediaLibrary(candidate) && isMediaFileComplete(candidate),
-      );
-      if (existingPath) {
-        const stats = fs.statSync(existingPath);
-        return {
-          exists: true,
-          filePath: existingPath,
-          playUrl: appFileUrlFromPath(existingPath),
-          size: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`,
-        };
-      }
-      return { exists: false };
-    } catch (err) {
-      logToFile("[DOWNLOAD] Saved media lookup error:", err.message);
-      return { exists: false, error: err.message };
-    }
-  },
-);
-
-ipcMain.handle(
-  "download-stream",
-  async (event, { downloadId, streamUrl, type, name }) => {
-    console.log(
-      "[DOWNLOAD] Handler called:",
-      downloadId,
-      streamUrl,
-      type,
-      name,
-    );
-    logToFile("[DOWNLOAD] Handler called:", downloadId, streamUrl, type, name);
-
-    const ffmpegPath = getFfmpegPath();
-    console.log("[DOWNLOAD] FFmpeg path:", ffmpegPath);
-    logToFile("[DOWNLOAD] FFmpeg path:", ffmpegPath);
-
-    if (!ffmpegPath) {
-      console.error("[DOWNLOAD] FFmpeg not available");
-      logToFile("[DOWNLOAD] FFmpeg not available");
-      return { success: false, error: "FFmpeg not available" };
-    }
-
-    const lookup = getDownloadTargetCandidates(
-      type,
-      name,
-      downloadId,
-      streamUrl,
-    );
-    const { outputPath, candidates } = lookup;
-    const target = getDownloadTarget(type, name, downloadId, true);
-    if (!isInsideMediaLibrary(outputPath)) {
-      return { success: false, error: "Invalid download path" };
-    }
-
-    const existingPath = candidates.find(
-      (candidate) =>
-        isInsideMediaLibrary(candidate) && isMediaFileComplete(candidate),
-    );
-    if (existingPath) {
-      const stats = fs.statSync(existingPath);
-      return {
-        success: true,
-        skipped: true,
-        filePath: existingPath,
-        playUrl: appFileUrlFromPath(existingPath),
-        size: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`,
-      };
-    }
-
-    console.log("[DOWNLOAD] Output path:", outputPath);
-    logToFile("[DOWNLOAD] Starting download:", downloadId, "->", outputPath);
-
-    const freeSpace = await checkFreeSpace(outputPath);
-    if (freeSpace < 100 * 1024 * 1024) {
-      // Less than 100 MB free
-      logToFile("[DOWNLOAD] Start cancelled due to low disk space (< 100MB)");
-      return { success: false, error: "DISK_FULL" };
-    }
-
-    // Mark this output as in-progress and record which stream it belongs to,
-    // so an interrupted/crashed download is never mistaken for a finished one
-    // and a different source with the same computed name never collides with it.
-    markDownloadStarted(outputPath);
-    writeDownloadMeta(outputPath, {
-      streamUrl,
-      name: name || "",
-      type: target.downloadType,
-      savedAt: Date.now(),
-    });
-
-    // Try segmented HLS downloader first (only if it is an HLS playlist URL)
-    if (streamUrl.toLowerCase().includes("m3u8")) {
-      try {
-        const config = await ensureConfigLoaded();
-        const prefLang = config.cinema_language || "tr";
-        const segmentedResult = await downloadHlsSegmented(
-          downloadId,
-          streamUrl,
-          outputPath,
-          name,
-          prefLang,
-          event,
-        );
-        if (segmentedResult.success) {
-          clearDownloadMarker(outputPath);
-          const stats = fs.statSync(outputPath);
-          const sizeMB = (stats.size / (1024 * 1024)).toFixed(1) + " MB";
-
-          if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send("download-complete", {
-              downloadId,
-              filePath: outputPath,
-              playUrl: appFileUrlFromPath(outputPath),
-            });
-          }
-          if (Notification.isSupported()) {
-            try {
-              new Notification({
-                title: "Strmly İndirme Tamamlandı",
-                body: `"${name || "Medya"}" başarıyla kaydedildi.`,
-                silent: false,
-              }).show();
-            } catch (ne) {
-              console.error("Failed to show native notification:", ne);
-            }
-          }
-          return {
-            success: true,
-            filePath: outputPath,
-            playUrl: appFileUrlFromPath(outputPath),
-          };
-        } else if (segmentedResult.error === "CANCELLED") {
-          cleanupPartialDownload(outputPath);
-          return { success: false, error: "CANCELLED" };
-        }
-      } catch (err) {
-        if (err.message === "FALLBACK_ENCRYPTED") {
-          console.log(
-            "[HLS DOWNLOAD] Stream is AES-128 encrypted, falling back to standard FFmpeg downloader.",
-          );
-          logToFile(
-            "[HLS DOWNLOAD] Stream is AES-128 encrypted, falling back to standard FFmpeg downloader.",
-          );
-        } else if (err.message === "FALLBACK_NOT_HLS") {
-          console.log(
-            "[HLS DOWNLOAD] Stream is not HLS (e.g. direct MKV/MP4 stream), falling back to standard FFmpeg downloader.",
-          );
-          logToFile(
-            "[HLS DOWNLOAD] Stream is not HLS (e.g. direct MKV/MP4 stream), falling back to standard FFmpeg downloader.",
-          );
-        } else {
-          console.error(
-            "[HLS DOWNLOAD] Segmented HLS downloader failed, falling back to standard FFmpeg downloader:",
-            err,
-          );
-          logToFile(
-            `[HLS DOWNLOAD] Segmented HLS downloader failed, falling back: ${err.message}`,
-          );
-        }
-      }
-    } else {
-      console.log(
-        "[DOWNLOAD] Stream URL does not contain m3u8. Skipping segmented downloader and using standard FFmpeg downloader.",
-      );
-      logToFile(
-        "[DOWNLOAD] Stream URL does not contain m3u8. Skipping segmented downloader and using standard FFmpeg downloader.",
-      );
-    }
-
-    let mapArgs = [];
-    try {
-      const tracks = await probeStreamTracks(streamUrl, ffmpegPath);
-      console.log(`[DOWNLOAD] Probed tracks for ${name}:`, tracks);
-      logToFile(
-        `[DOWNLOAD] Probed tracks for ${name}: ${JSON.stringify(tracks)}`,
-      );
-
-      const videoTrack = tracks.find((t) => t.type === "video");
-      const audioTracks = tracks.filter((t) => t.type === "audio");
-      const subtitleTracks = tracks.filter((t) => t.type === "subtitle");
-
-      if (videoTrack) {
-        mapArgs.push("-map", videoTrack.index);
-      } else {
-        mapArgs.push("-map", "0:v:0?");
-      }
-
-      if (audioTracks.length > 0) {
-        const config = await ensureConfigLoaded();
-        const prefLang = config.cinema_language || "tr";
-        const targetLangs =
-          prefLang === "tr"
-            ? ["tur", "tr", "turkish", "turkey"]
-            : ["eng", "en", "english"];
-
-        let matchedAudio = audioTracks.find(
-          (t) => t.lang && targetLangs.includes(t.lang),
-        );
-        if (!matchedAudio) {
-          const fallbackLangs =
-            prefLang === "tr"
-              ? ["eng", "en", "english"]
-              : ["tur", "tr", "turkish", "turkey"];
-          matchedAudio = audioTracks.find(
-            (t) => t.lang && fallbackLangs.includes(t.lang),
-          );
-        }
-        if (!matchedAudio) {
-          matchedAudio = audioTracks[0];
-        }
-        if (matchedAudio) {
-          mapArgs.push("-map", matchedAudio.index);
-        }
-      } else {
-        mapArgs.push("-map", "0:a:0?");
-      }
-
-      if (subtitleTracks.length > 0) {
-        const config = await ensureConfigLoaded();
-        const prefLang = config.cinema_language || "tr";
-        const targetLangs =
-          prefLang === "tr"
-            ? ["tur", "tr", "turkish", "turkey"]
-            : ["eng", "en", "english"];
-
-        const matchedSub = subtitleTracks.find(
-          (t) => t.lang && targetLangs.includes(t.lang),
-        );
-        if (matchedSub) {
-          mapArgs.push("-map", matchedSub.index);
-        }
-      }
-    } catch (err) {
-      console.error("[DOWNLOAD] Probing failed, using default maps:", err);
-      logToFile("[DOWNLOAD] Probing failed, using default maps:", err.message);
-      mapArgs = ["-map", "0:v:0?", "-map", "0:a:0?"];
-    }
-
-    return new Promise((resolve) => {
-      const args = [
-        "-i",
-        streamUrl,
-        ...mapArgs,
-        "-c",
-        "copy",
-        "-movflags",
-        "+faststart",
-        "-progress",
-        "pipe:1",
-        "-y",
-        outputPath,
-      ];
-
-      console.log("[DOWNLOAD] FFmpeg args:", args.join(" "));
-      logToFile("[DOWNLOAD] FFmpeg command:", ffmpegPath, args.join(" "));
-
-      let proc;
-      try {
-        proc = spawn(ffmpegPath, args, {
-          windowsHide: true,
-          stdio: ["pipe", "pipe", "pipe"],
-        });
-      } catch (err) {
-        console.error("[DOWNLOAD] Failed to spawn FFmpeg:", err);
-        logToFile("[DOWNLOAD] Failed to spawn FFmpeg:", err.message);
-        return resolve({
-          success: false,
-          error: `Failed to start FFmpeg: ${err.message}`,
-        });
-      }
-
-      activeDownloads.set(downloadId, {
-        process: proc,
-        outputPath,
-        startTime: Date.now(),
-        lastBytes: 0,
-        lastTime: Date.now(),
-      });
-
-      let duration = 0;
-      let lastProgress = 0;
-      let stderrBuffer = "";
-      proc.stdout.on("data", async (data) => {
-        const lines = data.toString().split("\n");
-        for (const line of lines) {
-          if (line.startsWith("out_time_ms=")) {
-            const timeMs = parseInt(line.split("=")[1]) / 1000000;
-            if (duration > 0) {
-              const progress = Math.min(
-                100,
-                Math.round((timeMs / duration) * 100),
-              );
-              if (progress !== lastProgress) {
-                lastProgress = progress;
-                const elapsed =
-                  (Date.now() - activeDownloads.get(downloadId)?.startTime) /
-                  1000;
-                const remaining =
-                  progress > 0
-                    ? Math.round((elapsed / progress) * (100 - progress))
-                    : 0;
-                const timeLeft =
-                  remaining > 60
-                    ? `${Math.floor(remaining / 60)}m ${remaining % 60}s`
-                    : `${remaining}s`;
-
-                // Calculate current file size and speed
-                try {
-                  const stats = fs.statSync(outputPath);
-                  const currentSize = stats.size;
-                  const download = activeDownloads.get(downloadId);
-                  const now = Date.now();
-                  const timeDiff = (now - download.lastTime) / 1000;
-                  const sizeDiff = currentSize - download.lastBytes;
-
-                  // Check disk space during download every 5 seconds
-                  if (
-                    download &&
-                    (!download.lastSpaceCheck ||
-                      now - download.lastSpaceCheck > 5000)
-                  ) {
-                    download.lastSpaceCheck = now;
-                    const space = await checkFreeSpace(outputPath);
-                    if (space < 30 * 1024 * 1024) {
-                      // Less than 30 MB free
-                      logToFile(
-                        "[DOWNLOAD] Low space detected during download, cancelling",
-                      );
-                      download.isDiskFull = true;
-                      proc.kill("SIGKILL");
-                      return;
-                    }
-                  }
-
-                  let speed = "";
-                  if (timeDiff > 0.5) {
-                    const bytesPerSecond = sizeDiff / timeDiff;
-                    const mbps = (bytesPerSecond * 8) / (1024 * 1024);
-                    speed = `${mbps.toFixed(1)} Mbps`;
-                    download.lastBytes = currentSize;
-                    download.lastTime = now;
-                  }
-
-                  const sizeMB = (currentSize / (1024 * 1024)).toFixed(1);
-                  console.log(`[DOWNLOAD] Progress: ${progress}% ${speed}`);
-                  if (mainWindow && mainWindow.webContents) {
-                    mainWindow.webContents.send("download-progress", {
-                      downloadId,
-                      progress,
-                      speed,
-                      timeLeft,
-                      size: `${sizeMB} MB`,
-                      downloader: "ffmpeg",
-                    });
-                  }
-                } catch (e) {
-                  // File might not exist yet
-                }
-              }
-            }
-          } else if (line.startsWith("duration=")) {
-            duration = parseFloat(line.split("=")[1]) || 0;
-          }
-        }
-      });
-
-      proc.stderr.on("data", (data) => {
-        stderrBuffer += data.toString();
-        const durationMatch = data
-          .toString()
-          .match(/Duration:\s*(\d+):(\d+):(\d+)/);
-        if (durationMatch) {
-          duration =
-            parseInt(durationMatch[1]) * 3600 +
-            parseInt(durationMatch[2]) * 60 +
-            parseInt(durationMatch[3]);
-          console.log("[DOWNLOAD] Duration:", duration, "seconds");
-          logToFile("[DOWNLOAD] Duration:", duration, "seconds");
-        }
-      });
-
-      proc.on("close", (code) => {
-        console.log("[DOWNLOAD] Process closed with code:", code);
-        logToFile("[DOWNLOAD] Process closed with code:", code);
-        const wasDiskFull = activeDownloads.get(downloadId)?.isDiskFull;
-        activeDownloads.delete(downloadId);
-
-        if (wasDiskFull) {
-          cleanupPartialDownload(outputPath);
-          if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send("download-progress", {
-              downloadId,
-              progress: 0,
-              speed: "0",
-              timeLeft: "0",
-              size: "0",
-              error: "DISK_FULL",
-              downloader: "ffmpeg",
-            });
-          }
-          resolve({ success: false, error: "DISK_FULL" });
-          return;
-        }
-
-        if (code === 0) {
-          try {
-            clearDownloadMarker(outputPath);
-            const stats = fs.statSync(outputPath);
-            const sizeMB = (stats.size / (1024 * 1024)).toFixed(1) + " MB";
-            console.log("[DOWNLOAD] Completed:", downloadId, sizeMB);
-            logToFile("[DOWNLOAD] Completed:", downloadId, sizeMB);
-
-            if (mainWindow && mainWindow.webContents) {
-              mainWindow.webContents.send("download-complete", {
-                downloadId,
-                filePath: outputPath,
-                playUrl: appFileUrlFromPath(outputPath),
-              });
-            }
-            if (Notification.isSupported()) {
-              try {
-                new Notification({
-                  title: "Strmly İndirme Tamamlandı",
-                  body: `"${name || "Medya"}" başarıyla kaydedildi.`,
-                  silent: false,
-                }).show();
-              } catch (ne) {
-                console.error("Failed to show native notification:", ne);
-              }
-            }
-            resolve({
-              success: true,
-              filePath: outputPath,
-              playUrl: appFileUrlFromPath(outputPath),
-            });
-          } catch (err) {
-            console.error("[DOWNLOAD] Failed to get file stats:", err);
-            cleanupPartialDownload(outputPath);
-            resolve({
-              success: false,
-              error: "Download completed but file not found",
-            });
-          }
-        } else {
-          cleanupPartialDownload(outputPath);
-          console.error("[DOWNLOAD] Failed:", downloadId, "exit code:", code);
-          console.error("[DOWNLOAD] Stderr:", stderrBuffer.slice(-500));
-          logToFile(
-            "[DOWNLOAD] Failed:",
-            downloadId,
-            "exit code:",
-            code,
-            "stderr:",
-            stderrBuffer.slice(-500),
-          );
-          resolve({
-            success: false,
-            error: `FFmpeg exited with code ${code}: ${stderrBuffer.slice(-200)}`,
-          });
-        }
-      });
-
-      proc.on("error", (err) => {
-        console.error("[DOWNLOAD] Process error:", err);
-        logToFile("[DOWNLOAD] Error:", downloadId, err.message);
-        activeDownloads.delete(downloadId);
-        cleanupPartialDownload(outputPath);
-        resolve({ success: false, error: err.message });
-      });
-    });
-  },
-);
-
-ipcMain.handle("cancel-download", async (event, { downloadId }) => {
-  const segDl = activeSegmentDownloads.get(downloadId);
-  if (segDl) {
-    try {
-      segDl.abortController.abort();
-      activeSegmentDownloads.delete(downloadId);
-      setTimeout(() => {
-        try {
-          fs.rmSync(segDl.tempDir, { recursive: true, force: true });
-        } catch {}
-        cleanupPartialDownload(segDl.outputPath);
-      }, 500);
-      return { success: true };
-    } catch {}
-  }
-
-  const download = activeDownloads.get(downloadId);
-  if (download && download.process) {
-    download.process.kill("SIGKILL");
-    activeDownloads.delete(downloadId);
-    cleanupPartialDownload(download.outputPath);
-    return { success: true };
-  }
-  return { success: false };
+// Download management (extracted to electron/download-manager.js)
+registerDownloadHandlers({
+  app,
+  ipcMain,
+  shell,
+  dialog,
+  Notification,
+  getFfmpegPath,
+  logToFile,
+  appFileUrlFromPath,
+  ensureConfigLoaded,
+  queueConfigWrite,
+  getConfigCache: () => configCache,
+  getMainWindow: () => mainWindow,
+  isSafeConfiguredDownloadFolder,
+  isSafeDownloadFolderSelection,
+  redactSensitiveText,
+  redactSensitiveUrl,
 });
 
-ipcMain.handle("delete-file", async (event, { filePath }) => {
-  try {
-    if (!isInsideMediaLibrary(filePath)) {
-      return { success: false, error: "Invalid file path" };
-    }
-    
-    // 1. Delete the video file
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      logToFile("[DOWNLOAD] Deleted file:", filePath);
-    }
-    
-    // 2. Delete the metadata file sidecar
-    const metaPath = getMetaPath(filePath);
-    if (fs.existsSync(metaPath)) {
-      fs.unlinkSync(metaPath);
-      logToFile("[DOWNLOAD] Deleted metadata file:", metaPath);
-    }
-
-    // 3. Delete part marker if exists
-    const partMarker = getPartMarkerPath(filePath);
-    if (fs.existsSync(partMarker)) {
-      fs.unlinkSync(partMarker);
-    }
-
-    // 4. Clean up any empty parent directories
-    cleanEmptyDirs(filePath);
-
-    return { success: true };
-  } catch (err) {
-    logToFile("[DOWNLOAD] Delete error:", err.message);
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle("play-file", async (event, { filePath }) => {
-  try {
-    if (!isInsideMediaLibrary(filePath)) {
-      return { success: false, error: "Invalid file path" };
-    }
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: "File not found" };
-    }
-    await shell.openPath(filePath);
-    return { success: true };
-  } catch (err) {
-    logToFile("[DOWNLOAD] Play error:", err.message);
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle("open-downloads-folder", async () => {
-  try {
-    const config = await ensureConfigLoaded();
-    const downloadsDir = ensureDir(
-      config.customDownloadsPath || path.join(app.getPath("videos"), "Strmly"),
-    );
-    await shell.openPath(downloadsDir);
-    return { success: true };
-  } catch (err) {
-    logToFile("[DOWNLOAD] Open downloads folder error:", err.message);
-    return { success: false, error: err.message };
-  }
-});
-
-async function moveFileCrossDevice(srcPath, destPath) {
-  try {
-    await fs.promises.rename(srcPath, destPath);
-  } catch (err) {
-    if (err.code === "EXDEV") {
-      await fs.promises.copyFile(srcPath, destPath);
-      await fs.promises.unlink(srcPath);
-    } else {
-      throw err;
-    }
-  }
-}
-
-// Recursively count regular files under a directory for move progress reporting.
-async function countFilesRecursive(dir) {
-  let count = 0;
-  let entries;
-  try {
-    entries = await fs.promises.readdir(dir, { withFileTypes: true });
-  } catch {
-    return 0;
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      count += await countFilesRecursive(path.join(dir, entry.name));
-    } else if (entry.isFile()) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-// Emit move progress to the renderer. Sends null `totalFiles` when the total is
-// unknown (e.g. counting failed), so the frontend can avoid rendering a stale
-// "x / 0" counter.
-function sendMoveDownloadsProgress(state) {
-  if (!mainWindow || !mainWindow.webContents) return;
-  try {
-    mainWindow.webContents.send("move-downloads-progress", state);
-  } catch {
-    // Best-effort: the window may have been closed mid-transfer.
-  }
-}
-
-async function moveDirectoryContents(src, dest) {
-  if (!fs.existsSync(dest)) {
-    fs.mkdirSync(dest, { recursive: true });
-  }
-
-  const totalFiles = await countFilesRecursive(src);
-  let filesMoved = 0;
-
-  const moveEntry = async (entrySrc, entryDest) => {
-    const entries = await fs.promises.readdir(entrySrc, {
-      withFileTypes: true,
-    });
-    for (const entry of entries) {
-      const srcPath = path.join(entrySrc, entry.name);
-      const destPath = path.join(entryDest, entry.name);
-      if (entry.isDirectory()) {
-        await moveEntry(srcPath, destPath);
-        try {
-          fs.rmdirSync(srcPath);
-        } catch {}
-      } else if (entry.isFile()) {
-        if (fs.existsSync(destPath)) {
-          try {
-            fs.unlinkSync(destPath);
-          } catch {}
-        }
-        await moveFileCrossDevice(srcPath, destPath);
-        filesMoved += 1;
-        const percent =
-          totalFiles > 0
-            ? Math.min(100, Math.round((filesMoved / totalFiles) * 100))
-            : 0;
-        sendMoveDownloadsProgress({
-          progress: percent,
-          currentFile: entry.name,
-          filesMoved,
-          totalFiles,
-        });
-      }
-    }
-  };
-
-  await moveEntry(src, dest);
-}
-
-ipcMain.handle("select-downloads-folder", async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ["openDirectory", "createDirectory"],
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    return { canceled: true };
-  }
-  return { canceled: false, filePath: result.filePaths[0] };
-});
-
-ipcMain.handle(
-  "set-downloads-folder",
-  async (event, { folderPath, moveExisting }) => {
-    try {
-      const config = await ensureConfigLoaded();
-      const oldPath =
-        config.customDownloadsPath ||
-        path.join(app.getPath("videos"), "Strmly");
-      const newPath = folderPath;
-
-      if (oldPath === newPath) {
-        return { success: true };
-      }
-
-      if (moveExisting && fs.existsSync(oldPath)) {
-        logToFile(
-          `[DOWNLOAD] Moving existing downloads from ${oldPath} to ${newPath}`,
-        );
-        sendMoveDownloadsProgress({
-          progress: 0,
-          currentFile: "",
-          filesMoved: 0,
-          totalFiles: 0,
-        });
-        await moveDirectoryContents(oldPath, newPath);
-        sendMoveDownloadsProgress({
-          progress: 100,
-          currentFile: "",
-          filesMoved: 0,
-          totalFiles: 0,
-        });
-      }
-
-      config.customDownloadsPath = newPath;
-      await queueConfigWrite();
-      return { success: true };
-    } catch (err) {
-      logToFile("[DOWNLOAD] Set downloads folder error:", err.message);
-      return { success: false, error: err.message };
-    }
-  },
-);
-
-ipcMain.handle("get-downloads-folder", async () => {
-  const config = await ensureConfigLoaded();
-  return (
-    config.customDownloadsPath || path.join(app.getPath("videos"), "Strmly")
-  );
-});

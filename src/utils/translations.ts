@@ -17,7 +17,8 @@ export const translations = {
       none: "Yok",
       yes: "Evet",
       no: "Hayır",
-      close: "Kapat"
+      close: "Kapat",
+      matchScore: "%{{score}} Eşleşme"
     },
     splash: {
       loadingSettings: "Kullanıcı ayarları yükleniyor...",
@@ -124,7 +125,6 @@ export const translations = {
         appearance: "Arayüz ve Görünüm",
         playback: "Oynatma Seçenekleri",
         network: "Ağ ve Bağlantı",
-        stats: "Sağlık ve Analiz",
         data: "Veri Yönetimi",
         about: "Hakkında"
       },
@@ -216,16 +216,6 @@ export const translations = {
         importSuccess: "Ayarlar başarıyla içe aktarıldı. Uygulamayı yeniden başlatın.",
         importError: "Yedek dosyası yüklenirken bir hata oluştu."
       },
-      diagnostics: {
-        title: "Sistem ve Playlist Teşhisi",
-        desc: "Playlist bağlantılarınızın sağlığını kontrol edin, akış yüklenme sürelerini analiz edin.",
-        runBtn: "Teşhisi Başlat",
-        running: "Teşhis Çalıştırılıyor...",
-        clearLog: "Günlüğü Temizle",
-        healthy: "Çalışıyor",
-        error: "Bağlantı Hatası",
-        complete: "Playlist teşhisi tamamlandı."
-      },
       about: {
         title: "Hakkında",
         desc: "Strmly sürüm bilgileri ve güncellemeler.",
@@ -306,7 +296,8 @@ export const translations = {
       none: "None",
       yes: "Yes",
       no: "No",
-      close: "Close"
+      close: "Close",
+      matchScore: "{{score}}% Match"
     },
     splash: {
       loadingSettings: "Loading user settings...",
@@ -413,7 +404,6 @@ export const translations = {
         appearance: "Appearance & Interface",
         playback: "Playback Options",
         network: "Network & Connection",
-        stats: "Health & Diagnostics",
         data: "Data Management",
         about: "About"
       },
@@ -504,16 +494,6 @@ export const translations = {
         exportSuccess: "Settings exported successfully.",
         importSuccess: "Settings imported successfully. Restart application.",
         importError: "An error occurred while loading the backup file."
-      },
-      diagnostics: {
-        title: "System & Playlist Diagnostics",
-        desc: "Check the health of your playlist links and analyze stream loading times.",
-        runBtn: "Start Diagnostics",
-        running: "Running Diagnostics...",
-        clearLog: "Clear Log",
-        healthy: "Healthy",
-        error: "Connection Error",
-        complete: "Playlist diagnostics complete."
       },
       about: {
         title: "About",

@@ -46,10 +46,10 @@ jobs:
           VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY }}
         run: |
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            npm run build
+            npm run verify
             npx electron-builder --win --publish always
           else
-            npm run build
+            npm run verify
             npx electron-builder --linux --publish always
           fi
         shell: bash

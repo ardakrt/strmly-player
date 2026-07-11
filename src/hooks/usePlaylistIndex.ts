@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { PlaylistItem } from '../utils/m3uParser';
-import { getItemGroupLower, isExcludedCatalogItem, isHdChannel } from '../utils/searchHelpers';
+import { isExcludedCatalogItem } from '../utils/searchHelpers';
 
 export function usePlaylistIndex(items: PlaylistItem[]) {
   return useMemo(() => {
@@ -18,17 +18,12 @@ export function usePlaylistIndex(items: PlaylistItem[]) {
 
     for (const item of items) {
       const group = item.group || 'Genel';
-      const groupLower = getItemGroupLower(item);
-      const isNationalSd = groupLower.includes('ulusal') && !isHdChannel(item.name);
 
-      if (!isNationalSd) {
-        const displayGroupItems = displayGroupMap.get(group);
-        if (displayGroupItems) displayGroupItems.push(item);
-        else displayGroupMap.set(group, [item]);
-      }
+      const displayGroupItems = displayGroupMap.get(group);
+      if (displayGroupItems) displayGroupItems.push(item);
+      else displayGroupMap.set(group, [item]);
 
       if (item.type === 'live') {
-        if (isNationalSd) continue;
         liveSet.add(group);
         live.push(item);
         liveGroupCounts[group] = (liveGroupCounts[group] || 0) + 1;
@@ -43,12 +38,10 @@ export function usePlaylistIndex(items: PlaylistItem[]) {
         if (isExcludedCatalogItem(item)) continue;
         movieSet.add(group);
         movie.push(item);
-        if (!isNationalSd) {
-          displayMovie.push(item);
-          const groupItems = movieGroupMap.get(group);
-          if (groupItems) groupItems.push(item);
-          else movieGroupMap.set(group, [item]);
-        }
+        displayMovie.push(item);
+        const groupItems = movieGroupMap.get(group);
+        if (groupItems) groupItems.push(item);
+        else movieGroupMap.set(group, [item]);
       }
     }
 

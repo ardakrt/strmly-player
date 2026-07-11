@@ -9,8 +9,10 @@ export function useGroupedSeriesReady(seriesItems: PlaylistItem[]) {
 
   useEffect(() => {
     let cancelled = false;
-    setIsSeriesReady(false);
-    setAllGroupedSeries([]);
+    if (seriesItems.length === 0) {
+      setIsSeriesReady(false);
+      setAllGroupedSeries([]);
+    }
     const run = () => {
       const grouped = groupPlaylistItemsToSeries(seriesItems);
       for (let i = 0; i < grouped.length; i++) {

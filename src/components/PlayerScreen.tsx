@@ -82,6 +82,8 @@ export function PlayerScreen({
       formatTime={player.formatPlayerTime}
       onMouseMove={player.handlePlayerMouseMove}
       onMouseLeave={player.handlePlayerMouseLeave}
+      showIntroSkip={player.showIntroSkip}
+      onSkipIntro={player.handleSkipIntro}
     />
   );
 }

@@ -4,6 +4,12 @@ import { getTranslation } from '../utils/translations';
 import { GLOBAL_KEYS } from '../constants';
 import { getTmdbApiKey } from '../utils/tmdb';
 
+type TranscodeMode = "auto" | "copy" | "full";
+
+const isTranscodeMode = (value: unknown): value is TranscodeMode => (
+  value === "auto" || value === "copy" || value === "full"
+);
+
 export function useAppSettings() {
   const [toast, setToast] = useState({ show: false, message: '' });
 
@@ -83,11 +89,12 @@ export function useAppSettings() {
   const [cardLayoutSize, setCardLayoutSize] = useState<string>('medium');
   const [activeSettingsTab, setActiveSettingsTab] = useState<string>('players');
 
-  const [transcodeMode, setTranscodeModeState] = useState<string>(() => {
+  const [transcodeMode, setTranscodeModeState] = useState<TranscodeMode>(() => {
     try {
       const stored = localStorage.getItem('cinema_transcode_mode');
       if (stored) {
-        return stored.startsWith('"') ? JSON.parse(stored) : stored;
+        const parsed = stored.startsWith('"') ? JSON.parse(stored) : stored;
+        if (isTranscodeMode(parsed)) return parsed;
       }
     } catch {
       // Ignore
@@ -217,7 +224,7 @@ export function useAppSettings() {
     }
   }, []);
 
-  const setTranscodeMode = useCallback((mode: string) => {
+  const setTranscodeMode = useCallback((mode: TranscodeMode) => {
     setTranscodeModeState(mode);
     saveAppSetting('cinema_transcode_mode', mode);
   }, [saveAppSetting]);

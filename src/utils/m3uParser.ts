@@ -204,7 +204,11 @@ export function parseM3UAsync(content: string | ArrayBuffer): Promise<ParsedPlay
     };
 
     try {
-      worker.postMessage(content);
+      if (content instanceof ArrayBuffer) {
+        worker.postMessage(content, [content]);
+      } else {
+        worker.postMessage(content);
+      }
     } catch {
       worker.terminate();
       resolve(parseOnMainThread());

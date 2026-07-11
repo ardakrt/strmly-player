@@ -38,7 +38,7 @@ export const ChannelModal = ({
   isFavorite,
   onToggleFavorite
 }: ChannelModalProps) => {
-  const { language } = useSettings();
+  const { t, language } = useSettings();
   const [cast, setCast] = useState<CastMember[]>([]);
   const [showCastModal, setShowCastModal] = useState(false);
 
@@ -106,25 +106,26 @@ export const ChannelModal = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 select-none animate-fade-in">
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} role="button" tabIndex={-1} aria-label={language === 'tr' ? 'Kapat' : 'Close'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClose(); }} />
       <div className="w-full max-w-4xl bg-neutral-950/65 backdrop-blur-2xl border border-white/[0.08] rounded-[36px] overflow-hidden flex flex-col md:flex-row shadow-[0_32px_80px_rgba(0,0,0,0.85)] relative animate-scale-in z-10">
-        <button
+        <button type="button"
           onClick={onClose}
           className="absolute top-5 right-5 z-30 w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-300 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
           title={language === 'tr' ? 'Kapat' : 'Close'}
         >
           ✕
         </button>
-        <button
+        <button type="button"
           onClick={onToggleFavorite}
           className="absolute top-5 right-17 z-30 w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 backdrop-blur-md transition-all duration-300 active:scale-95 shadow-lg cursor-pointer hover:scale-105"
           title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
+          aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
         >
           <Heart size={18} fill={isFavorite ? "currentColor" : "none"} className={isFavorite ? "text-red-500" : ""} />
         </button>
         <div className="w-full md:w-[40%] aspect-video md:aspect-[2/3] bg-black/30 relative flex items-center justify-center border-r border-white/[0.05] shrink-0 overflow-hidden">
           {tmdbData?.poster ? (
-            <img src={tmdbData.poster} className="w-full h-full object-cover" />
+            <img src={tmdbData.poster} alt={channel.name} className="w-full h-full object-cover" />
           ) : (
             <ImageWithFallback
               src={channel.logo}
@@ -152,7 +153,7 @@ export const ChannelModal = ({
             </div>
             {tmdbData && (
               <div className="flex flex-wrap items-center gap-3.5 text-xs font-semibold">
-                <span className="text-emerald-400">{tmdbData.match}</span>
+                <span className="text-emerald-400">{t('common.matchScore').replace('{{score}}', (tmdbData.match || '95').replace(/[^0-9]/g, ''))}</span>
                 <span className="text-neutral-400">{tmdbData.year}</span>
                 <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-neutral-300 rounded text-[10px] font-bold">4K ULTRA HD</span>
                 <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-neutral-300 rounded text-[10px] font-bold">DOLBY ATMOS 5.1</span>
@@ -167,9 +168,9 @@ export const ChannelModal = ({
             </div>
             {cast.length > 0 && (
               <div className="flex flex-col gap-2.5">
-                <div 
+                <button type="button"
                   onClick={() => setShowCastModal(true)}
-                  className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0"
+                  className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0 w-full bg-transparent border-0 p-0 text-left"
                 >
                   <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500 group-hover/cast-header:text-neutral-300 transition-colors">{language === 'tr' ? 'Oyuncular' : 'Cast'}</span>
                   <span className="text-[9px] text-neutral-500 group-hover/cast-header:text-[var(--accent-color)] font-bold uppercase tracking-wider transition-colors flex items-center gap-1">
@@ -178,13 +179,17 @@ export const ChannelModal = ({
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </span>
-                </div>
+                </button>
                 <div 
                   onClick={() => setShowCastModal(true)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowCastModal(true); }}
+                  aria-label={language === 'tr' ? 'Tüm oyuncuları gör' : 'See all cast'}
                   className="flex gap-4 overflow-x-auto pb-1.5 hide-scrollbar select-none cursor-pointer"
                 >
                   {cast.slice(0, 8).map((member, idx) => (
-                    <div key={idx} className="flex flex-col items-center gap-1 shrink-0 w-16 text-center transition-transform hover:scale-105 duration-200">
+                    <div key={`${member.name}-${idx}`} className="flex flex-col items-center gap-1 shrink-0 w-16 text-center transition-transform hover:scale-105 duration-200">
                       <img
                         src={member.avatarUrl}
                         alt={member.name}
@@ -203,7 +208,7 @@ export const ChannelModal = ({
             )}
           </div>
           <div className="flex flex-col gap-2.5 border-t border-white/5 pt-4 shrink-0">
-            <button
+            <button type="button"
               onClick={() => onPlay(channel)}
               className="w-full py-3.5 bg-white hover:bg-neutral-200 font-bold text-xs uppercase text-black rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 transform cursor-pointer"
             >
@@ -220,12 +225,16 @@ export const ChannelModal = ({
         <div 
           className="fixed inset-0 z-[4000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
           onClick={() => setShowCastModal(false)}
+          role="button"
+          tabIndex={-1}
+          aria-label={language === 'tr' ? 'Kapat' : 'Close'}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowCastModal(false); }}
         >
           <div 
             className="w-full max-w-lg bg-neutral-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl relative animate-scale-in flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
+            <button type="button"
               onClick={() => setShowCastModal(false)}
               className="absolute top-4 right-4 z-50 w-8 h-8 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
             >
@@ -239,7 +248,7 @@ export const ChannelModal = ({
 
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 mt-2 max-h-[360px] overflow-y-auto pr-1.5 custom-modal-scrollbar">
               {cast.map((member, idx) => (
-                <div key={idx} className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
+                <div key={`${member.name}-${idx}`} className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
                   <img
                     src={member.avatarUrl}
                     alt={member.name}

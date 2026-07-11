@@ -695,6 +695,7 @@ export const HomeView = memo(function HomeView({
             <img
               key={heroBackdropImage}
               src={heroBackdropImage}
+              alt=""
               className="absolute inset-0 w-full h-full object-cover animate-fade-in home-hero-image"
               style={{ objectPosition: 'center 25%' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -793,7 +794,7 @@ export const HomeView = memo(function HomeView({
           <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/[0.08] bg-black/20 px-2.5 py-2 backdrop-blur-xl">
             {activeShowcaseList.map((_, idx) => (
               <button
-                key={idx}
+                key={`showcase-dot-${idx}`}
                 type="button"
                 aria-label={`${language === 'tr' ? 'Vitrin' : 'Showcase'} ${idx + 1}`}
                 onClick={() => setActiveFeaturedIndex(idx)}
@@ -823,7 +824,8 @@ export const HomeView = memo(function HomeView({
           </div>
 
           <div className="relative group/row">
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-history', 'left')}
               className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -889,7 +891,8 @@ export const HomeView = memo(function HomeView({
               ))}
             </div>
 
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-history', 'right')}
               className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -922,7 +925,8 @@ export const HomeView = memo(function HomeView({
           </div>
 
           <div className="relative group/row">
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-quick-live-tv', 'left')}
               className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -936,7 +940,8 @@ export const HomeView = memo(function HomeView({
               {homeLiveTvQuickChannels.map(item => renderRailCard(item, 'quick-live'))}
             </div>
 
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-quick-live-tv', 'right')}
               className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -956,7 +961,8 @@ export const HomeView = memo(function HomeView({
           </div>
 
           <div className="relative group/row">
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-discovery-home', 'left')}
               className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -977,7 +983,8 @@ export const HomeView = memo(function HomeView({
                 />
               ))}
             </div>
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-discovery-home', 'right')}
               className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -1003,7 +1010,8 @@ export const HomeView = memo(function HomeView({
           </div>
 
           <div className="relative group/row">
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-popular-movies', 'left')}
               className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -1025,7 +1033,8 @@ export const HomeView = memo(function HomeView({
                 />
               ))}
             </div>
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-popular-movies', 'right')}
               className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -1051,7 +1060,8 @@ export const HomeView = memo(function HomeView({
           </div>
 
           <div className="relative group/row">
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-popular-series', 'left')}
               className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -1073,7 +1083,8 @@ export const HomeView = memo(function HomeView({
                 />
               ))}
             </div>
-            <button
+            <button type="button"
+              aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-popular-series', 'right')}
               className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
             >
@@ -1084,7 +1095,7 @@ export const HomeView = memo(function HomeView({
       )}
       {playlists.length === 0 && (
         <div className="flex flex-col items-center justify-center text-center p-12 bg-neutral-950/40 backdrop-blur-md border border-white/5 rounded-3xl mt-4">
-          <UploadCloud size={38} className="text-neutral-600 mb-4 animate-bounce" />
+          <UploadCloud size={38} className="text-neutral-600 mb-4 animate-pulse" />
           <h3 className="text-base font-semibold text-neutral-200">{t('home.noPlaylistsTitle')}</h3>
           <p className="text-xs text-neutral-500 max-w-sm mt-1.5 mb-5">{t('home.noPlaylistsDesc')}</p>
           <button

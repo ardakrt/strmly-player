@@ -24,6 +24,8 @@ export interface DownloadItem {
   addedAt: number;
   completedAt?: number;
   queuePosition?: number;
+  /** Auto-retry attempts after failure (not counting user-initiated retries). */
+  retryCount?: number;
 }
 
 interface QueueItem {
@@ -106,7 +108,12 @@ function sanitizeLoadedDownloads(parsed: unknown): DownloadItem[] {
   return uniqueItems;
 }
 
-function saveDownloads(downloads: DownloadItem[]) {
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let lastUiEmitAt = 0;
+const UI_EMIT_MIN_MS = 300;
+const SAVE_DEBOUNCE_MS = 1200;
+
+function saveDownloadsNow(downloads: DownloadItem[]) {
   if (persistAdapter) {
     persistAdapter.save(DOWNLOADS_SETTING_KEY, downloads);
     return;
@@ -120,14 +127,48 @@ function saveDownloads(downloads: DownloadItem[]) {
   }
 }
 
-function emitDownloads() {
-  saveDownloads(downloadsState);
+function scheduleSaveDownloads(downloads: DownloadItem[], force = false) {
+  if (force) {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    saveDownloadsNow(downloads);
+    return;
+  }
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveDownloadsNow(downloadsState);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function emitDownloads(options?: { forceSave?: boolean; throttleUi?: boolean }) {
+  const forceSave = options?.forceSave ?? false;
+  const throttleUi = options?.throttleUi ?? false;
+  scheduleSaveDownloads(downloadsState, forceSave);
+
+  const now = Date.now();
+  if (throttleUi && now - lastUiEmitAt < UI_EMIT_MIN_MS) {
+    // Still schedule a trailing UI emit so the final progress isn't stuck.
+    window.setTimeout(() => {
+      if (Date.now() - lastUiEmitAt >= UI_EMIT_MIN_MS) {
+        lastUiEmitAt = Date.now();
+        listeners.forEach((listener) => listener());
+      }
+    }, UI_EMIT_MIN_MS);
+    return;
+  }
+  lastUiEmitAt = now;
   listeners.forEach((listener) => listener());
 }
 
-function setDownloads(updater: (downloads: DownloadItem[]) => DownloadItem[]) {
+function setDownloads(
+  updater: (downloads: DownloadItem[]) => DownloadItem[],
+  options?: { forceSave?: boolean; throttleUi?: boolean },
+) {
   downloadsState = updater(downloadsState);
-  emitDownloads();
+  emitDownloads(options);
 }
 
 // Loads (and migrates, if needed) the downloads list for `profileId`, replacing
@@ -253,7 +294,8 @@ async function startNextDownload() {
       const current = downloadsState.find(
         (download) => download.id === next.id,
       );
-      if (current?.status !== "paused") {
+      // CANCELLED often means user paused / playback paused downloads — keep paused.
+      if (current?.status !== "paused" && result?.error !== "CANCELLED") {
         if (result?.error === "DISK_FULL") {
           window.dispatchEvent(
             new CustomEvent("show-toast", {
@@ -261,63 +303,92 @@ async function startNextDownload() {
             }),
           );
         }
-        setDownloads((downloads) =>
+        const errMsg =
+          result?.error === "DISK_FULL"
+            ? "Disk alanı yetersiz! / Disk space is full!"
+            : result?.error || "İndirme başarısız oldu.";
+        setDownloads(
+          (downloads) =>
+            downloads.map((download) =>
+              download.id === next.id
+                ? {
+                    ...download,
+                    status: "failed",
+                    error: errMsg,
+                  }
+                : download,
+            ),
+          { forceSave: true },
+        );
+        scheduleAutoRetry(next.id, result?.error);
+      } else if (result?.error === "CANCELLED" && current?.status === "downloading") {
+        setDownloads(
+          (downloads) =>
+            downloads.map((download) =>
+              download.id === next.id
+                ? {
+                    ...download,
+                    status: "paused",
+                    speed: "",
+                    timeLeft: "",
+                    queuePosition: undefined,
+                  }
+                : download,
+            ),
+          { forceSave: true },
+        );
+      }
+    }
+
+    if (result?.success && result.filePath) {
+      setDownloads(
+        (downloads) =>
+          downloads.map((download) =>
+            download.id === next.id
+              ? {
+                  ...download,
+                  status: "completed",
+                  progress: 100,
+                  speed: "",
+                  timeLeft: "",
+                  size: result.size || download.size,
+                  filePath: result.filePath || download.filePath,
+                  playUrl: result.playUrl || download.playUrl,
+                  completedAt: Date.now(),
+                  queuePosition: undefined,
+                  retryCount: 0,
+                  error: undefined,
+                }
+              : download,
+          ),
+        { forceSave: true },
+      );
+    }
+  } catch (error) {
+    const current = downloadsState.find((download) => download.id === next.id);
+    if (current?.status !== "paused") {
+      setDownloads(
+        (downloads) =>
           downloads.map((download) =>
             download.id === next.id
               ? {
                   ...download,
                   status: "failed",
                   error:
-                    result?.error === "DISK_FULL"
-                      ? "Disk alanı yetersiz! / Disk space is full!"
-                      : result?.error || "İndirme başarısız oldu.",
+                    error instanceof Error
+                      ? error.message
+                      : "Bilinmeyen indirme hatası.",
                 }
               : download,
           ),
-        );
-      }
-    }
-
-    if (result?.success && result.skipped && result.filePath) {
-      setDownloads((downloads) =>
-        downloads.map((download) =>
-          download.id === next.id
-            ? {
-                ...download,
-                status: "completed",
-                progress: 100,
-                speed: "",
-                timeLeft: "",
-                size: result.size || download.size,
-                filePath: result.filePath || download.filePath,
-                playUrl: result.playUrl || download.playUrl,
-                completedAt: Date.now(),
-                queuePosition: undefined,
-              }
-            : download,
-        ),
+        { forceSave: true },
       );
-    }
-  } catch (error) {
-    const current = downloadsState.find((download) => download.id === next.id);
-    if (current?.status !== "paused") {
-      setDownloads((downloads) =>
-        downloads.map((download) =>
-          download.id === next.id
-            ? {
-                ...download,
-                status: "failed",
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : "Bilinmeyen indirme hatası.",
-              }
-            : download,
-        ),
-      );
+      scheduleAutoRetry(next.id);
     }
   } finally {
-    activeDownloadId = null;
+    if (activeDownloadId === next.id) {
+      activeDownloadId = null;
+    }
     updateQueuePositions();
     void startNextDownload();
   }
@@ -333,7 +404,7 @@ function ensureIpcListeners() {
       console.log(
         `%c[Strmly Downloader]%c Starting download %c${data.downloadId}%c via %c${
           data.downloader === "segmented"
-            ? "🚀 MULTI-CONNECTION HLS SEGMENTED DOWNLOADER (6 Threads)"
+            ? "🚀 MULTI-CONNECTION HLS SEGMENTED DOWNLOADER"
             : "📼 STANDARD FFmpeg SINGLE-THREAD DOWNLOADER"
         }`,
         "color: #ffffff; background: #3b82f6; padding: 2px 6px; border-radius: 4px; font-weight: bold;",
@@ -346,59 +417,132 @@ function ensureIpcListeners() {
       );
     }
 
-    setDownloads((downloads) =>
-      downloads.map((download) => {
-        if (download.id === data.downloadId) {
-          if (data.error === "DISK_FULL") {
-            window.dispatchEvent(
-              new CustomEvent("show-toast", {
-                detail: {
-                  message:
-                    "Disk alanı yetersiz! İndirme durduruldu. / Disk space is full!",
-                },
-              }),
-            );
+    const isError = data.error === "DISK_FULL";
+    setDownloads(
+      (downloads) =>
+        downloads.map((download) => {
+          if (download.id === data.downloadId) {
+            if (isError) {
+              window.dispatchEvent(
+                new CustomEvent("show-toast", {
+                  detail: {
+                    message:
+                      "Disk alanı yetersiz! İndirme durduruldu. / Disk space is full!",
+                  },
+                }),
+              );
+              return {
+                ...download,
+                status: "failed",
+                error: "Disk alanı yetersiz! / Disk space is full!",
+                speed: "",
+                timeLeft: "",
+              };
+            }
             return {
               ...download,
-              status: "failed",
-              error: "Disk alanı yetersiz! / Disk space is full!",
-              speed: "",
-              timeLeft: "",
+              progress: data.progress,
+              speed: data.speed,
+              timeLeft: data.timeLeft,
+              size: data.size,
+              status: "downloading",
             };
           }
-          return {
-            ...download,
-            progress: data.progress,
-            speed: data.speed,
-            timeLeft: data.timeLeft,
-            size: data.size,
-            status: "downloading",
-          };
-        }
-        return download;
-      }),
+          return download;
+        }),
+      isError ? { forceSave: true } : { throttleUi: true },
     );
   });
 
   window.electronAPI?.onDownloadComplete?.((data) => {
-    setDownloads((downloads) =>
-      downloads.map((download) =>
-        download.id === data.downloadId
+    setDownloads(
+      (downloads) =>
+        downloads.map((download) =>
+          download.id === data.downloadId
+            ? {
+                ...download,
+                status: "completed",
+                progress: 100,
+                speed: "",
+                timeLeft: "",
+                filePath: data.filePath,
+                playUrl: data.playUrl || download.playUrl,
+                completedAt: Date.now(),
+                queuePosition: undefined,
+                retryCount: 0,
+                error: undefined,
+              }
+            : download,
+        ),
+      { forceSave: true },
+    );
+  });
+}
+
+const MAX_AUTO_RETRIES = 2;
+
+function scheduleAutoRetry(downloadId: string, error?: string) {
+  if (error === "DISK_FULL" || error === "CANCELLED") return;
+  const item = downloadsState.find((d) => d.id === downloadId);
+  if (!item) return;
+  const retries = item.retryCount || 0;
+  if (retries >= MAX_AUTO_RETRIES) return;
+
+  const delayMs = 2000 * (retries + 1);
+  window.setTimeout(() => {
+    const current = downloadsState.find((d) => d.id === downloadId);
+    if (!current || current.status !== "failed") return;
+    queue = queue.filter((q) => q.id !== downloadId);
+    queue.push({
+      id: current.id,
+      url: current.streamUrl,
+      type: current.type,
+      name: current.name,
+    });
+    setDownloads(
+      (downloads) =>
+        downloads.map((d) =>
+          d.id === downloadId
+            ? {
+                ...d,
+                status: "pending",
+                progress: 0,
+                speed: "",
+                timeLeft: "",
+                error: undefined,
+                retryCount: (d.retryCount || 0) + 1,
+              }
+            : d,
+        ),
+      { forceSave: true },
+    );
+    updateQueuePositions();
+    void startNextDownload();
+  }, delayMs);
+}
+
+export function pauseAllDownloads() {
+  const activeId = activeDownloadId;
+  activeDownloadId = null;
+  if (activeId) {
+    void window.electronAPI?.cancelDownload?.(activeId);
+  }
+  queue = [];
+  setDownloads(
+    (current) =>
+      current.map((download) =>
+        download.status === "downloading" || download.status === "pending"
           ? {
               ...download,
-              status: "completed",
-              progress: 100,
+              status: "paused",
               speed: "",
               timeLeft: "",
-              filePath: data.filePath,
-              playUrl: data.playUrl || download.playUrl,
-              completedAt: Date.now(),
               queuePosition: undefined,
             }
           : download,
       ),
-    );
-  });
+    { forceSave: true },
+  );
 }
 
 export function useDownloads() {
@@ -740,26 +884,7 @@ export function useDownloads() {
     void startNextDownload();
   }, []);
 
-  const pauseAll = useCallback(() => {
-    if (activeDownloadId) {
-      void window.electronAPI?.cancelDownload?.(activeDownloadId);
-    }
-    queue = [];
-    setDownloads((current) =>
-      current.map((d) =>
-        d.status === "downloading" || d.status === "pending"
-          ? {
-              ...d,
-              status: "paused",
-              speed: "",
-              timeLeft: "",
-              queuePosition: undefined,
-            }
-          : d,
-      ),
-    );
-    updateQueuePositions();
-  }, []);
+  const pauseAll = useCallback(() => pauseAllDownloads(), []);
 
   const resumeAll = useCallback(() => {
     const toResume = downloadsState.filter(

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type Hls from 'hls.js';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { useSettings } from '../context/SettingsContext';
+import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 
 interface UseCinematicPlayerProps {
   selectedChannel: PlaylistItem | null;
@@ -9,226 +10,9 @@ interface UseCinematicPlayerProps {
   showToast: (message: string) => void;
 }
 
-const PLAYER_VOLUME_KEY = 'cinema_player_volume';
-const PLAYER_MUTED_KEY = 'cinema_player_muted';
-const PLAYER_SPEED_KEY = 'cinema_player_speed';
-const PLAYER_QUALITY_KEY = 'cinema_player_quality';
-const PLAYER_AUDIO_PREF_KEY = 'cinema_player_audio_pref';
-type PlaybackStatus = 'loading' | 'playing' | 'recovering' | 'transcoding' | 'error';
-export type PlayerQualityLevel = { id: number; label: string; height?: number; bitrate?: number };
-
-function translateReason(reason: string, language: 'tr' | 'en'): string {
-  const dictionary: Record<string, { tr: string; en: string }> = {
-    'Yerel oynatma basarisiz oldu': {
-      tr: 'Yerel oynatma başarısız oldu',
-      en: 'Native playback failed'
-    },
-    'HLS medya kurtarma basarisiz': {
-      tr: 'HLS medya kurtarma başarısız',
-      en: 'HLS media recovery failed'
-    },
-    'Ilk oynatma basarisiz oldu': {
-      tr: 'İlk oynatma başarısız oldu',
-      en: 'First playback failed'
-    },
-    'HLS yerel oynatma baslamadi': {
-      tr: 'HLS yerel oynatma başlamadı',
-      en: 'HLS native playback did not start'
-    },
-    'Yerel oynatma baslamadi': {
-      tr: 'Yerel oynatma başlamadı',
-      en: 'Native playback did not start'
-    },
-    'Uyumluluk modu baslamadi': {
-      tr: 'Uyumluluk modu başlamadı',
-      en: 'Compatibility mode did not start'
-    },
-    'Akis kurtarilamadi': {
-      tr: 'Akış kurtarılamadı',
-      en: 'Stream could not be recovered'
-    },
-    'Akis takildi': {
-      tr: 'Akış takıldı',
-      en: 'Stream stalled'
-    },
-    'Seek sonrasi akis takildi': {
-      tr: 'Seek sonrası akış takıldı',
-      en: 'Stream stalled after seek'
-    },
-    'Uyumluluk modu baslatilamadi': {
-      tr: 'Uyumluluk modu başlatılamadı',
-      en: 'Compatibility mode could not be started'
-    },
-    'Ses codec uyumluluk modu baslatilamadi': {
-      tr: 'Ses codec uyumluluk modu başlatılamadı',
-      en: 'Audio codec compatibility mode could not be started'
-    },
-    'Oynatici baslatilamadi': {
-      tr: 'Oynatıcı başlatılamadı',
-      en: 'Player could not be started'
-    },
-    'Ilk kare gecikti': {
-      tr: 'İlk kare gecikti',
-      en: 'First frame delayed'
-    },
-    'Sunucu zamaninda yanit vermedi': {
-      tr: 'Sunucu zamanında yanıt vermedi',
-      en: 'Server did not respond in time'
-    },
-    'FFmpeg uyumluluk modu kullanilamiyor': {
-      tr: 'FFmpeg uyumluluk modu kullanılamıyor',
-      en: 'FFmpeg compatibility mode unavailable'
-    },
-    'Uyumluluk modu hata verdi': {
-      tr: 'Uyumluluk modu hata verdi',
-      en: 'Compatibility mode failed'
-    },
-    'Video cozulurken hata olustu': {
-      tr: 'Video çözülürken hata oluştu',
-      en: 'Error decoding video'
-    },
-    'Oynatma hatasi': {
-      tr: 'Oynatma hatası',
-      en: 'Playback error'
-    },
-    'Video bu noktadan devam edemedi': {
-      tr: 'Video bu noktadan devam edemedi',
-      en: 'Video could not continue from this point'
-    },
-    'HLS ag hatasi': {
-      tr: 'HLS ağ hatası',
-      en: 'HLS network error'
-    },
-    'HLS medya hatasi': {
-      tr: 'HLS medya hatası',
-      en: 'HLS media error'
-    },
-    'HLS oynatma hatasi': {
-      tr: 'HLS oynatma hatası',
-      en: 'HLS playback error'
-    },
-    'Video ileri sariliyor...': {
-      tr: 'Video ileri sarılıyor...',
-      en: 'Seeking video forward...'
-    },
-    'Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.': {
-      tr: 'Video ileri sarılamadı. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.',
-      en: 'Could not seek forward. The source might not support seeking from this point.'
-    },
-    'Video ileri sarilirken hata olustu.': {
-      tr: 'Video ileri sarılırken hata oluştu.',
-      en: 'An error occurred while seeking forward.'
-    },
-    'Yayin akisi kurtariliyor...': {
-      tr: 'Yayın akışı kurtarılıyor...',
-      en: 'Recovering stream...'
-    },
-    'Ses dili değiştiriliyor (Transcode)...': {
-      tr: 'Ses dili değiştiriliyor (Transcode)...',
-      en: 'Changing audio language (Transcode)...'
-    },
-    'Altyazı yüklendi.': {
-      tr: 'Altyazı yüklendi.',
-      en: 'Subtitle loaded.'
-    },
-    'Resim içinde resim bu cihazda desteklenmiyor olabilir.': {
-      tr: 'Resim içinde resim bu cihazda desteklenmiyor olabilir.',
-      en: 'Picture-in-picture might not be supported on this device.'
-    }
-  };
-
-  return dictionary[reason]?.[language] || dictionary[reason]?.tr || reason;
-}
-
-function getPlaybackLabel(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
-  if (language === 'en') {
-    if (item?.type === 'live') return 'Live stream';
-    if (item?.type === 'movie') return 'Movie';
-    return 'Series episode';
-  }
-  if (item?.type === 'live') return 'Canlı yayın';
-  if (item?.type === 'movie') return 'Film';
-  return 'Dizi bölümü';
-}
-
-function getLoadingMessage(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
-  if (language === 'en') {
-    return `Preparing ${getPlaybackLabel(item, language).toLowerCase()}...`;
-  }
-  return `${getPlaybackLabel(item, language)} hazırlanıyor...`;
-}
-
-function getTranscodingMessage(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
-  if (language === 'en') {
-    return `Trying compatibility mode for ${getPlaybackLabel(item, language).toLowerCase()}...`;
-  }
-  return `${getPlaybackLabel(item, language)} için uyumluluk modu deneniyor...`;
-}
-
-function getRecoveringMessage(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
-  if (language === 'en') {
-    return `Recovering ${getPlaybackLabel(item, language).toLowerCase()} stream...`;
-  }
-  return `${getPlaybackLabel(item, language)} akışı kurtarılıyor...`;
-}
-
-function getPlaybackFailureMessage(item: PlaylistItem | null, reason?: string, language: 'tr' | 'en' = 'tr'): string {
-  const translatedReason = reason ? translateReason(reason, language) : '';
-  const reasonText = translatedReason ? ` (${translatedReason})` : '';
-  if (language === 'en') {
-    return `${getPlaybackLabel(item, language)} could not be opened${reasonText}. The source might be temporarily offline, codec unsupported, or the server is not responding. Try another source or open with an external player.`;
-  }
-  return `${getPlaybackLabel(item, language)} açılamadı${reasonText}. Kaynak geçici olarak kapalı, codec desteklenmiyor veya sunucu yanıt vermiyor olabilir. Başka bir kaynak deneyin ya da harici oynatıcı ile açmayı deneyin.`;
-}
-
-function getSavedPlayerVolume(): number {
-  const saved = Number(localStorage.getItem(PLAYER_VOLUME_KEY));
-  return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 1;
-}
-
-function getSavedPlayerMuted(): boolean {
-  return localStorage.getItem(PLAYER_MUTED_KEY) === 'true';
-}
-
-function getSavedPlaybackSpeed(): number {
-  const saved = Number(localStorage.getItem(PLAYER_SPEED_KEY));
-  return Number.isFinite(saved) && saved >= 0.25 && saved <= 2 ? saved : 1;
-}
-
-function getSavedQualityLevel(): number {
-  const saved = Number(localStorage.getItem(PLAYER_QUALITY_KEY));
-  return Number.isFinite(saved) ? saved : -1;
-}
-
-function getSavedAudioPreference(): { name?: string; lang?: string } | null {
-  try {
-    const saved = localStorage.getItem(PLAYER_AUDIO_PREF_KEY);
-    return saved ? JSON.parse(saved) : null;
-  } catch {
-    return null;
-  }
-}
-
-function getPreferredAudioTrackIndex(tracks: { name?: string; lang?: string }[]): number {
-  const preferred = getSavedAudioPreference();
-  if (preferred) {
-    const preferredName = preferred.name?.toLowerCase();
-    const preferredLang = preferred.lang?.toLowerCase();
-    const exact = tracks.findIndex(track =>
-      (preferredLang && track.lang?.toLowerCase() === preferredLang) ||
-      (preferredName && track.name?.toLowerCase() === preferredName)
-    );
-    if (exact >= 0) return exact;
-  }
-
-  const turkish = tracks.findIndex(track =>
-    track.name?.toLowerCase().includes('türk') ||
-    track.name?.toLowerCase().includes('turk') ||
-    track.lang?.toLowerCase() === 'tr'
-  );
-  return turkish >= 0 ? turkish : 0;
-}
-
+import { getLoadingMessage, getPlaybackFailureMessage, getPreferredAudioTrackIndex, getRecoveringMessage, getSavedPlaybackSpeed, getSavedPlayerMuted, getSavedPlayerVolume, getSavedQualityLevel, getTranscodingMessage, PLAYER_AUDIO_PREF_KEY, PLAYER_MUTED_KEY, PLAYER_QUALITY_KEY, PLAYER_SPEED_KEY, PLAYER_VOLUME_KEY, translateReason } from './cinematicPlayerHelpers';
+import type { PlaybackStatus, PlayerQualityLevel } from './cinematicPlayerHelpers';
+export type { PlayerQualityLevel } from './cinematicPlayerHelpers';
 export function useCinematicPlayer({
   selectedChannel,
   saveWatchProgress,
@@ -250,22 +34,52 @@ export function useCinematicPlayer({
   const pendingSeekTimeRef = useRef<number | null>(null);
   const startupTimeoutRef = useRef<any>(null);
   const recoveryAttemptRef = useRef(0);
+  const lastRecoveryTimeRef = useRef(0);
   const hlsNetworkRecoveriesRef = useRef(0);
   const hlsMediaRecoveriesRef = useRef(0);
   const lastBufferedUpdateRef = useRef(0);
   const seekGraceUntilRef = useRef(0);
   const lastRequestedSeekRef = useRef<number | null>(null);
+  const lastFfmpegRestartAtRef = useRef(0);
+  const ffmpegRestartInFlightRef = useRef(false);
+  // Escalate copy → full once when browser rejects the remuxed bitstream.
+  const forcedTranscodeModeRef = useRef<'copy' | 'full' | null>(null);
 
   // States/refs to reload the stream if paused for a long time (TCP/Token timeout recovery)
   const pausedTimeRef = useRef<number | null>(null);
   const resumeTimeRef = useRef<number | null>(null);
 
-  const getTranscodeMode = () => {
+  const learnedIntroRef = useRef<{ from: number; to: number } | null>(null);
+  const [learnedIntro, setLearnedIntro] = useState<{ from: number; to: number } | null>(null);
+  const [showIntroSkip, setShowIntroSkip] = useState(false);
+
+  const getTranscodeMode = (): 'copy' | 'full' => {
+    if (forcedTranscodeModeRef.current) return forcedTranscodeModeRef.current;
     if (transcodeMode === 'copy') return 'copy';
     if (transcodeMode === 'full') return 'full';
-    // 'auto' mode: copy video only if video codec is h264, otherwise full transcode
-    if (probedVideoCodecRef.current === 'h264') return 'copy';
+    // 'auto': only copy pure H.264. HEVC/MPEG2/unknown get full re-encode
+    // (copy+AAC was a common source of lip-sync drift on IPTV series).
+    const videoCodec = probedVideoCodecRef.current;
+    if (videoCodec === 'h264' || videoCodec === 'avc' || videoCodec === 'avc1') {
+      return 'copy';
+    }
     return 'full';
+  };
+
+  const invokeFfmpegProxy = async (
+    startTime?: number,
+    audioStreamId?: number,
+  ) => {
+    if (!selectedChannel || !window.electronAPI?.startFfmpegProxy) {
+      return { success: false as const, error: 'FFmpeg uyumluluk modu kullanilamiyor' };
+    }
+    return window.electronAPI.startFfmpegProxy(
+      selectedChannel.url,
+      startTime,
+      audioStreamId,
+      getTranscodeMode(),
+      selectedChannel.type,
+    );
   };
 
   const [isPlaying, setIsPlaying] = useState(true);
@@ -380,43 +194,63 @@ export function useCinematicPlayer({
     setBufferedProgress(0);
     seekGraceUntilRef.current = Date.now() + 20000;
     lastRequestedSeekRef.current = targetTime;
+    setPlaybackStatus('seeking');
+    setPlaybackMessage(
+      language === 'tr'
+        ? `İleri sarılıyor... (${formatPlayerTime(targetTime)})`
+        : `Seeking... (${formatPlayerTime(targetTime)})`
+    );
 
     if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
       const requestId = ++seekRequestIdRef.current;
-      setPlaybackStatus('recovering');
-      setPlaybackMessage(translateReason("Video ileri sarılıyor...", language));
-      showToast(translateReason("Video ileri sarılıyor...", language));
       try {
-        const result = await window.electronAPI.startFfmpegProxy(
-          selectedChannel.url,
+        // Proxy now returns the local URL immediately; browser connects while FFmpeg seeks.
+        const result = await invokeFfmpegProxy(
           targetTime,
           activeAudioStreamIdRef.current,
-          getTranscodeMode()
         );
         if (requestId !== seekRequestIdRef.current) return;
         if (result.success && result.url && videoRef.current) {
           seekOffsetRef.current = targetTime;
-          videoRef.current.src = result.url;
+          // Cache-bust so Chromium does not reuse a closed previous stream connection.
+          const streamUrl = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+          videoRef.current.src = streamUrl;
           videoRef.current.muted = playerMutedRef.current;
           videoRef.current.volume = playerVolumeRef.current;
           videoRef.current.play().then(forceUnmute).catch(() => { });
         } else {
+          setPlaybackStatus('playing');
           setPlaybackMessage('');
           showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
         }
       } catch (e) {
         console.error("Transcoded seek error:", e);
+        setPlaybackStatus('playing');
         setPlaybackMessage('');
         showToast(translateReason("Video ileri sarilirken hata olustu.", language));
       }
     } else {
       try {
-        setPlaybackMessage('');
-        videoRef.current.currentTime = targetTime;
+        const video = videoRef.current;
+        // Fast path: jump immediately; overlay clears on seeked/playing.
+        video.currentTime = targetTime;
+        if (video.paused) {
+          video.play().then(forceUnmute).catch(() => { });
+        }
       } catch (error) {
         console.warn("Native seek failed:", error);
+        setPlaybackStatus('playing');
+        setPlaybackMessage('');
         showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
       }
+    }
+  };
+
+  const handleSkipIntro = () => {
+    if (learnedIntroRef.current) {
+      handlePlayerSeek(learnedIntroRef.current.to);
+      setShowIntroSkip(false);
+      showToast(language === 'tr' ? 'Giriş atlandı.' : 'Intro skipped.');
     }
   };
 
@@ -433,6 +267,28 @@ export function useCinematicPlayer({
       ? Math.min(targetTime, Math.max(0, durationRef.current - 0.25))
       : targetTime);
 
+    // Learn intro boundaries on forward skip in the first 5 minutes
+    if (selectedChannel.type === 'series') {
+      const absoluteBefore = seekOffsetRef.current + videoRef.current.currentTime;
+      if (absoluteBefore < 300 && targetTime > absoluteBefore) {
+        const diff = targetTime - absoluteBefore;
+        // Intros are usually between 30 and 200 seconds long
+        if (diff >= 30 && diff <= 200) {
+          const { cleanTitle } = parseSeriesEpisodeInfo(selectedChannel.name);
+          const key = `intro_${cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+          const introData = { from: Math.floor(absoluteBefore), to: Math.floor(targetTime) };
+          localStorage.setItem(key, JSON.stringify(introData));
+          learnedIntroRef.current = introData;
+          setLearnedIntro(introData);
+          showToast(
+            language === 'tr'
+              ? `"${cleanTitle}" için giriş atlama noktası kaydedildi (${formatPlayerTime(introData.from)} - ${formatPlayerTime(introData.to)})`
+              : `Saved intro skip point for "${cleanTitle}" (${formatPlayerTime(introData.from)} - ${formatPlayerTime(introData.to)})`
+          );
+        }
+      }
+    }
+
     pendingSeekTimeRef.current = targetTime;
     lastRequestedSeekRef.current = targetTime;
     seekGraceUntilRef.current = Date.now() + 20000;
@@ -440,12 +296,21 @@ export function useCinematicPlayer({
 
     if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
 
+    // Timeline jumps (absolute): start immediately — the old 150ms debounce felt like lag.
+    // Relative skips still debounce so rapid ←/→ presses coalesce into one FFmpeg restart.
+    if (!isRelative) {
+      pendingSeekTimeRef.current = null;
+      void executeSeek(targetTime);
+      return;
+    }
+
+    const debounceMs = isTranscodingRef.current ? 220 : 100;
     seekTimeoutRef.current = setTimeout(() => {
       const finalTargetTime = pendingSeekTimeRef.current;
       if (finalTargetTime === null) return;
       pendingSeekTimeRef.current = null;
-      executeSeek(finalTargetTime);
-    }, 150);
+      void executeSeek(finalTargetTime);
+    }, debounceMs);
   };
 
   const handleTimelineSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -563,7 +428,10 @@ export function useCinematicPlayer({
         showToast(translateReason("Ses dili değiştiriliyor (Transcode)...", language));
         const currentPos = video.currentTime;
         try {
-          const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, seekOffsetRef.current + currentPos, streamId, getTranscodeMode());
+          const result = await invokeFfmpegProxy(
+            seekOffsetRef.current + currentPos,
+            streamId,
+          );
           if (result.success && result.url) {
             seekOffsetRef.current = seekOffsetRef.current + currentPos;
             isTranscodingRef.current = true;
@@ -639,6 +507,30 @@ export function useCinematicPlayer({
     setCurrentTime(0);
     setBufferedProgress(0);
     setDuration(selectedChannel.duration && selectedChannel.duration > 0 ? selectedChannel.duration : 0);
+
+    // Load learned intro for series
+    if (selectedChannel.type === 'series') {
+      const { cleanTitle } = parseSeriesEpisodeInfo(selectedChannel.name);
+      const key = `intro_${cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setLearnedIntro(parsed);
+          learnedIntroRef.current = parsed;
+        } catch {
+          setLearnedIntro(null);
+          learnedIntroRef.current = null;
+        }
+      } else {
+        setLearnedIntro(null);
+        learnedIntroRef.current = null;
+      }
+    } else {
+      setLearnedIntro(null);
+      learnedIntroRef.current = null;
+    }
+    setShowIntroSkip(false);
     setAudioTracks([]);
     setActiveAudioTrack(0);
     setQualityLevels([]);
@@ -651,6 +543,9 @@ export function useCinematicPlayer({
     video.playbackRate = playbackSpeedRef.current;
     setFfmpegFallbackActive(false);
     isTranscodingRef.current = false;
+    forcedTranscodeModeRef.current = null;
+    ffmpegRestartInFlightRef.current = false;
+    lastFfmpegRestartAtRef.current = 0;
     probedVideoCodecRef.current = 'unknown';
     activeAudioStreamIdRef.current = undefined;
     seekRequestIdRef.current = 0;
@@ -658,6 +553,7 @@ export function useCinematicPlayer({
     seekGraceUntilRef.current = 0;
     lastRequestedSeekRef.current = null;
     recoveryAttemptRef.current = 0;
+    lastRecoveryTimeRef.current = 0;
     hlsNetworkRecoveriesRef.current = 0;
     hlsMediaRecoveriesRef.current = 0;
     lastBufferedUpdateRef.current = 0;
@@ -687,6 +583,8 @@ export function useCinematicPlayer({
 
     const armStartupTimeout = () => {
       clearStartupTimeout();
+      // VOD FFmpeg probe + first fragment can exceed 12s on slow IPTV sources.
+      const timeoutMs = isTranscodingRef.current || selectedChannel.type !== 'live' ? 22000 : 12000;
       startupTimeoutRef.current = window.setTimeout(() => {
         if (!active || videoReady || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
         if (!isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
@@ -694,16 +592,35 @@ export function useCinematicPlayer({
         } else {
           failPlayback('Sunucu zamaninda yanit vermedi');
         }
-      }, 12000);
+      }, timeoutMs);
     };
 
     const startFfmpegFallback = async (forceStartTime?: number, reason?: string) => {
       if (!active) return;
+      if (selectedChannel.type === 'live') {
+        forceStartTime = 0;
+      }
       if (!window.electronAPI?.startFfmpegProxy) {
         failPlayback('FFmpeg uyumluluk modu kullanilamiyor');
         return;
       }
-      const currentPos = forceStartTime !== undefined ? forceStartTime : video.currentTime;
+
+      // Prevent restart thrash when FFmpeg dies mid-episode (common IPTV series issue).
+      const now = Date.now();
+      if (ffmpegRestartInFlightRef.current) {
+        console.warn('[AutoTranscode] Restart already in flight, skipping');
+        return;
+      }
+      if (now - lastFfmpegRestartAtRef.current < 3500) {
+        console.warn('[AutoTranscode] Restart throttled');
+        return;
+      }
+      lastFfmpegRestartAtRef.current = now;
+      ffmpegRestartInFlightRef.current = true;
+
+      const currentPos = forceStartTime !== undefined
+        ? forceStartTime
+        : (seekOffsetRef.current + (video.currentTime || 0));
       console.warn(`[AutoTranscode] Transcoding triggered. Starting from second: ${currentPos}`);
       isTranscodingRef.current = true;
       setFfmpegFallbackActive(true);
@@ -713,7 +630,10 @@ export function useCinematicPlayer({
       setBufferedProgress(0);
       armStartupTimeout();
       try {
-        const result = await window.electronAPI.startFfmpegProxy(selectedChannel.url, currentPos, undefined, getTranscodeMode());
+        const result = await invokeFfmpegProxy(
+          currentPos,
+          activeAudioStreamIdRef.current,
+        );
         if (!active) return;
         if (result.success && result.url) {
           if (hlsInstanceRef.current) {
@@ -736,13 +656,64 @@ export function useCinematicPlayer({
         isTranscodingRef.current = false;
         setFfmpegFallbackActive(false);
         failPlayback('Uyumluluk modu hata verdi');
+      } finally {
+        ffmpegRestartInFlightRef.current = false;
       }
     };
 
     const onVideoError = () => {
       const err = video.error;
       console.warn('Video error:', err?.code, err?.message);
+
+      if (selectedChannel.type === 'live') {
+        const now = Date.now();
+        if (now - lastRecoveryTimeRef.current < 4000) {
+          console.warn("[Player] Video error recovery throttled (already attempted recently)");
+          return;
+        }
+        lastRecoveryTimeRef.current = now;
+
+        recoveryAttemptRef.current += 1;
+        if (recoveryAttemptRef.current <= 3) {
+          if (isTranscodingRef.current) {
+            console.warn("[Player] Video error on transcoding live stream. Restarting fallback...");
+            setPlaybackStatus('recovering');
+            setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
+            showToast(translateReason("Yayin akisi kurtariliyor...", language));
+            startFfmpegFallback(0, 'Yerel oynatma basarisiz oldu');
+          } else {
+            console.warn("[Player] Video error detected on live stream. Attempting recovery...");
+            setPlaybackStatus('recovering');
+            setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
+            showToast(translateReason("Yayin akisi kurtariliyor...", language));
+
+            const playUrl = selectedChannel.url;
+            loadPlayerSource(playUrl, false);
+
+            const playLive = () => {
+              video.play().then(forceUnmute).catch(() => {});
+            };
+            video.addEventListener('loadedmetadata', playLive, { once: true });
+          }
+          return;
+        } else {
+          failPlayback('Yerel oynatma basarisiz oldu');
+          return;
+        }
+      }
+
       if (isTranscodingRef.current) {
+        // Copy remux can produce a stream Chromium rejects — escalate to full once.
+        if (getTranscodeMode() === 'copy' && forcedTranscodeModeRef.current !== 'full') {
+          console.warn('[AutoTranscode] Copy mode rejected by decoder, escalating to full');
+          forcedTranscodeModeRef.current = 'full';
+          lastFfmpegRestartAtRef.current = 0; // allow immediate escalation restart
+          startFfmpegFallback(
+            seekOffsetRef.current + (video.currentTime || 0),
+            'Yerel oynatma basarisiz oldu',
+          );
+          return;
+        }
         failPlayback(err?.message || 'Video cozulurken hata olustu');
         return;
       }
@@ -800,9 +771,18 @@ export function useCinematicPlayer({
       setPlaybackStatus('playing');
       setPlaybackMessage('');
       recoveryAttemptRef.current = 0;
+      hlsNetworkRecoveriesRef.current = 0;
+      hlsMediaRecoveriesRef.current = 0;
       if (isTranscodingRef.current) {
         void probeTranscodedMetadata();
       }
+    };
+
+    // Native seek often stays in "playing" state and only fires seeked — clear HUD here.
+    const onSeekedClear = () => {
+      clearStall();
+      setPlaybackStatus(prev => (prev === 'seeking' ? 'playing' : prev));
+      setPlaybackMessage(prev => (prev.startsWith('İleri sarılıyor') || prev.startsWith('Seeking') ? '' : prev));
     };
 
     let hasResumed = false;
@@ -819,7 +799,10 @@ export function useCinematicPlayer({
           hasResumed = true;
           resumeTimeRef.current = null; // consume it
           if (isTranscodingRef.current) {
-            handlePlayerSeek(targetTime);
+            // Already opened FFmpeg at this offset during init — avoid double restart.
+            if (Math.abs(targetTime - seekOffsetRef.current) > 2) {
+              handlePlayerSeek(targetTime);
+            }
           } else {
             video.currentTime = targetTime;
             // Explicitly play to prevent the browser from stalling the video due to an interrupted loading/play promise
@@ -934,6 +917,18 @@ export function useCinematicPlayer({
         }
       }
       updateBufferedProgress();
+
+      // Check learned intro boundaries
+      const intro = learnedIntroRef.current;
+      if (intro) {
+        if (now >= intro.from && now < intro.to - 4) {
+          setShowIntroSkip(true);
+        } else {
+          setShowIntroSkip(false);
+        }
+      } else {
+        setShowIntroSkip(false);
+      }
     };
 
     const durationChange = () => {
@@ -965,13 +960,25 @@ export function useCinematicPlayer({
     const onWaiting = () => {
       if (stallTimeout) clearTimeout(stallTimeout);
       const waitStartedAt = Date.now();
-      const stallDelay = selectedChannel.type === 'live' ? 12000 : 22000;
+      // Transcode path buffers more slowly; don't kill FFmpeg too eagerly.
+      const stallDelay = selectedChannel.type === 'live'
+        ? 12000
+        : (isTranscodingRef.current ? 35000 : 22000);
       stallTimeout = setTimeout(() => {
         if (!active || !video || !selectedChannel) return;
         if (video.seeking || Date.now() < seekGraceUntilRef.current) return;
         if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
         console.warn("[Player] Stall detected! Attempting recovery...");
         
+        if (selectedChannel.type === 'live') {
+          const now = Date.now();
+          if (now - lastRecoveryTimeRef.current < 4000) {
+            console.warn("[Player] Stall recovery throttled (already attempted recently)");
+            return;
+          }
+          lastRecoveryTimeRef.current = now;
+        }
+
         setPlaybackStatus('recovering');
         setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
 
@@ -992,14 +999,25 @@ export function useCinematicPlayer({
           }
           startFfmpegFallback(Math.max(0, seekOffsetRef.current + currentPos), 'Seek sonrasi akis takildi');
         } else {
+          if (selectedChannel.type === 'live' && recoveryAttemptRef.current > 3) {
+            failPlayback('Akis kurtarilamadi');
+            return;
+          }
           const playUrl = selectedChannel.url;
           loadPlayerSource(playUrl, false);
           
-          const restoreTime = () => {
-            video.currentTime = currentPos;
-            video.play().then(forceUnmute).catch(() => {});
-          };
-          video.addEventListener('loadedmetadata', restoreTime, { once: true });
+          if (selectedChannel.type === 'live') {
+            const playLive = () => {
+              video.play().then(forceUnmute).catch(() => {});
+            };
+            video.addEventListener('loadedmetadata', playLive, { once: true });
+          } else {
+            const restoreTime = () => {
+              video.currentTime = currentPos;
+              video.play().then(forceUnmute).catch(() => {});
+            };
+            video.addEventListener('loadedmetadata', restoreTime, { once: true });
+          }
         }
         showToast(translateReason("Yayin akisi kurtariliyor...", language));
       }, stallDelay);
@@ -1023,7 +1041,7 @@ export function useCinematicPlayer({
     video.addEventListener('pause', onPauseEvent);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('seeking', clearStall);
-    video.addEventListener('seeked', clearStall);
+    video.addEventListener('seeked', onSeekedClear);
     const onProgress = () => updateBufferedProgress(true);
     video.addEventListener('progress', onProgress);
 
@@ -1117,6 +1135,33 @@ export function useCinematicPlayer({
           forceUnmute();
         });
 
+        const handleLiveHlsFatalError = (errorMsg: string) => {
+          const now = Date.now();
+          if (now - lastRecoveryTimeRef.current < 4000) {
+            console.warn("[Player] Fatal HLS recovery throttled (already attempted recently)");
+            return;
+          }
+          lastRecoveryTimeRef.current = now;
+
+          recoveryAttemptRef.current += 1;
+          if (recoveryAttemptRef.current <= 3) {
+            console.warn(`[Player] Fatal HLS error (${errorMsg}) on live stream. Reloading stream...`);
+            setPlaybackStatus('recovering');
+            setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
+            showToast(translateReason("Yayin akisi kurtariliyor...", language));
+
+            const playUrl = selectedChannel.url;
+            loadPlayerSource(playUrl, false);
+
+            const playLive = () => {
+              video.play().then(forceUnmute).catch(() => {});
+            };
+            video.addEventListener('loadedmetadata', playLive, { once: true });
+          } else {
+            failPlayback(errorMsg);
+          }
+        };
+
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
           console.warn('HLS error:', data.type, data.details);
           if (data.fatal) {
@@ -1126,6 +1171,8 @@ export function useCinematicPlayer({
                 setPlaybackStatus('recovering');
                 setPlaybackMessage(getRecoveringMessage(selectedChannel));
                 hls.startLoad();
+              } else if (selectedChannel.type === 'live') {
+                handleLiveHlsFatalError('HLS ag hatasi');
               } else if (!transcodeActive) {
                 startFfmpegFallback(undefined, 'HLS ag hatasi');
               } else {
@@ -1138,18 +1185,24 @@ export function useCinematicPlayer({
                   setPlaybackStatus('recovering');
                   setPlaybackMessage(getRecoveringMessage(selectedChannel));
                   hls.recoverMediaError();
+                } else if (selectedChannel.type === 'live') {
+                  handleLiveHlsFatalError('HLS medya hatasi');
                 } else if (!transcodeActive) {
                   startFfmpegFallback(undefined, 'HLS medya hatasi');
                 } else {
                   failPlayback('HLS medya hatasi');
                 }
               } catch {
-                if (!transcodeActive) {
+                if (selectedChannel.type === 'live') {
+                  handleLiveHlsFatalError('HLS medya kurtarma basarisiz');
+                } else if (!transcodeActive) {
                   startFfmpegFallback(undefined, 'HLS medya kurtarma basarisiz');
                 } else {
                   failPlayback('HLS medya kurtarma basarisiz');
                 }
               }
+            } else if (selectedChannel.type === 'live') {
+              handleLiveHlsFatalError('HLS oynatma hatasi');
             } else if (!transcodeActive) {
               startFfmpegFallback(undefined, 'HLS oynatma hatasi');
             } else {
@@ -1173,8 +1226,29 @@ export function useCinematicPlayer({
 
       let shouldTranscode = false;
       let streamId: number | undefined = undefined;
+      const isLocalFile =
+        playUrl.startsWith('app-file:') ||
+        playUrl.startsWith('file:') ||
+        /^[a-zA-Z]:[\\/]/.test(playUrl);
 
-      // Only run network codec analysis for non-HLS (.m3u8) direct VOD streams BEFORE playback starts
+      // Pre-detect unsupported codecs from the file name / URL to ensure instant compatibility mapping
+      const nameLower = selectedChannel.name.toLowerCase();
+      const urlLower = selectedChannel.url.toLowerCase();
+      const hasUnsupportedKeyword =
+        nameLower.includes('ac3') || nameLower.includes('ddp') || nameLower.includes('dts') ||
+        nameLower.includes('eac3') || nameLower.includes('5.1') || nameLower.includes('truehd') ||
+        nameLower.includes('atmos') ||
+        urlLower.includes('ac3') || urlLower.includes('ddp') || urlLower.includes('dts') ||
+        urlLower.includes('eac3') || urlLower.includes('5.1') || urlLower.includes('truehd') ||
+        urlLower.includes('atmos');
+
+      if (hasUnsupportedKeyword) {
+        shouldTranscode = true;
+      }
+
+      // Codec analysis for non-HLS VOD (remote + local downloads). Local app-file://
+      // used to be rejected by the main process, so AC3 downloads never got a
+      // working FFmpeg fallback and looked stuck/unopenable.
       if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
         setPlaybackStatus('loading');
         setPlaybackMessage(language === 'tr' ? 'Ses formatı kontrol ediliyor...' : 'Checking audio format...');
@@ -1207,12 +1281,28 @@ export function useCinematicPlayer({
               activeAudioStreamIdRef.current = streamId;
             }
 
-            if (res.codec) {
-              const codec = res.codec.toLowerCase();
-              const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp'];
-              if (unsupportedCodecs.includes(codec)) {
-                shouldTranscode = true;
-              }
+            const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp', 'pcm_bluray', 'pcm_s16le'];
+            const selectedCodec = (
+              (typeof streamId === 'number'
+                ? res.audioStreams?.find(s => s.streamId === streamId)?.codec
+                : undefined) || res.codec || ''
+            ).toLowerCase();
+            if (selectedCodec && unsupportedCodecs.includes(selectedCodec)) {
+              shouldTranscode = true;
+            }
+            // Browser often cannot demux multi-audio IPTV TS cleanly even if one track is AAC.
+            if (res.audioStreams && res.audioStreams.length > 1 &&
+                res.audioStreams.some(s => unsupportedCodecs.includes((s.codec || '').toLowerCase()))) {
+              shouldTranscode = true;
+            }
+            // Local remux of HEVC often fails natively in Chromium — prefer FFmpeg path.
+            if (isLocalFile && res.videoCodec && /hevc|h265|av1|mpeg2video/i.test(res.videoCodec)) {
+              shouldTranscode = true;
+            }
+          } else if (!isLocalFile) {
+            // Only force transcode on probe failure for remote streams.
+            if (transcodeMode === 'full' || transcodeMode === 'copy') {
+              shouldTranscode = true;
             }
           }
         } catch (e) {
@@ -1223,14 +1313,26 @@ export function useCinematicPlayer({
       if (shouldTranscode) {
         setPlaybackStatus('transcoding');
         setPlaybackMessage(getTranscodingMessage(selectedChannel, language));
+        // Start FFmpeg already at resume position to avoid an immediate second restart.
+        let startAt = 0;
+        const resumeAt = selectedChannel.currentTime || 0;
+        if (selectedChannel.type !== 'live' && resumeAt > 5) {
+          startAt = resumeAt;
+        }
+        isTranscodingRef.current = true;
         armStartupTimeout();
-        const transcodeRes = await window.electronAPI!.startFfmpegProxy!(selectedChannel.url, 0, streamId, getTranscodeMode());
+        const transcodeRes = await invokeFfmpegProxy(startAt, streamId);
         if (!active) return;
         if (transcodeRes.success && transcodeRes.url) {
-          seekOffsetRef.current = 0;
-          isTranscodingRef.current = true;
+          seekOffsetRef.current = startAt;
           setFfmpegFallbackActive(true);
           await loadPlayerSource(transcodeRes.url, true);
+        } else if (isLocalFile) {
+          // Fall back to native local play if FFmpeg path fails.
+          isTranscodingRef.current = false;
+          setFfmpegFallbackActive(false);
+          setPlaybackMessage('');
+          await loadPlayerSource(playUrl, false);
         } else {
           isTranscodingRef.current = false;
           setFfmpegFallbackActive(false);
@@ -1255,6 +1357,9 @@ export function useCinematicPlayer({
       active = false;
       isTranscodingRef.current = false;
       clearStartupTimeout();
+      if (seekTimeoutRef.current) {
+        clearTimeout(seekTimeoutRef.current);
+      }
       clearInterval(unmuteInterval);
       clearStall();
       video.removeEventListener('error', onVideoError);
@@ -1268,7 +1373,7 @@ export function useCinematicPlayer({
       video.removeEventListener('pause', onPauseEvent);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('seeking', clearStall);
-      video.removeEventListener('seeked', clearStall);
+      video.removeEventListener('seeked', onSeekedClear);
       video.removeEventListener('progress', onProgress);
 
       if ((video as any).audioTracks) {
@@ -1319,6 +1424,8 @@ export function useCinematicPlayer({
     showSubtitleMenu,
     isFullscreen,
     bufferedProgress,
+    showIntroSkip,
+    learnedIntro,
     
     setIsPlaying,
     setCurrentTime,
@@ -1351,6 +1458,7 @@ export function useCinematicPlayer({
     handleAudioTrackChange,
     handleSubtitleUpload,
     handlePlayerPiP,
-    formatPlayerTime
+    formatPlayerTime,
+    handleSkipIntro
   };
 }

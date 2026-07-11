@@ -37,7 +37,7 @@ export function SpotlightSearch({
   handleOpenDetails,
   handleOpenSeriesModalDirect
 }: SpotlightSearchProps) {
-  const { language } = useSettings();
+  const { language, onShowToast } = useSettings();
   const [focusedResultIndex, setFocusedResultIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
@@ -110,7 +110,7 @@ export function SpotlightSearch({
   const handleVoiceSearch = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert(language === 'tr' ? 'Tarayıcınız sesli aramayı desteklemiyor.' : 'Voice search is not supported in this browser.');
+      onShowToast(language === 'tr' ? 'Tarayıcınız sesli aramayı desteklemiyor.' : 'Voice search is not supported in this browser.');
       return;
     }
     
@@ -215,7 +215,7 @@ export function SpotlightSearch({
           />
           
           {/* Voice Search Button */}
-          <button
+          <button type="button"
             onClick={handleVoiceSearch}
             className={`p-1.5 rounded-lg border transition-all shrink-0 cursor-pointer flex items-center justify-center ${
               isListening
@@ -228,7 +228,7 @@ export function SpotlightSearch({
           </button>
 
           {spotlightSearchInput && (
-            <button
+            <button type="button"
               onClick={() => setSpotlightSearchInput('')}
               className="p-1 rounded-lg hover:bg-white/5 text-neutral-400 hover:text-white transition-all shrink-0 cursor-pointer"
             >
@@ -246,7 +246,7 @@ export function SpotlightSearch({
             const Icon = scope.icon;
             const isActive = spotlightScope === scope.id;
             return (
-              <button
+              <button type="button"
                 key={scope.id}
                 onClick={() => setSpotlightScope(scope.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer shrink-0 border ${
@@ -291,7 +291,7 @@ export function SpotlightSearch({
                     <Clock size={11} />
                     {language === 'tr' ? 'SON ARAMALAR' : 'RECENT SEARCHES'}
                   </span>
-                  <button
+                  <button type="button"
                     onClick={clearAllRecent}
                     className="text-[9px] font-bold text-red-400/70 hover:text-red-400 transition-colors cursor-pointer"
                   >
@@ -339,7 +339,7 @@ export function SpotlightSearch({
                           </div>
                         </div>
                         
-                        <button
+                        <button type="button"
                           onClick={(e) => removeRecentSearch(e, item.id)}
                           className={`p-1 rounded hover:bg-white/10 text-neutral-600 hover:text-red-400 transition-all cursor-pointer mr-1 ${
                             isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'

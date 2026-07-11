@@ -32,7 +32,10 @@ export default defineConfig({
   },
   server: {
     watch: {
-      ignored: (path) => path.includes('profiles')
+      ignored: [
+        '**/profiles/**',
+        '**/profiles-dev/**',
+      ]
     }
   }
 })

@@ -40,6 +40,7 @@ declare global {
         startTime?: number,
         audioStreamId?: number,
         transcodeMode?: string,
+        contentType?: string,
       ) => Promise<{
         success: boolean;
         port?: number;
@@ -105,7 +106,28 @@ declare global {
         size?: string;
         error?: string;
       }>;
-      cancelDownload?: (downloadId: string) => Promise<{ success: boolean }>;
+      getSavedMediaInfoBatch?: (
+        items: {
+          key?: string;
+          downloadId?: string;
+          type?: string;
+          name?: string;
+          streamUrl?: string;
+        }[],
+      ) => Promise<{
+        results: {
+          key?: string;
+          exists: boolean;
+          filePath?: string;
+          playUrl?: string;
+          size?: string;
+          error?: string;
+        }[];
+        error?: string;
+      }>;
+      cancelDownload?: (
+        downloadId: string,
+      ) => Promise<{ success: boolean; resumable?: boolean }>;
       deleteFile?: (
         filePath: string,
       ) => Promise<{ success: boolean; error?: string }>;
@@ -116,10 +138,12 @@ declare global {
       selectDownloadsFolder?: () => Promise<{
         canceled: boolean;
         filePath?: string;
+        selectionToken?: string;
       }>;
       setDownloadsFolder?: (params: {
         folderPath: string;
         moveExisting: boolean;
+        selectionToken: string;
       }) => Promise<{ success: boolean; error?: string }>;
       getDownloadsFolder?: () => Promise<string>;
       onDownloadProgress?: (
@@ -232,6 +256,8 @@ export interface ImageWithFallbackProps {
   itemType?: "live" | "movie" | "series";
   isGenericLogo?: boolean;
   aspect?: "portrait" | "landscape";
+  cover?: boolean;
+  lazy?: boolean;
 }
 
 export interface EpisodeThumbProps {

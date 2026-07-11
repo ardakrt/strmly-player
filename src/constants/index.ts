@@ -28,7 +28,7 @@ export const HERO_BACKDROPS = [
 
 export const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
-export const GLOBAL_KEYS = ['cinema_profiles', 'cinema_active_profile_id', 'cinema_tmdb_key', 'cinema_default_player', 'cinema_theme', 'cinema_accent', 'cinema_glass_intensity', 'cinema_neon_glow', 'cinema_card_layout_size', 'cinema_language', 'cinema_transcode_mode'];
+export const GLOBAL_KEYS = ['cinema_profiles', 'cinema_active_profile_id', 'cinema_tmdb_key', 'cinema_default_player', 'cinema_theme', 'cinema_accent', 'cinema_glass_intensity', 'cinema_neon_glow', 'cinema_card_layout_size', 'cinema_language', 'cinema_transcode_mode', 'cinema_download_segment_concurrency', 'cinema_download_max_height', 'cinema_download_segment_delay_ms'];
 
 export const DEFAULT_AVATARS = [
   'linear-gradient(to right, #ff7e5f, #feb47b)', // Sunset Glow

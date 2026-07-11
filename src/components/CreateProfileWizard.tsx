@@ -107,11 +107,21 @@ export function CreateProfileWizard({
     || (playlistType === 'xtream' && xtreamUrl.trim().length > 0 && xtreamUser.trim().length > 0 && xtreamPass.trim().length > 0);
   const canContinue = step === 1 ? identityReady : step === 2 ? connectionReady : true;
 
-  const renderAvatar = (value: string, className: string) => value.startsWith('linear-gradient') ? (
-    <div className={className} style={{ background: value }} />
-  ) : (
-    <img src={value} className={`${className} object-cover`} alt="" />
-  );
+  const renderAvatar = (value: string, className: string) => {
+    if (!value) {
+      return (
+        <div className={`${className} flex items-center justify-center bg-neutral-950`}>
+          <UserRound size={42} className="text-neutral-600" />
+        </div>
+      );
+    }
+
+    return value.startsWith('linear-gradient') ? (
+      <div className={className} style={{ background: value }} />
+    ) : (
+      <img src={value} className={`${className} object-cover`} alt="" />
+    );
+  };
 
   const seriesCatalog = avatarSearchResults.length > 0 ? avatarSearchResults : localSeries.map(series => ({
     id: series.id,
@@ -209,7 +219,7 @@ export function CreateProfileWizard({
                 {step === 1 ? (avatarPickerOpen ? (language === 'tr' ? 'Dizini ve oyuncunu seç' : 'Select series and actor') : t('profiles.setupWizard.step1Desc')) : step === 2 ? (language === 'tr' ? 'IPTV bağlantını kur' : 'Setup IPTV link') : (language === 'tr' ? 'Her şey hazır' : 'All set')}
               </h2>
             </div>
-            <button
+            <button type="button"
               onClick={onClose}
               disabled={isSaving}
               className="w-10 h-10 rounded-full border border-white/8 bg-white/[0.035] hover:bg-white/10 disabled:opacity-40 flex items-center justify-center text-neutral-400 hover:text-white transition-all"
@@ -222,7 +232,7 @@ export function CreateProfileWizard({
             {step === 1 && (avatarPickerOpen ? (
               <div className="animate-fade-in">
                 <div className="flex items-center justify-between gap-5">
-                  <button
+                  <button type="button"
                     onClick={() => {
                       if (selectedSeriesForCast) {
                         onSelectedSeriesForCastChange(null);
@@ -260,7 +270,7 @@ export function CreateProfileWizard({
                         className="w-full h-12 pl-11 pr-4 rounded-2xl border border-white/10 bg-white/[0.035] text-xs text-white outline-none placeholder-neutral-600 focus:border-white/30 transition-all"
                       />
                     </div>
-                    <button onClick={() => hasTmdbApiKey && avatarSearchQuery.trim() && onAvatarSearch(avatarSearchQuery)} disabled={!hasTmdbApiKey || !avatarSearchQuery.trim() || avatarSearchLoading} className="h-12 px-6 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-[10px] font-black transition-all">
+                    <button type="button" onClick={() => hasTmdbApiKey && avatarSearchQuery.trim() && onAvatarSearch(avatarSearchQuery)} disabled={!hasTmdbApiKey || !avatarSearchQuery.trim() || avatarSearchLoading} className="h-12 px-6 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-[10px] font-black transition-all">
                       {language === 'tr' ? 'Ara' : 'Search'}
                     </button>
                   </div>
@@ -283,7 +293,7 @@ export function CreateProfileWizard({
                     {seriesCast.length > 0 ? (
                       <div className="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-9 gap-x-5 gap-y-6 max-h-[390px] overflow-y-auto hide-scrollbar pr-1">
                         {seriesCast.map((actor, index) => (
-                          <button key={`${actor.name}-${index}`} onClick={() => chooseActor(actor.avatarUrl)} className="group min-w-0 flex flex-col items-center gap-2.5">
+                          <button type="button" key={`${actor.name}-${index}`} onClick={() => chooseActor(actor.avatarUrl)} className="group min-w-0 flex flex-col items-center gap-2.5">
                             <div className={`w-full aspect-square rounded-full overflow-hidden border-2 transition-all group-hover:scale-105 ${avatar === actor.avatarUrl ? 'border-white shadow-[0_0_26px_rgba(255,255,255,0.22)]' : 'border-white/10 group-hover:border-white/45'}`}>
                               <img src={actor.avatarUrl} className="w-full h-full object-cover" alt={actor.name} />
                             </div>
@@ -317,7 +327,7 @@ export function CreateProfileWizard({
                     ) : (
                       <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-4 max-h-[390px] overflow-y-auto hide-scrollbar pr-1 pb-1">
                         {seriesCatalog.map(item => (
-                          <button key={`${item.mediaType}-${item.id}`} onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)} title={item.name} className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-transparent hover:border-white/45 transition-all hover:-translate-y-1 bg-neutral-900">
+                          <button type="button" key={`${item.mediaType}-${item.id}`} onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)} title={item.name} className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-transparent hover:border-white/45 transition-all hover:-translate-y-1 bg-neutral-900">
                             <img src={item.posterUrl} className="w-full h-full object-cover" alt={item.name} />
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/5 to-transparent" />
                             <span className="absolute inset-x-2 bottom-2 truncate text-[9px] font-black text-white">{item.name}</span>
@@ -331,7 +341,7 @@ export function CreateProfileWizard({
             ) : (
               <div className="grid lg:grid-cols-[240px_1fr] gap-10 items-center min-h-[400px] animate-fade-in">
                 <div className="flex flex-col items-center">
-                  <button onClick={() => setAvatarPickerOpen(true)} className="group relative w-48 h-48 rounded-[38px] overflow-hidden border-2 border-white/15 hover:border-white/50 bg-neutral-950 shadow-[0_28px_80px_rgba(0,0,0,0.55)] transition-all hover:-translate-y-1" title={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'}>
+                  <button type="button" onClick={() => setAvatarPickerOpen(true)} className="group relative w-48 h-48 rounded-[38px] overflow-hidden border-2 border-white/15 hover:border-white/50 bg-neutral-950 shadow-[0_28px_80px_rgba(0,0,0,0.55)] transition-all hover:-translate-y-1" title={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'}>
                     {avatar ? renderAvatar(avatar, 'w-full h-full') : <div className="w-full h-full flex items-center justify-center"><UserRound size={46} className="text-neutral-600" /></div>}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 h-14 flex items-center justify-center gap-2 text-[10px] font-black text-white opacity-80 group-hover:opacity-100">
@@ -388,7 +398,7 @@ export function CreateProfileWizard({
                     { id: 'm3u', label: language === 'tr' ? 'M3U Linki' : 'M3U Link', detail: language === 'tr' ? 'Tek bağlantıyla kur' : 'Setup with single link', icon: Link2 },
                     { id: 'xtream', label: 'Xtream Codes', detail: language === 'tr' ? 'Hesabınla bağlan' : 'Connect with credentials', icon: Server }
                   ].map(option => (
-                    <button
+                    <button type="button"
                       key={option.id}
                       onClick={() => onPlaylistTypeChange(option.id as 'none' | 'm3u' | 'xtream')}
                       className={`min-h-28 rounded-2xl border p-4 text-left transition-all ${playlistType === option.id ? 'border-white/45 bg-white text-black shadow-[0_18px_50px_rgba(255,255,255,0.10)]' : 'border-white/8 bg-white/[0.025] text-neutral-400 hover:border-white/20 hover:bg-white/[0.05] hover:text-white'}`}
@@ -434,7 +444,7 @@ export function CreateProfileWizard({
                       { value: 24, label: language === 'tr' ? '1 Gün' : '1 Day' },
                       { value: 168, label: language === 'tr' ? '7 Gün' : '7 Days' }
                     ].map(option => (
-                      <button key={option.value} onClick={() => onUpdateIntervalChange(option.value as 6 | 12 | 24 | 168)} className={`h-11 rounded-xl border text-[10px] font-black transition-all ${updateInterval === option.value ? 'border-white bg-white text-black' : 'border-white/8 bg-white/[0.025] text-neutral-500 hover:text-white hover:border-white/20'}`}>{option.label}</button>
+                      <button type="button" key={option.value} onClick={() => onUpdateIntervalChange(option.value as 6 | 12 | 24 | 168)} className={`h-11 rounded-xl border text-[10px] font-black transition-all ${updateInterval === option.value ? 'border-white bg-white text-black' : 'border-white/8 bg-white/[0.025] text-neutral-500 hover:text-white hover:border-white/20'}`}>{option.label}</button>
                     ))}
                   </div>
                 </div>
@@ -485,7 +495,7 @@ export function CreateProfileWizard({
           </div>
 
           {!avatarPickerOpen && <footer className="h-20 shrink-0 px-6 md:px-9 border-t border-white/8 flex items-center justify-between gap-3 bg-black/20">
-            <button
+            <button type="button"
               onClick={() => step === 1 ? onClose() : setStep(current => current - 1)}
               disabled={isSaving}
               className="h-11 px-5 rounded-2xl border border-white/10 bg-white/[0.025] hover:bg-white/[0.07] disabled:opacity-40 text-xs font-bold text-neutral-300 hover:text-white flex items-center gap-2 transition-all"
@@ -494,7 +504,7 @@ export function CreateProfileWizard({
             </button>
 
             {step < 3 ? (
-              <button
+              <button type="button"
                 onClick={() => canContinue && setStep(current => current + 1)}
                 disabled={!canContinue}
                 className="h-11 px-6 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-xs font-black flex items-center gap-2 transition-all"
@@ -502,7 +512,7 @@ export function CreateProfileWizard({
                 {language === 'tr' ? 'Devam Et' : 'Continue'} <ArrowRight size={14} />
               </button>
             ) : (
-              <button
+              <button type="button"
                 onClick={onSave}
                 disabled={isSaving}
                 className="h-11 px-6 rounded-2xl bg-white hover:bg-neutral-200 disabled:bg-neutral-700 disabled:text-neutral-400 text-black text-xs font-black flex items-center gap-2 transition-all shadow-[0_14px_38px_rgba(255,255,255,0.10)]"

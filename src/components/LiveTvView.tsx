@@ -10,7 +10,7 @@ import { MediaCardContextMenu } from './MediaCardContextMenu';
 import { useSettings } from '../context/SettingsContext';
 
 // Helper to extract stream quality from channel names
-export const getQualityBadge = (name: string): string | null => {
+const getQualityBadge = (name: string): string | null => {
   const upper = name.toUpperCase();
   if (/\b(4K|UHD|ULTRA\s*HD)\b/.test(upper)) return '4K';
   if (/\b(1080P?|FHD|FULL\s*HD)\b/.test(upper)) return 'FHD';
@@ -20,7 +20,7 @@ export const getQualityBadge = (name: string): string | null => {
 };
 
 // Helper to clean resolution garbage from names for display
-export const cleanChannelName = (name: string): string => {
+const cleanChannelName = (name: string): string => {
   return name
     .replace(/\[\s*(4K|UHD|ULTRA\s*HD|FHD|FULL\s*HD|HD|SD|1080P?|720P?|576P?|480P?|50FPS|60FPS|HEVC|H265|RAW)\s*\]/gi, '')
     .replace(/\(\s*(4K|UHD|ULTRA\s*HD|FHD|FULL\s*HD|HD|SD|1080P?|720P?|576P?|480P?|50FPS|60FPS|HEVC|H265|RAW)\s*\)/gi, '')
@@ -29,7 +29,7 @@ export const cleanChannelName = (name: string): string => {
 };
 
 // Helper to map category names to Lucide icons dynamically
-export const getCategoryIcon = (name: string) => {
+const getCategoryIcon = (name: string) => {
   const upper = name.toUpperCase();
   if (upper.includes('SPOR') || upper.includes('SPORT')) return Trophy;
   if (upper.includes('SİNEMA') || upper.includes('FİLM') || upper.includes('MOVIE') || upper.includes('CİNEMA') || upper.includes('ACTION') || upper.includes('VOD') || upper.includes('VİZYON')) return Film;
@@ -102,6 +102,8 @@ export const LiveChannelCard = React.memo(({
       onContextMenu={(event) => onContextMenu?.(event, channel)}
       onMouseEnter={() => onActive?.(channel)}
       onFocus={() => onActive?.(channel)}
+      role="button"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(channel); }}
       className={`group flex items-center justify-between p-2 rounded-xl transition-all focusable-item cursor-pointer border ${
         isActive
           ? 'bg-white/[0.06] border-white/10 border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 scale-[1.01]'
@@ -115,6 +117,7 @@ export const LiveChannelCard = React.memo(({
           {channel.logo ? (
             <img 
               src={channel.logo} 
+              alt=""
               className="max-w-[70%] max-h-[70%] object-contain" 
               onError={(e) => { (e.target as HTMLImageElement).src = ''; }} 
             />
@@ -144,10 +147,11 @@ export const LiveChannelCard = React.memo(({
             title={isOnline === 'online' ? (language === 'tr' ? 'Çevrimiçi' : 'Online') : (language === 'tr' ? 'Çevrimdışı' : 'Offline')}
           />
         )}
-        <button
+        <button type="button"
           onClick={(e) => { e.stopPropagation(); onToggleFavorite(channel.id, e); }}
           className="w-7 h-7 rounded-full bg-black/40 hover:bg-black border border-white/10 flex items-center justify-center text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-md cursor-pointer"
           title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
+          aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
         >
           <Heart size={12} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
         </button>
@@ -186,6 +190,8 @@ export const LiveChannelGridCard = React.memo(({
       onContextMenu={(event) => onContextMenu?.(event, channel)}
       onMouseEnter={() => onActive?.(channel)}
       onFocus={() => onActive?.(channel)}
+      role="button"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(channel); }}
       className={`group relative flex flex-col items-center justify-center aspect-video p-3 rounded-2xl transition-all duration-300 focusable-item cursor-pointer border ${
         isActive
           ? 'bg-white/[0.08] border-white/20 shadow-[0_0_20px_var(--accent-glow)] scale-[1.03]'
@@ -202,6 +208,7 @@ export const LiveChannelGridCard = React.memo(({
         {channel.logo ? (
           <img 
             src={channel.logo} 
+            alt=""
             className="max-w-[70%] max-h-[70%] object-contain" 
             onError={(e) => { (e.target as HTMLImageElement).src = ''; }} 
           />
@@ -234,12 +241,13 @@ export const LiveChannelGridCard = React.memo(({
             title={isOnline === 'online' ? (language === 'tr' ? 'Çevrimiçi' : 'Online') : (language === 'tr' ? 'Çevrimdışı' : 'Offline')}
           />
         )}
-        <button
+        <button type="button"
           onClick={(e) => {
             e.stopPropagation();
             onToggleFavorite(channel.id, e);
           }}
           className="w-6 h-6 rounded-full bg-black/65 hover:bg-black border border-white/10 flex items-center justify-center text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-md cursor-pointer"
+          aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
         >
           <Heart size={10} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
         </button>
@@ -268,7 +276,10 @@ export const LiveTvView = React.memo(function LiveTvView({
 }: LiveTvViewProps) {
   const { t, language } = useSettings();
   const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; item: PlaylistItem } | null>(null);
-  const [previewChannel, setPreviewChannel] = React.useState<PlaylistItem | null>(null);
+  const [selectedChannel, setSelectedChannel] = React.useState<PlaylistItem | null>(null);
+  const previewChannel = selectedChannel && filteredDisplayItems.some(item => item.id === selectedChannel.id)
+    ? selectedChannel
+    : (filteredDisplayItems[0] || null);
   
   // Persisted view mode: 'list' | 'grid'
   const [viewMode, setViewMode] = React.useState<'list' | 'grid'>(() => {
@@ -292,13 +303,7 @@ export const LiveTvView = React.memo(function LiveTvView({
     localStorage.setItem('strmly_livetv_preview_collapsed', String(next));
   };
 
-  React.useEffect(() => {
-    if (filteredDisplayItems.length > 0) {
-      setPreviewChannel(filteredDisplayItems[0]);
-    } else {
-      setPreviewChannel(null);
-    }
-  }, [filteredDisplayItems]);
+  // Selected channel is automatically kept in sync with filteredDisplayItems via computed previewChannel
 
   if (selectedGroup !== 'Canlı TV') return null;
 
@@ -333,7 +338,7 @@ export const LiveTvView = React.memo(function LiveTvView({
       <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
         <div className="flex items-center justify-between px-2 mb-2">
           <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
-          <button
+          <button type="button"
             onClick={() => liveCat.setEditMode(!liveCat.editMode)}
             className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors focusable-item ${liveCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
           >
@@ -352,7 +357,7 @@ export const LiveTvView = React.memo(function LiveTvView({
         </div>
 
         {/* All Channels Button */}
-        <button
+        <button type="button"
           onClick={() => { setActiveLiveCategory('Tümü'); setVisibleCount(100); }}
           className={`flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${
             activeLiveCategory === 'Tümü'
@@ -380,7 +385,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                   onDragOver={handleDragOver}
                   onDrop={(e) => liveCat.handleDrop(e, group)}
                 >
-                  <button
+                  <button type="button"
                     onClick={() => { setActiveLiveCategory(group); setVisibleCount(100); }}
                     className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${liveCat.editMode ? 'pr-16' : 'pr-4'} ${
                       isCatActive
@@ -393,17 +398,19 @@ export const LiveTvView = React.memo(function LiveTvView({
                   </button>
                   {liveCat.editMode && (
                     <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                      <button
+                      <button type="button"
                         onClick={(e) => liveCat.toggleFavorite(group, e)}
                         className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                         title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
+                        aria-label={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
                       >
                         <Heart size={11} fill="currentColor" />
                       </button>
-                      <button
+                      <button type="button"
                         onClick={(e) => liveCat.handleHide(group, e)}
                         className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                         title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+                        aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
                       >
                         <Trash2 size={11} />
                       </button>
@@ -430,7 +437,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                 onDragOver={handleDragOver}
                 onDrop={(e) => liveCat.handleDrop(e, group)}
               >
-                <button
+                <button type="button"
                   onClick={() => { setActiveLiveCategory(group); setVisibleCount(100); }}
                   className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${liveCat.editMode ? 'pr-16' : 'pr-4'} ${
                     isCatActive
@@ -443,17 +450,19 @@ export const LiveTvView = React.memo(function LiveTvView({
                 </button>
                 {liveCat.editMode && (
                   <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                    <button
+                    <button type="button"
                       onClick={(e) => liveCat.toggleFavorite(group, e)}
                       className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
+                      aria-label={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
                     >
                       <Heart size={11} />
                     </button>
-                    <button
+                    <button type="button"
                       onClick={(e) => liveCat.handleHide(group, e)}
                       className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+                      aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
                     >
                       <Trash2 size={11} />
                     </button>
@@ -463,7 +472,7 @@ export const LiveTvView = React.memo(function LiveTvView({
             );
           })}
           {otherCategories.length > visibleLiveCategoryLimit && (
-            <button
+            <button type="button"
               onClick={() => setVisibleLiveCategoryLimit(prev => prev + 50)}
               className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item cursor-pointer"
             >
@@ -484,18 +493,20 @@ export const LiveTvView = React.memo(function LiveTvView({
           </span>
           <div className="flex items-center gap-1.5">
             {/* View Mode Switcher */}
-            <button
+            <button type="button"
               onClick={handleToggleViewMode}
               className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer focusable-item"
               title={viewMode === 'list' ? (language === 'tr' ? 'Izgara Görünümü' : 'Grid View') : (language === 'tr' ? 'Liste Görünümü' : 'List View')}
+              aria-label={viewMode === 'list' ? (language === 'tr' ? 'Izgara Görünümü' : 'Grid View') : (language === 'tr' ? 'Liste Görünümü' : 'List View')}
             >
               {viewMode === 'list' ? <Grid size={13} /> : <List size={13} />}
             </button>
             {/* Preview Panel Toggle */}
-            <button
+            <button type="button"
               onClick={handleTogglePreviewCollapse}
               className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer focusable-item"
               title={isPreviewCollapsed ? (language === 'tr' ? 'Detayları Göster' : 'Detayları Gizle') : (language === 'tr' ? 'Detayları Gizle' : 'Show Details')}
+              aria-label={isPreviewCollapsed ? (language === 'tr' ? 'Detayları Göster' : 'Detayları Gizle') : (language === 'tr' ? 'Detayları Gizle' : 'Show Details')}
             >
               <Info size={13} className={isPreviewCollapsed ? 'opacity-40' : 'text-[var(--accent-color)]'} />
             </button>
@@ -524,7 +535,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                       isFavorite={globalFavorites.includes(channel.id)}
                       onToggleFavorite={toggleFavorite}
                       onContextMenu={openContextMenu}
-                      onActive={setPreviewChannel}
+                      onActive={setSelectedChannel}
                       isActive={previewChannel?.id === channel.id}
                     />
                   ))}
@@ -544,7 +555,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                   isFavorite={globalFavorites.includes(channel.id)}
                   onToggleFavorite={toggleFavorite}
                   onContextMenu={openContextMenu}
-                  onActive={setPreviewChannel}
+                  onActive={setSelectedChannel}
                   isActive={previewChannel?.id === channel.id}
                 />
               )}
@@ -562,6 +573,7 @@ export const LiveTvView = React.memo(function LiveTvView({
               {previewChannel.logo ? (
                 <img 
                   src={previewChannel.logo} 
+                  alt=""
                   className="max-h-[55%] max-w-[55%] object-contain z-10 transition-transform duration-500 group-hover:scale-105" 
                   onError={(e) => { (e.target as HTMLImageElement).src = ''; }}
                 />
@@ -597,14 +609,14 @@ export const LiveTvView = React.memo(function LiveTvView({
 
             {/* Play Button */}
             <div className="flex flex-col gap-2 mt-auto shrink-0">
-              <button
+              <button type="button"
                 onClick={() => handlePlayStream(previewChannel)}
                 className="w-full py-3 bg-white hover:bg-neutral-200 text-black rounded-xl flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
               >
                 <Play size={12} fill="#000" /> {language === 'tr' ? 'Kanalı İzle' : 'Watch Channel'}
               </button>
               
-              <button
+              <button type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleFavorite(previewChannel.id, e);

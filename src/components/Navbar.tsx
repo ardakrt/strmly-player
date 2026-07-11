@@ -58,7 +58,7 @@ export const Navbar = memo(function Navbar({
             : 'h-12 max-w-[1180px]'
         }`}
       >
-        <div className="flex min-w-0 items-center h-full">
+        <div className="flex min-w-0 flex-1 items-center h-full">
           <button
             type="button"
             aria-label={t('navbar.home')}
@@ -68,7 +68,7 @@ export const Navbar = memo(function Navbar({
             <span className="text-[14px] font-black tracking-[-0.015em] text-white leading-none transition-opacity duration-200 group-hover:opacity-80">Strmly</span>
           </button>
 
-          <div className="hide-scrollbar flex min-w-0 items-center h-full gap-0.5 overflow-x-auto px-1 sm:ml-1 sm:px-2">
+          <div className="hide-scrollbar flex min-w-0 flex-1 items-center h-full gap-0.5 overflow-x-auto px-1 sm:ml-1 sm:px-2">
             {[
               { id: 'Ana Sayfa', label: t('navbar.home') },
               { id: 'Canlı TV', label: t('navbar.liveTv') },
@@ -174,7 +174,7 @@ export const Navbar = memo(function Navbar({
                       {profiles.filter(p => p.id !== currentProfile?.id).map(prof => {
                         const isProfGradient = prof.avatarUrl.startsWith('linear-gradient');
                         return (
-                          <button
+                          <button type="button"
                             key={prof.id}
                             onClick={() => {
                               setProfileDropdownOpen(false);
@@ -197,13 +197,13 @@ export const Navbar = memo(function Navbar({
                   )}
 
                   <div className="p-1.5 flex flex-col gap-0.5 text-left">
-                    <button
+                    <button type="button"
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer focusable-item"
                       onClick={() => { setProfileDropdownOpen(false); handleLogoutProfile(); }}
                     >
                       <ArrowLeft size={13} className="text-neutral-400 rotate-180" /> {t('navbar.changeProfile')}
                     </button>
-                    <button
+                    <button type="button"
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer focusable-item"
                       onClick={() => { setProfileDropdownOpen(false); setSelectedGroup('Ayarlar'); }}
                     >

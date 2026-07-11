@@ -19,13 +19,13 @@ export function FavoritesEmptyState({ onGoToLiveTv, onGoToHome }: FavoritesEmpty
           Kanalların, filmlerin veya dizilerin üzerindeki kalp simgesine tıklayarak favori listenizi oluşturabilirsiniz.
         </p>
         <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
+          <button type="button"
             onClick={onGoToLiveTv}
             className="h-11 px-5 rounded-full bg-white text-black hover:bg-neutral-200 transition-all font-bold text-xs flex items-center gap-2"
           >
             <Tv size={15} /> Canlı TV&apos;ye Git
           </button>
-          <button
+          <button type="button"
             onClick={onGoToHome}
             className="h-11 px-5 rounded-full bg-white/8 hover:bg-white/14 border border-white/10 transition-all font-bold text-xs text-white flex items-center gap-2"
           >

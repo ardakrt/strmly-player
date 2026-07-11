@@ -89,20 +89,56 @@ export function DownloadsView({ app }: DownloadsViewProps) {
   // app-file:// URL is available, instead of always shelling out to the
   // OS's default video player.
   const playDownloadInternal = useCallback(
-    (downloadId: string) => {
+    async (downloadId: string) => {
       const item = downloads.find((d) => d.id === downloadId);
-      if (item?.playUrl) {
+      if (!item) return;
+
+      let playUrl = item.playUrl;
+      // Older completed entries sometimes only have filePath — refresh playUrl.
+      if (!playUrl && item.status === "completed" && window.electronAPI?.getSavedMediaInfo) {
+        try {
+          const info = await window.electronAPI.getSavedMediaInfo({
+            downloadId: item.id,
+            type: item.type,
+            name: item.name,
+            streamUrl: item.streamUrl,
+          });
+          if (info?.exists && info.playUrl) {
+            playUrl = info.playUrl;
+          }
+        } catch {
+          // fall through to external open
+        }
+      }
+
+      if (playUrl) {
         app.playback.handlePlayStream({
           id: item.id,
           name: item.name,
           logo: item.logo || "",
           group: item.group,
-          url: item.playUrl,
+          url: playUrl,
           type: item.type,
         });
         return;
       }
-      playDownload(downloadId);
+
+      if (item.filePath) {
+        playDownload(downloadId);
+        return;
+      }
+
+      // Last resort: stream original IPTV URL if local file is missing.
+      if (item.streamUrl) {
+        app.playback.handlePlayStream({
+          id: item.id,
+          name: item.name,
+          logo: item.logo || "",
+          group: item.group,
+          url: item.streamUrl,
+          type: item.type,
+        });
+      }
     },
     [downloads, app.playback, playDownload],
   );
@@ -434,7 +470,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
       {/* Minimal Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-6">
         <div className="flex items-center gap-4">
-          <button
+          <button type="button"
             onClick={() => setSelectedGroup("Ayarlar")}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
             title="Geri Dön"
@@ -466,7 +502,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             className="h-8.5 w-full rounded-full border border-white/5 bg-black/15 pl-8.5 pr-8 text-xs font-semibold text-white outline-none transition-all placeholder:text-neutral-600 focus:border-white/12 focus:bg-black/25"
           />
           {query && (
-            <button
+            <button type="button"
               onClick={() => setQuery("")}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors cursor-pointer"
             >
@@ -487,7 +523,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
           ].map((pill) => {
             const active = categoryFilter === pill.id;
             return (
-              <button
+              <button type="button"
                 key={pill.id}
                 onClick={() => setCategoryFilter(pill.id as any)}
                 className={`px-3 py-1 text-[10px] font-bold tracking-wide transition-all border rounded-full cursor-pointer ${
@@ -506,7 +542,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
           {downloads.some(
             (d) => d.status === "downloading" || d.status === "pending",
           ) ? (
-            <button
+            <button type="button"
               onClick={pauseAll}
               className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border border-white/5 rounded-full cursor-pointer bg-white/[0.02] hover:bg-amber-500/10 hover:border-amber-500/20 text-neutral-400 hover:text-amber-400"
             >
@@ -516,7 +552,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
           ) : downloads.some(
               (d) => d.status === "paused" || d.status === "failed",
             ) ? (
-            <button
+            <button type="button"
               onClick={resumeAll}
               className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border border-white/5 rounded-full cursor-pointer bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/20 text-neutral-400 hover:text-emerald-400"
             >
@@ -525,7 +561,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             </button>
           ) : null}
 
-          <button
+          <button type="button"
             onClick={() => void window.electronAPI?.openDownloadsFolder?.()}
             className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border rounded-full cursor-pointer bg-white/[0.02] text-neutral-400 border-white/5 hover:text-white hover:bg-white/[0.05]"
           >
@@ -851,7 +887,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
               </div>
 
               {/* Pause button */}
-              <button
+              <button type="button"
                 onClick={() => onCancel(download)}
                 title={language === "tr" ? "Duraklat" : "Pause"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all active:scale-95"
@@ -860,7 +896,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
               </button>
 
               {/* Cancel (Delete) button */}
-              <button
+              <button type="button"
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "İptal Et" : "Cancel"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -873,7 +909,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
           {/* Queued / Pending cancel */}
           {isPending && (
             <>
-              <button
+              <button type="button"
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "İptal Et" : "Cancel"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -886,7 +922,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
           {/* Retry on fail / resume on paused */}
           {(isFailed || isPaused) && (
             <>
-              <button
+              <button type="button"
                 onClick={() => onRetry(download)}
                 title={
                   language === "tr"
@@ -905,7 +941,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                   <RefreshCw size={11} />
                 )}
               </button>
-              <button
+              <button type="button"
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "Sil" : "Delete"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -918,7 +954,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
           {/* Play (Completed) / See Episodes */}
           {download.status === "completed" && (
             <>
-              <button
+              <button type="button"
                 onClick={() => onPlay(download)}
                 title={
                   download.type === "series"
@@ -945,7 +981,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                   </>
                 )}
               </button>
-              <button
+              <button type="button"
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "Sil" : "Delete"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -1010,8 +1046,8 @@ const DownloadItemRow = memo(function DownloadItemRow({
                   <div className="flex items-center gap-1.5">
                     {ep.status === "completed" && (
                       <>
-                        <button
-                          onClick={() => onPlayEpisode(ep.id)}
+                        <button type="button"
+                          onClick={() => void onPlayEpisode(ep.id)}
                           title={language === "tr" ? "Oynat" : "Play"}
                           className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-black hover:bg-neutral-200 cursor-pointer transition-all active:scale-95 shadow-sm"
                         >
@@ -1021,7 +1057,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                             className="ml-0.5"
                           />
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => onDeleteEpisode(ep.id)}
                           title={language === "tr" ? "Sil" : "Delete"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -1033,7 +1069,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
 
                     {ep.status === "pending" && (
                       <>
-                        <button
+                        <button type="button"
                           onClick={() => onPrioritizeEpisode(ep.id)}
                           title={
                             language === "tr"
@@ -1044,7 +1080,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                         >
                           <Zap size={10} fill="currentColor" />
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => onCancelEpisode(ep.id)}
                           title={language === "tr" ? "İptal Et" : "Cancel"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -1056,14 +1092,14 @@ const DownloadItemRow = memo(function DownloadItemRow({
 
                     {ep.status === "downloading" && (
                       <>
-                        <button
+                        <button type="button"
                           onClick={() => onCancelEpisode(ep.id)}
                           title={language === "tr" ? "Duraklat" : "Pause"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all active:scale-95"
                         >
                           <Pause size={10} fill="currentColor" />
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => onDeleteEpisode(ep.id)}
                           title={language === "tr" ? "İptal Et" : "Cancel"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
@@ -1075,7 +1111,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
 
                     {(ep.status === "paused" || ep.status === "failed") && (
                       <>
-                        <button
+                        <button type="button"
                           onClick={() => onRetryEpisode(ep.id)}
                           title={
                             language === "tr"
@@ -1098,7 +1134,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                             <RefreshCw size={10} />
                           )}
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => onDeleteEpisode(ep.id)}
                           title={language === "tr" ? "Sil" : "Delete"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"

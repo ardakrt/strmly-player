@@ -1,9 +1,10 @@
 import React, { lazy, Suspense } from 'react';
+import type { useProfiles } from '../hooks/useProfiles';
 
 const ProfileScreen = lazy(() => import('./ProfileScreen').then(m => ({ default: m.ProfileScreen })));
 
 interface ProfileScreenWrapperProps {
-  profilesHook: any;
+  profilesHook: ReturnType<typeof useProfiles>;
   isParsing: boolean;
   toast: { show: boolean; message: string };
   activeTheme: string;
