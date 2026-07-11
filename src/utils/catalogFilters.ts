@@ -24,7 +24,7 @@ export function matchesQualityFilter(rank: number, qualityFilter: string): boole
 export function passesUlusalHdRule(item: PlaylistItem): boolean {
   const gLower = getItemGroupLower(item);
   if (!gLower.includes('ulusal')) return true;
-  return isHdChannel(item.name, item.nameLower);
+  return isHdChannel(item.name);
 }
 
 /**
@@ -99,11 +99,32 @@ export function seriesMatchesQuery(series: GroupedSeries, query: string): boolea
   return false;
 }
 
+/**
+ * Series quality buckets (historic UI semantics — not exclusive getQualityRank ranks).
+ * e.g. "720" alone is SD; "720p"/"720i" are HD; "2160" alone is SD; "2160p" is 4K.
+ */
 export function seriesMatchesQuality(series: GroupedSeries, qualityFilter: string): boolean {
   if (qualityFilter === 'all') return true;
   const nameLower = getItemNameLower(series);
-  const rank = getQualityRank(series.name, nameLower);
-  return matchesQualityFilter(rank, qualityFilter);
+  const is4k =
+    nameLower.includes('4k') || nameLower.includes('uhd') || nameLower.includes('2160p');
+  const isFhd =
+    nameLower.includes('fhd') || nameLower.includes('1080p') || nameLower.includes('1080i');
+  const isHd =
+    (nameLower.includes('hd') && !nameLower.includes('fhd')) ||
+    nameLower.includes('720p') ||
+    nameLower.includes('720i');
+  const isSd =
+    nameLower.includes('sd') ||
+    nameLower.includes('576p') ||
+    nameLower.includes('480p') ||
+    (!is4k && !isFhd && !isHd);
+
+  if (qualityFilter === '4k') return is4k;
+  if (qualityFilter === 'fhd') return isFhd;
+  if (qualityFilter === 'hd') return isHd;
+  if (qualityFilter === 'sd') return isSd;
+  return true;
 }
 
 /**

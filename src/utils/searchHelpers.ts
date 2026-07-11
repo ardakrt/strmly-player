@@ -109,11 +109,18 @@ export function getQualityRank(name: string, nameLower?: string): number {
   return 1;
 }
 
-// Check if a channel name indicates HD/UHD quality (used for "Ulusal" category filtering)
-export function isHdChannel(name: string, nameLower?: string): boolean {
-  // Prefer precomputed nameLower; fall back once. Quality rank 2+ is HD/FHD/4K.
-  const rank = getQualityRank(name, nameLower);
-  return rank >= 2;
+// Check if a channel name indicates HD/UHD quality (used for "Ulusal" category filtering).
+// Semantic lock: must match historic includes(hd|fhd|uhd|4k|1080) on name.toLowerCase() —
+// NOT getQualityRank (which also treats 720 / 2160 as HD/4K).
+export function isHdChannel(name: string): boolean {
+  const n = name.toLowerCase();
+  return (
+    n.includes('hd') ||
+    n.includes('fhd') ||
+    n.includes('uhd') ||
+    n.includes('4k') ||
+    n.includes('1080')
+  );
 }
 
 const SERIES_NAME_PATTERNS = [
@@ -137,33 +144,38 @@ function isSeriesName(name: string): boolean {
   return false;
 }
 
-/** True if URL looks like a file-based VOD path (extension before query/hash). */
+const VOD_EXTENSIONS = [
+  '.mp4',
+  '.mkv',
+  '.avi',
+  '.mov',
+  '.flv',
+  '.mpeg',
+  '.mpg',
+  '.m4v',
+  '.webm',
+  '.wmv',
+] as const;
+
+/**
+ * True if URL matches historic VOD-extension detection used by preprocessPlaylistItems:
+ * endsWith(ext) | includes(ext+'?') | includes(ext+'&') | includes('#'+ext) | includes('/'+ext)
+ * (covers path segments like /.mp4/ and .mp4& without a ?).
+ */
 export function urlHasVodExtension(urlLower: string): boolean {
-  // Single scan for common VOD extensions without 5× includes per extension
-  const q = urlLower.indexOf('?');
-  const h = urlLower.indexOf('#');
-  let end = urlLower.length;
-  if (q >= 0) end = Math.min(end, q);
-  if (h >= 0) end = Math.min(end, h);
-  const pathPart = end < urlLower.length ? urlLower.slice(0, end) : urlLower;
-  const dot = pathPart.lastIndexOf('.');
-  if (dot < 0) return false;
-  const ext = pathPart.slice(dot);
-  switch (ext) {
-    case '.mp4':
-    case '.mkv':
-    case '.avi':
-    case '.mov':
-    case '.flv':
-    case '.mpeg':
-    case '.mpg':
-    case '.m4v':
-    case '.webm':
-    case '.wmv':
+  for (let i = 0; i < VOD_EXTENSIONS.length; i++) {
+    const ext = VOD_EXTENSIONS[i];
+    if (
+      urlLower.endsWith(ext) ||
+      urlLower.includes(ext + '?') ||
+      urlLower.includes(ext + '&') ||
+      urlLower.includes('#' + ext) ||
+      urlLower.includes('/' + ext)
+    ) {
       return true;
-    default:
-      return false;
+    }
   }
+  return false;
 }
 
 // Pre-process playlist items for fast O(1) searches

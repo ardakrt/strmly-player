@@ -30,12 +30,18 @@ const {
   matchesQualityFilter,
   applyCatalogPostFilters,
   seriesMatchesQuery,
+  seriesMatchesQuality,
   sortByNameAzZa,
   takeTopByScore,
   dailyStableScore,
 } = require(catalogOut);
 
-const { urlHasVodExtension, preprocessPlaylistItems, getQualityRank } = require(searchOut);
+const {
+  urlHasVodExtension,
+  preprocessPlaylistItems,
+  getQualityRank,
+  isHdChannel,
+} = require(searchOut);
 const { groupPlaylistItemsToSeries } = require(seriesOut);
 
 // --- quality / catalog filters ---
@@ -79,6 +85,38 @@ const series = {
 assert.strictEqual(seriesMatchesQuery(series, 's01e01'), true);
 assert.strictEqual(seriesMatchesQuery(series, 'nomatch'), false);
 
+// --- isHdChannel: historic Ulusal predicate (NOT getQualityRank) ---
+assert.strictEqual(isHdChannel('TRT 1 HD'), true);
+assert.strictEqual(isHdChannel('Show FHD'), true);
+assert.strictEqual(isHdChannel('Film 4K'), true);
+assert.strictEqual(isHdChannel('Kanal 1080'), true);
+assert.strictEqual(isHdChannel('Kanal 720'), false, '720 alone is not HD under historic rule');
+assert.strictEqual(isHdChannel('Show 720p'), false, '720p alone is not HD under historic Ulusal rule');
+assert.strictEqual(isHdChannel('Film 2160p'), false, '2160p alone is not HD under historic Ulusal rule');
+assert.strictEqual(isHdChannel('TRT 1'), false);
+// getQualityRank still ranks 720 as 2 / 2160 as 4 — must not drive isHdChannel
+assert.strictEqual(getQualityRank('Kanal 720', 'kanal 720'), 2);
+assert.strictEqual(isHdChannel('Kanal 720'), false);
+
+// --- seriesMatchesQuality: historic exclusive-ish buckets ---
+function sq(name, filter) {
+  return seriesMatchesQuality(
+    { name, nameLower: name.toLocaleLowerCase('tr-TR'), group: 'G', seasons: {} },
+    filter,
+  );
+}
+assert.strictEqual(sq('drama 720', 'sd'), true, '720 alone → SD bucket');
+assert.strictEqual(sq('drama 720', 'hd'), false, '720 alone → not HD bucket');
+assert.strictEqual(sq('drama 720p', 'hd'), true, '720p → HD');
+assert.strictEqual(sq('drama 720i', 'hd'), true, '720i → HD');
+assert.strictEqual(sq('drama 2160', 'sd'), true, '2160 alone → SD (not 2160p)');
+assert.strictEqual(sq('drama 2160', '4k'), false);
+assert.strictEqual(sq('drama 2160p', '4k'), true);
+assert.strictEqual(sq('drama 1080i', 'fhd'), true);
+assert.strictEqual(sq('drama fhd', 'fhd'), true);
+assert.strictEqual(sq('drama hd only', 'hd'), true);
+assert.strictEqual(sq('drama fhd', 'hd'), false, 'fhd excluded from hd bucket');
+
 // --- takeTopByScore equivalence vs full sort ---
 const pool = [];
 for (let i = 0; i < 200; i++) {
@@ -98,27 +136,63 @@ assert.deepStrictEqual(
   'takeTopByScore matches full sort top-80',
 );
 
-// --- url / preprocess ---
-assert.strictEqual(urlHasVodExtension('http://x/a/movie.mp4'), true);
-assert.strictEqual(urlHasVodExtension('http://x/a/movie.mp4?token=1'), true);
+// --- urlHasVodExtension: parity with historic vodExtensions.some() ---
+const vodExts = ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.mpeg', '.mpg', '.m4v', '.webm', '.wmv'];
+function historicVod(urlLower) {
+  return vodExts.some(
+    (ext) =>
+      urlLower.endsWith(ext) ||
+      urlLower.includes(ext + '?') ||
+      urlLower.includes(ext + '&') ||
+      urlLower.includes('#' + ext) ||
+      urlLower.includes('/' + ext),
+  );
+}
+const vodUrls = [
+  'http://x/a/movie.mp4',
+  'http://x/a/movie.mp4?token=1',
+  'http://x/a/file.mp4&sid=2',
+  'http://x/vod/.mp4/stream',
+  'http://x/a#.mp4',
+  'http://cdn/x/movie.mkv',
+  'http://cdn/x/.mkv/playlist',
+  'http://x/live/stream.m3u8',
+  'http://x/play/channel',
+  'http://x/a/movie.mp4',
+];
+// force lowercase inputs as preprocess does
+for (const u of vodUrls) {
+  const lower = u.toLowerCase();
+  assert.strictEqual(
+    urlHasVodExtension(lower),
+    historicVod(lower),
+    `urlHasVodExtension parity for ${lower}`,
+  );
+}
+assert.strictEqual(urlHasVodExtension('http://x/a/file.mp4&x=1'), true, '.mp4& without ?');
+assert.strictEqual(urlHasVodExtension('http://x/vod/.mp4/chunk'), true, '/.mp4/ path segment');
 assert.strictEqual(urlHasVodExtension('http://x/live/stream.m3u8'), false);
-assert.strictEqual(getQualityRank('Film 1080p', 'film 1080p'), 3);
 
+// preprocess must classify regression URLs as movie (VOD), not live
 const raw = [
   { name: 'Live One', group: 'Live', url: 'http://x/live/1.m3u8', type: 'live' },
   { name: 'Show S01E01', group: 'Dizi', url: 'http://x/files/show.mkv', type: 'live' },
   { name: 'Film Name', group: 'Sinema', url: 'http://x/movie/1', type: 'live' },
+  { name: 'Odd Path Film', group: 'Genel', url: 'http://cdn/vod/.mp4/part1', type: 'live' },
+  { name: 'Amp Film', group: 'Genel', url: 'http://cdn/f.mp4&auth=1', type: 'live' },
 ];
 preprocessPlaylistItems(raw);
 assert.strictEqual(raw[0].type, 'live');
 assert.strictEqual(raw[1].type, 'series', 'vod+episode name → series');
 assert.strictEqual(raw[2].type, 'movie', '/movie/ path → movie');
+assert.strictEqual(raw[3].type, 'movie', '/.mp4/ path → VOD movie (not live)');
+assert.strictEqual(raw[4].type, 'movie', '.mp4& → VOD movie (not live)');
 assert.ok(raw[0].nameLower && raw[0].qualityRank);
 
 // --- series grouping dedup ---
 const eps = [
   { name: 'Demo S01E01', group: 'Drama', url: 'u1', type: 'series', logo: 'a.png' },
-  { name: 'Demo S01E01', group: 'Drama', url: 'u1b', type: 'series', logo: '' }, // dup episode
+  { name: 'Demo S01E01', group: 'Drama', url: 'u1b', type: 'series', logo: '' },
   { name: 'Demo S01E02', group: 'Drama', url: 'u2', type: 'series', logo: '' },
 ];
 const grouped = groupPlaylistItemsToSeries(eps);
