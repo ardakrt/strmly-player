@@ -364,7 +364,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
           </div>
         </div>
 
-        <button
+        <button type="button"
           onClick={(e) => {
             e.stopPropagation();
             toggleFavorite(channel.id, e);
@@ -582,13 +582,13 @@ export const HomeView = memo(function HomeView({
               </div>
             </div>
             <div className="flex shrink-0 flex-col sm:flex-row lg:flex-col xl:flex-row gap-3">
-              <button
+              <button type="button"
                 onClick={onOpenPlaylistSetup}
                 className="h-12 px-6 rounded-full bg-white text-black hover:bg-neutral-200 transition-all font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95"
               >
                 <UploadCloud size={15} /> IPTV Listesi Ekle
               </button>
-              <button
+              <button type="button"
                 onClick={() => showToast('M3U URL, M3U dosyası veya Xtream Codes bilgileriyle liste ekleyebilirsiniz.')}
                 className="h-12 px-6 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 transition-all font-bold text-xs text-white active:scale-95"
               >
@@ -629,7 +629,7 @@ export const HomeView = memo(function HomeView({
             <Play size={16} fill="#000" className="ml-0.5" />
           </div>
         </div>
-        <button
+        <button type="button"
           onClick={(e) => toggleFavorite(channel.id, e)}
           className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110"
           title="Favorilere Ekle"
@@ -740,7 +740,7 @@ export const HomeView = memo(function HomeView({
             </p>
 
             <div className="flex items-center gap-2.5 mt-1.5">
-              <button
+              <button type="button"
                 onClick={() => {
                   if (isPlaylistHero && currentHeroItem) {
                     if (currentHeroItem.type === 'series') {
@@ -756,7 +756,7 @@ export const HomeView = memo(function HomeView({
               >
                 <Play size={13} fill="#000" className="ml-0.5" /> {language === 'tr' ? 'Şimdi İzle' : 'Watch Now'}
               </button>
-              <button
+              <button type="button"
                 onClick={() => {
                   if (isPlaylistHero && currentHeroItem) {
                     handleOpenDetails(currentHeroItem);
@@ -813,7 +813,7 @@ export const HomeView = memo(function HomeView({
               <div className="w-2 h-2 rounded-full bg-[var(--accent-color)] animate-pulse" />
               <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'İzlemeye Devam Et' : 'Continue Watching'}</h3>
             </div>
-            <button
+            <button type="button"
               onClick={() => {
                 clearRecentlyWatched();
               }}
@@ -1000,7 +1000,7 @@ export const HomeView = memo(function HomeView({
               <Play size={14} className="text-white fill-white" />
               <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'Popüler Filmler' : 'Popular Movies'}</h3>
             </div>
-            <button
+            <button type="button"
               onClick={() => setSelectedGroup('Sinema')}
               className="group/see-all inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[9px] text-neutral-400 hover:bg-white/[0.08] hover:text-white font-bold uppercase tracking-wider transition-all"
             >
@@ -1050,7 +1050,7 @@ export const HomeView = memo(function HomeView({
               <Sparkles size={14} className="text-white" />
               <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'Popüler Diziler' : 'Popular Series'}</h3>
             </div>
-            <button
+            <button type="button"
               onClick={() => setSelectedGroup('Diziler')}
               className="group/see-all inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[9px] text-neutral-400 hover:bg-white/[0.08] hover:text-white font-bold uppercase tracking-wider transition-all"
             >
@@ -1098,7 +1098,7 @@ export const HomeView = memo(function HomeView({
           <UploadCloud size={38} className="text-neutral-600 mb-4 animate-pulse" />
           <h3 className="text-base font-semibold text-neutral-200">{t('home.noPlaylistsTitle')}</h3>
           <p className="text-xs text-neutral-500 max-w-sm mt-1.5 mb-5">{t('home.noPlaylistsDesc')}</p>
-          <button
+          <button type="button"
             onClick={() => setSelectedGroup('Ayarlar')}
             className="px-5 py-2.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-black text-xs font-semibold rounded-xl transition-all"
           >
