@@ -17,6 +17,7 @@ $AbandonedPatterns = @(
   '^\?\? \.grok',
   '^\?\? \.agents',
   '^\?\? mcps',
+  '^\?\? testsprite-plans',
   '^\?\? test_image',
   '^\?\? \.env$',
   '^\?\? dist/',

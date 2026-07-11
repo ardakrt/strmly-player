@@ -70,101 +70,7 @@ function formatTotalSize(totalMB: number): string {
   return `${tb.toFixed(2)} TB`;
 }
 
-export function DownloadsView({ app }: DownloadsViewProps) {
-  const { language } = useSettings();
-  const { setSelectedGroup } = app.navigation;
-
-  const {
-    downloads,
-    cancelDownload,
-    retryDownload,
-    deleteDownload,
-    playDownload,
-    prioritizeDownload,
-    pauseAll,
-    resumeAll,
-  } = useDownloads();
-
-  // Plays a saved download inside the app's own player when a local
-  // app-file:// URL is available, instead of always shelling out to the
-  // OS's default video player.
-  const playDownloadInternal = useCallback(
-    async (downloadId: string) => {
-      const item = downloads.find((d) => d.id === downloadId);
-      if (!item) return;
-
-      let playUrl = item.playUrl;
-      // Older completed entries sometimes only have filePath — refresh playUrl.
-      if (!playUrl && item.status === "completed" && window.electronAPI?.getSavedMediaInfo) {
-        try {
-          const info = await window.electronAPI.getSavedMediaInfo({
-            downloadId: item.id,
-            type: item.type,
-            name: item.name,
-            streamUrl: item.streamUrl,
-          });
-          if (info?.exists && info.playUrl) {
-            playUrl = info.playUrl;
-          }
-        } catch {
-          // fall through to external open
-        }
-      }
-
-      if (playUrl) {
-        app.playback.handlePlayStream({
-          id: item.id,
-          name: item.name,
-          logo: item.logo || "",
-          group: item.group,
-          url: playUrl,
-          type: item.type,
-        });
-        return;
-      }
-
-      if (item.filePath) {
-        playDownload(downloadId);
-        return;
-      }
-
-      // Last resort: stream original IPTV URL if local file is missing.
-      if (item.streamUrl) {
-        app.playback.handlePlayStream({
-          id: item.id,
-          name: item.name,
-          logo: item.logo || "",
-          group: item.group,
-          url: item.streamUrl,
-          type: item.type,
-        });
-      }
-    },
-    [downloads, app.playback, playDownload],
-  );
-
-  const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<
-    "all" | "active" | "movie" | "series"
-  >("all");
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    group: GroupedDownloadItem;
-  } | null>(null);
-
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  };
-
-  // Group downloads function helper
-  const groupDownloads = (rawItems: DownloadItem[]): GroupedDownloadItem[] => {
+const groupDownloadsHelper = (rawItems: DownloadItem[]): GroupedDownloadItem[] => {
     const result: GroupedDownloadItem[] = [];
     const seriesGroups: Record<string, DownloadItem[]> = {};
 
@@ -289,6 +195,102 @@ export function DownloadsView({ app }: DownloadsViewProps) {
     return result;
   };
 
+export function DownloadsView({ app }: DownloadsViewProps) {
+  const { language } = useSettings();
+  const { setSelectedGroup } = app.navigation;
+
+  const {
+    downloads,
+    cancelDownload,
+    retryDownload,
+    deleteDownload,
+    playDownload,
+    prioritizeDownload,
+    pauseAll,
+    resumeAll,
+  } = useDownloads();
+
+  // Plays a saved download inside the app's own player when a local
+  // app-file:// URL is available, instead of always shelling out to the
+  // OS's default video player.
+  const playDownloadInternal = useCallback(
+    async (downloadId: string) => {
+      const item = downloads.find((d) => d.id === downloadId);
+      if (!item) return;
+
+      let playUrl = item.playUrl;
+      // Older completed entries sometimes only have filePath — refresh playUrl.
+      if (!playUrl && item.status === "completed" && window.electronAPI?.getSavedMediaInfo) {
+        try {
+          const info = await window.electronAPI.getSavedMediaInfo({
+            downloadId: item.id,
+            type: item.type,
+            name: item.name,
+            streamUrl: item.streamUrl,
+          });
+          if (info?.exists && info.playUrl) {
+            playUrl = info.playUrl;
+          }
+        } catch {
+          // fall through to external open
+        }
+      }
+
+      if (playUrl) {
+        app.playback.handlePlayStream({
+          id: item.id,
+          name: item.name,
+          logo: item.logo || "",
+          group: item.group,
+          url: playUrl,
+          type: item.type,
+        });
+        return;
+      }
+
+      if (item.filePath) {
+        playDownload(downloadId);
+        return;
+      }
+
+      // Last resort: stream original IPTV URL if local file is missing.
+      if (item.streamUrl) {
+        app.playback.handlePlayStream({
+          id: item.id,
+          name: item.name,
+          logo: item.logo || "",
+          group: item.group,
+          url: item.streamUrl,
+          type: item.type,
+        });
+      }
+    },
+    [downloads, app.playback, playDownload],
+  );
+
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<
+    "all" | "active" | "movie" | "series"
+  >("all");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    group: GroupedDownloadItem;
+  } | null>(null);
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
+  // Group downloads function helper
+
+
   // Size calculations
   const totalSizeMB = useMemo(() => {
     return downloads
@@ -333,7 +335,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
       });
 
     // 2. Perform Series + Season Grouping
-    const grouped = groupDownloads(filteredRaw);
+    const grouped = groupDownloadsHelper(filteredRaw);
 
     // 3. Sort grouped items by their latest activity/added timestamp descending
     return grouped.sort((a, b) => {
