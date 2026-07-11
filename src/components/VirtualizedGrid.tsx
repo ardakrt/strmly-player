@@ -16,7 +16,6 @@ export function VirtualizedGrid<T>({
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [clientHeight, setClientHeight] = useState(600);
-  const [columns, setColumns] = useState(4);
   const [containerWidth, setContainerWidth] = useState(1000);
 
   useEffect(() => {
@@ -82,9 +81,7 @@ export function VirtualizedGrid<T>({
     }
   };
 
-  useEffect(() => {
-    setColumns(getColumnsCount(containerWidth, cardLayoutSize));
-  }, [cardLayoutSize, containerWidth]);
+  const columns = getColumnsCount(containerWidth, cardLayoutSize);
 
   const rowHeight = useMemo(() => {
     // Gap size is 24px (gap-6)

@@ -347,10 +347,11 @@ function createWindow() {
   // Log all console messages from the renderer process
   mainWindow.webContents.on(
     "console-message",
-    (event, level, message, line, sourceId) => {
+    (event) => {
+      const { level, message, lineNumber, sourceId } = event;
       logToFile(
         "[RENDERER]",
-        `Level:${level} - ${message} (at ${sourceId}:${line})`,
+        `Level:${level} - ${message} (at ${sourceId}:${lineNumber})`,
       );
     },
   );
