@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { SavedPlaylist } from '../types';
 import { useCategoryManager } from './useCategoryManager';
@@ -122,7 +122,7 @@ export function useAppCategories({
       }
       return prevOrder;
     });
-  }, [uniqueLiveCategories, saveAppSetting]);
+  }, [uniqueLiveCategories, saveAppSetting, setCustomCategoryOrder]);
 
   useEffect(() => {
     if (uniqueSeriesCategories.length === 0) return;
@@ -142,7 +142,7 @@ export function useAppCategories({
       }
       return prevOrder;
     });
-  }, [uniqueSeriesCategories, saveAppSetting]);
+  }, [uniqueSeriesCategories, saveAppSetting, setCustomSeriesCategoryOrder]);
 
   useEffect(() => {
     if (uniqueMovieCategories.length === 0) return;
@@ -162,7 +162,7 @@ export function useAppCategories({
       }
       return prevOrder;
     });
-  }, [uniqueMovieCategories, saveAppSetting]);
+  }, [uniqueMovieCategories, saveAppSetting, setCustomMovieCategoryOrder]);
 
   const liveCat = useCategoryManager({
     domain: 'live',

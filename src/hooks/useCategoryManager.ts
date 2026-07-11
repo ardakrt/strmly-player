@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 
 type Domain = 'live' | 'series' | 'movie';
 

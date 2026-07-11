@@ -16,7 +16,7 @@ function percentile(values, ratio) {
 }
 
 async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } = {}) {
-  const samples = await window.webContents.executeJavaScript(`(async () => {
+  const benchmark = await window.webContents.executeJavaScript(`(async () => {
     const pages = ${JSON.stringify(PAGES)};
     const iterations = ${iterations};
     const warmups = ${warmups};
@@ -54,15 +54,66 @@ async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } 
         if (pass >= warmups) results[page.name].push(duration);
       }
     }
-    return results;
+    const scrollResults = {};
+    for (const page of pages) {
+      await navigate(page);
+      const candidates = [document.scrollingElement, ...document.querySelectorAll('*')]
+        .filter(Boolean)
+        .filter(element => {
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 &&
+            (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+            element.scrollHeight - element.clientHeight > 32;
+        });
+      const target = candidates.sort((a, b) =>
+        (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight)
+      )[0];
+      if (!target) {
+        scrollResults[page.name] = { scrollRange: 0, frames: [] };
+        continue;
+      }
+
+      const scrollRange = Math.min(2400, target.scrollHeight - target.clientHeight);
+      const frames = [];
+      let previous = performance.now();
+      target.scrollTop = 0;
+      for (let frame = 1; frame <= 120; frame += 1) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const now = performance.now();
+        frames.push(now - previous);
+        previous = now;
+        const progress = frame <= 60 ? frame / 60 : (120 - frame) / 60;
+        target.scrollTop = scrollRange * progress;
+      }
+      scrollResults[page.name] = { scrollRange, frames };
+    }
+    return { navigation: results, scroll: scrollResults };
   })()`);
 
-  return Object.fromEntries(Object.entries(samples).map(([page, values]) => [page, {
+  const navigation = Object.fromEntries(Object.entries(benchmark.navigation).map(([page, values]) => [page, {
     medianMs: Number(percentile(values, 0.5).toFixed(2)),
     p95Ms: Number(percentile(values, 0.95).toFixed(2)),
     maxMs: Number(Math.max(...values).toFixed(2)),
     samples: values.map(value => Number(value.toFixed(2))),
   }]));
+  const scroll = Object.fromEntries(Object.entries(benchmark.scroll).map(([page, result]) => {
+    const values = result.frames;
+    return [page, values.length === 0 ? {
+      scrollRange: 0,
+      medianFrameMs: 0,
+      p95FrameMs: 0,
+      maxFrameMs: 0,
+      missedFramePercent: 0,
+    } : {
+      scrollRange: Math.round(result.scrollRange),
+      medianFrameMs: Number(percentile(values, 0.5).toFixed(2)),
+      p95FrameMs: Number(percentile(values, 0.95).toFixed(2)),
+      maxFrameMs: Number(Math.max(...values).toFixed(2)),
+      missedFramePercent: Number((values.filter(value => value > 20).length / values.length * 100).toFixed(2)),
+    }];
+  }));
+  return { navigation, scroll };
 }
 
 module.exports = { runPerformanceBenchmark };

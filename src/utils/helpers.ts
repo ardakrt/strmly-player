@@ -30,32 +30,7 @@ export const getMockDetails = (title: string, group: string) => {
   };
 };
 
-// Auto-generating realistic live EPG programs based on time
-const getLiveEPG = (channelId: string, name: string): EPGProgram => {
-  const hash = name.length + channelId.charCodeAt(0) || 0;
-  const minute = new Date().getMinutes();
-  const currentProgress = (minute + (hash % 15)) % 100;
 
-  const currentPrograms = [
-    "Haber Bülteni - Canlı", "Spor Dünyası", "Sabah Kahvesi", "Sinema Gecesi",
-    "Belgesel Saati", "Dünya Turu", "Ekonomi Gündemi", "Çizgi Film Şöleni",
-    "Müzik Rüzgarı", "Teknoloji Rehberi", "Siyaset Meydanı", "Yemek Tarifleri"
-  ];
-  const nextPrograms = [
-    "Hava Durumu & Analiz", "Canlı Maç Yayını", "Gündem Özel", "Kısa Film Kuşağı",
-    "Vahşi Yaşam Belgeseli", "Gezi Rehberi", "Finans Analizi", "Çocuk Kulübü",
-    "Hit Müzik Listesi", "Geleceğin Teknolojileri", "Tartışma Programı", "Gurme Keşifler"
-  ];
-
-  const programIndex = hash % currentPrograms.length;
-  const nextIndex = (hash + 1) % nextPrograms.length;
-
-  return {
-    title: currentPrograms[programIndex],
-    nextTitle: nextPrograms[nextIndex],
-    progress: currentProgress
-  };
-};
 
 export const hexToRgbStr = (hex: string) => {
   const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
