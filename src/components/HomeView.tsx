@@ -97,15 +97,12 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   const { language } = useSettings();
   const quality = getQualityLabel(channel.name);
   const cardRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
 
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsVisible(true);
-      return;
-    }
+
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some(entry => entry.isIntersecting)) {

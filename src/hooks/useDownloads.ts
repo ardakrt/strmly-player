@@ -553,7 +553,6 @@ export function useDownloads() {
     ensureIpcListeners();
     const listener = () => setLocalDownloads([...downloadsState]);
     listeners.add(listener);
-    listener();
 
     return () => {
       listeners.delete(listener);
