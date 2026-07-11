@@ -605,10 +605,10 @@ export const SeriesModal = ({
                     aria-label={allSeasonSaved
                       ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
                       : seasonDownloading
-                      ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
-                      : savedCount > 0
-                        ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
-                        : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
+                        ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
+                        : savedCount > 0
+                          ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
+                          : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
                     }
                   >
                     {allSeasonSaved
