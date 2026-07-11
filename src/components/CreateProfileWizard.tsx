@@ -379,6 +379,7 @@ export function CreateProfileWizard({
                           key={option.id}
                           type="button"
                           aria-pressed={selected}
+                          aria-label={optionLabel}
                           onClick={() => toggleContentPreference(option.id)}
                           className={`h-16 rounded-2xl border px-3 flex flex-col items-start justify-center gap-2 transition-all ${selected ? 'border-white bg-white text-black shadow-[0_12px_30px_rgba(255,255,255,0.10)]' : 'border-white/8 bg-white/[0.025] text-neutral-500 hover:border-white/25 hover:bg-white/[0.055] hover:text-white'}`}
                         >

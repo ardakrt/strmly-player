@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "strmly",
   "private": true,
   "version": "1.6.0",
@@ -16,7 +16,7 @@
     "typecheck": "tsc -b",
     "typecheck:unused": "tsc -p tsconfig.app.json --noUnusedLocals true --noUnusedParameters true --noEmit",
     "test:migration": "node scripts/test-migration.js",
-    "test:security": "node scripts/test-security.js",
+    "check:a11y": "node scripts/check-a11y-controls.js",`n    "test:security": "node scripts/test-security.js",
     "test:performance": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-performance.ps1",
     "verify": "npm run lint && npm run typecheck:unused && npm run test:migration && npm run test:security && npm run build",
     "preview": "vite preview",
@@ -115,3 +115,4 @@
     }
   }
 }
+

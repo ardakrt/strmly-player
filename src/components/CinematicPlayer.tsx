@@ -633,6 +633,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               e.stopPropagation();
               onClose();
             }}
+            aria-label={language === 'tr' ? 'Geri' : 'Back'}
           >
             <ArrowLeft size={18} />
           </button>

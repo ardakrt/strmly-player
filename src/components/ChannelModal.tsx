@@ -237,6 +237,7 @@ export const ChannelModal = ({
             <button type="button"
               onClick={() => setShowCastModal(false)}
               className="absolute top-4 right-4 z-50 w-8 h-8 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
+              aria-label={language === 'tr' ? 'Kapat' : 'Close'}
             >
               ✕
             </button>
