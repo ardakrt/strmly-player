@@ -4,6 +4,8 @@ export type { PlaylistItem };
 // Extend window interface for Electron API
 declare global {
   interface Window {
+    /** Set by Electron preload when STRMLY_PERF_BENCH=1 */
+    strmlyPerfBench?: boolean;
     electronAPI?: {
       playExternal: (
         url: string,

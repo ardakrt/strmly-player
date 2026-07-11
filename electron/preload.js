@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Used by the performance harness and readiness gates in the renderer.
+contextBridge.exposeInMainWorld('strmlyPerfBench', process.env.STRMLY_PERF_BENCH === '1');
+
 contextBridge.exposeInMainWorld('electronAPI', {
   playExternal: (url, playerType) => ipcRenderer.invoke('play-external', { url, playerType }),
   saveConfig: (key, value) => ipcRenderer.invoke('save-config', { key, value }),

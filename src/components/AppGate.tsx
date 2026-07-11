@@ -45,7 +45,11 @@ export function AppGate({ app }: AppGateProps) {
     );
   }
 
-  if (!boot.hasInitialBooted) {
+  const isPerfBench =
+    typeof window !== 'undefined' &&
+    (window as Window & { strmlyPerfBench?: boolean }).strmlyPerfBench === true;
+
+  if (!boot.hasInitialBooted && !isPerfBench) {
     return (
       <SplashScreen
         activeAccent={ui.activeAccent}
@@ -54,7 +58,9 @@ export function AppGate({ app }: AppGateProps) {
     );
   }
 
-  if (boot.loaded && (activeProfileId === null || !boot.isAppReady)) {
+  // Performance bench mode must reach the main shell (navbar) without a live
+  // profile/playlist so scripts/test-performance.ps1 can measure real nav cost.
+  if (!isPerfBench && boot.loaded && (activeProfileId === null || !boot.isAppReady)) {
     return (
       <SettingsProvider value={settingsContextValue}>
         <ProfileScreenWrapper

@@ -2,7 +2,7 @@
 
 const PAGES = [
   { name: "Ana Sayfa", navIndex: 0 },
-  { name: "Canlı TV", navIndex: 1 },
+  { name: "Canli TV", navIndex: 1 },
   { name: "Sinema", navIndex: 2 },
   { name: "Diziler", navIndex: 3 },
   { name: "Favorilerim", navIndex: 4 },
@@ -24,10 +24,18 @@ async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } 
     const nextPaint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const deadline = performance.now() + 30000;
 
-    while (!document.querySelector('nav[aria-label]')) {
-      if (performance.now() > deadline) throw new Error('Navigation did not become ready within 30 seconds');
-      await sleep(50);
-    }
+    const navReady = async () => {
+      while (true) {
+        const nav = document.querySelector('nav[aria-label]');
+        const links = nav ? [...nav.querySelectorAll('div.hide-scrollbar > button')] : [];
+        if (nav && links.length >= 6) return links;
+        if (performance.now() > deadline) {
+          throw new Error('Navigation did not become ready within 30 seconds (links=' + links.length + ')');
+        }
+        await sleep(50);
+      }
+    };
+    await navReady();
 
     const navigate = async page => {
       let button;
@@ -35,12 +43,14 @@ async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } 
         const profileButton = document.querySelector('nav button[aria-expanded]');
         profileButton?.click();
         await nextPaint();
-        button = document.querySelector('button:has(svg.lucide-settings)');
+        await sleep(80);
+        button = document.querySelector('button:has(svg.lucide-settings)')
+          || [...document.querySelectorAll('button')].find(b => /settings|ayar/i.test(b.getAttribute('aria-label') || b.textContent || ''));
       } else {
-        const navButtons = [...document.querySelectorAll('nav div.hide-scrollbar > button')];
+        const navButtons = await navReady();
         button = navButtons[page.navIndex];
       }
-      if (!button) throw new Error('Page button not found: ' + page.name);
+      if (!button) throw new Error('Page button not found: ' + page.name + ' (navIndex=' + page.navIndex + ')');
       const start = performance.now();
       button.click();
       await nextPaint();

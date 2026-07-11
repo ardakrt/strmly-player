@@ -40,7 +40,11 @@ export function AppShell({ app }: AppShellProps) {
       <AppOverlays app={app} />
 
       <Navbar
-        loaded={boot.isAppReady}
+        loaded={
+          boot.isAppReady ||
+          (typeof window !== 'undefined' &&
+            (window as Window & { strmlyPerfBench?: boolean }).strmlyPerfBench === true)
+        }
         scrolled={ui.scrolled}
         selectedGroup={navigation.selectedGroup}
         setSelectedGroup={navigation.setSelectedGroup}
