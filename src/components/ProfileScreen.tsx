@@ -270,7 +270,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             <div
               key={`ambient-${profile.id}`}
               className={`absolute inset-0 transition-opacity duration-[1100ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isActiveAmbient ? 'opacity-100' : 'opacity-0'}`}
-              style={{ willChange: 'opacity' }}
+
             >
               <div className="absolute left-1/2 top-[47%] w-[62vw] h-[62vw] max-w-[980px] max-h-[980px] -translate-x-1/2 -translate-y-1/2">
                 {isGradient ? (

@@ -653,8 +653,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             className="w-full bg-black/60 backdrop-blur-xl rounded-full px-4 py-3 flex items-center gap-3 border border-white/10 transform-gpu"
             style={{
               boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-              backfaceVisibility: 'hidden',
-              willChange: 'backdrop-filter'
+              backfaceVisibility: 'hidden'
             }}
           >
             {channel.type === 'series' && (
