@@ -192,47 +192,14 @@ export function useCinematicPlayer({
   const executeSeek = async (targetTime: number) => {
     if (!videoRef.current || !selectedChannel) return;
     setBufferedProgress(0);
-    seekGraceUntilRef.current = Date.now() + 20000;
     lastRequestedSeekRef.current = targetTime;
-    setPlaybackStatus('seeking');
-    setPlaybackMessage(
-      language === 'tr'
-        ? `İleri sarılıyor... (${formatPlayerTime(targetTime)})`
-        : `Seeking... (${formatPlayerTime(targetTime)})`
-    );
+    const video = videoRef.current;
 
-    if (isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
-      const requestId = ++seekRequestIdRef.current;
+    // --- Native path (offline app-file / progressive URL): no full-screen "seeking" overlay.
+    // Setting playbackStatus='seeking' for ~1 frame caused a black flash on every scrub.
+    if (!isTranscodingRef.current) {
+      seekGraceUntilRef.current = Date.now() + 4000;
       try {
-        // Proxy now returns the local URL immediately; browser connects while FFmpeg seeks.
-        const result = await invokeFfmpegProxy(
-          targetTime,
-          activeAudioStreamIdRef.current,
-        );
-        if (requestId !== seekRequestIdRef.current) return;
-        if (result.success && result.url && videoRef.current) {
-          seekOffsetRef.current = targetTime;
-          // Cache-bust so Chromium does not reuse a closed previous stream connection.
-          const streamUrl = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-          videoRef.current.src = streamUrl;
-          videoRef.current.muted = playerMutedRef.current;
-          videoRef.current.volume = playerVolumeRef.current;
-          videoRef.current.play().then(forceUnmute).catch(() => { });
-        } else {
-          setPlaybackStatus('playing');
-          setPlaybackMessage('');
-          showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
-        }
-      } catch (e) {
-        console.error("Transcoded seek error:", e);
-        setPlaybackStatus('playing');
-        setPlaybackMessage('');
-        showToast(translateReason("Video ileri sarilirken hata olustu.", language));
-      }
-    } else {
-      try {
-        const video = videoRef.current;
-        // Fast path: jump immediately; overlay clears on seeked/playing.
         video.currentTime = targetTime;
         if (video.paused) {
           video.play().then(forceUnmute).catch(() => { });
@@ -243,6 +210,65 @@ export function useCinematicPlayer({
         setPlaybackMessage('');
         showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
       }
+      return;
+    }
+
+    if (!window.electronAPI?.startFfmpegProxy) return;
+
+    // --- Transcode path: try in-stream native seek first (no FFmpeg restart / no black flash).
+    const relative = targetTime - seekOffsetRef.current;
+    const mediaDuration = Number.isFinite(video.duration) ? video.duration : 0;
+    const canNativeWithinStream =
+      relative >= 0 &&
+      mediaDuration > 1 &&
+      relative < mediaDuration - 0.35;
+
+    if (canNativeWithinStream) {
+      seekGraceUntilRef.current = Date.now() + 6000;
+      try {
+        video.currentTime = relative;
+        if (video.paused) {
+          video.play().then(forceUnmute).catch(() => { });
+        }
+        return;
+      } catch {
+        // fall through to proxy restart
+      }
+    }
+
+    // Far jump outside the current FFmpeg window — restart proxy (show seeking HUD).
+    seekGraceUntilRef.current = Date.now() + 20000;
+    setPlaybackStatus('seeking');
+    setPlaybackMessage(
+      language === 'tr'
+        ? `İleri sarılıyor... (${formatPlayerTime(targetTime)})`
+        : `Seeking... (${formatPlayerTime(targetTime)})`
+    );
+
+    const requestId = ++seekRequestIdRef.current;
+    try {
+      const result = await invokeFfmpegProxy(
+        targetTime,
+        activeAudioStreamIdRef.current,
+      );
+      if (requestId !== seekRequestIdRef.current) return;
+      if (result.success && result.url && videoRef.current) {
+        seekOffsetRef.current = targetTime;
+        const streamUrl = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        videoRef.current.src = streamUrl;
+        videoRef.current.muted = playerMutedRef.current;
+        videoRef.current.volume = playerVolumeRef.current;
+        videoRef.current.play().then(forceUnmute).catch(() => { });
+      } else {
+        setPlaybackStatus('playing');
+        setPlaybackMessage('');
+        showToast(translateReason("Video ileri sarilamadi. Kaynak bu noktadan devam etmeyi desteklemiyor olabilir.", language));
+      }
+    } catch (e) {
+      console.error("Transcoded seek error:", e);
+      setPlaybackStatus('playing');
+      setPlaybackMessage('');
+      showToast(translateReason("Video ileri sarilirken hata olustu.", language));
     }
   };
 

@@ -90,6 +90,16 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       : (language === 'tr' ? 'Dizi bölümü' : 'Episode');
   const isPlaybackError = playbackStatus === 'error';
   const isSeeking = playbackStatus === 'seeking';
+  // Delay seeking HUD so instant/native seeks never flash a black "İleri sarılıyor" frame.
+  const [showSeekingHud, setShowSeekingHud] = useState(false);
+  useEffect(() => {
+    if (!isSeeking) {
+      setShowSeekingHud(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShowSeekingHud(true), 280);
+    return () => window.clearTimeout(t);
+  }, [isSeeking]);
   // Seek uses a light overlay so the scrub position stays visible; don't blank the whole player.
   const shouldShowPlaybackOverlay = isPlaybackError || (!isSeeking && (!videoReady || !!playbackMessage));
 
@@ -522,9 +532,9 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             onHideControls();
           }}
         />
-        {isSeeking && (
-          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center animate-fade-in">
-            <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-black/55 px-5 py-3 shadow-2xl backdrop-blur-md">
+        {showSeekingHud && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-5 py-3 shadow-2xl backdrop-blur-md">
               <LoaderCircle size={22} className="animate-spin text-white/85" />
               <div className="flex flex-col items-start gap-0.5">
                 <span className="text-sm font-bold tracking-wide text-white/90">
