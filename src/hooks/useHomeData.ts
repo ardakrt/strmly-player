@@ -520,7 +520,7 @@ export function useHomeData({
     const visibleChannels = selected.slice(0, 15);
     if (activeContentPreferences.includes('sports')) {
       const sportsKeywords = ['spor', 'sport', 'bein', 's sport', 'ssport', 'tivibu spor', 'smart spor', 'nba', 'futbol'];
-      return [...visibleChannels].sort((a, b) => {
+      return visibleChannels.toSorted((a, b) => {
         const aText = `${a.name} ${a.group || ''}`.toLocaleLowerCase('tr-TR');
         const bText = `${b.name} ${b.group || ''}`.toLocaleLowerCase('tr-TR');
         const aSport = sportsKeywords.some(keyword => aText.includes(keyword)) ? 1 : 0;
