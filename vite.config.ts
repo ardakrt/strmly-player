@@ -31,6 +31,7 @@ export default defineConfig({
     }
   },
   server: {
+    allowedHosts: true,
     watch: {
       ignored: [
         '**/profiles/**',
