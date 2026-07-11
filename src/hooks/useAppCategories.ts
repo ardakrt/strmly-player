@@ -103,6 +103,67 @@ export function useAppCategories({
     }
   }
 
+  // Sync custom category order with playlist items
+  useEffect(() => {
+    if (uniqueLiveCategories.length === 0) return;
+    setCustomCategoryOrder(prevOrder => {
+      const uniqueCatsSet = new Set(uniqueLiveCategories);
+      const prevOrderSet = new Set(prevOrder);
+      const updatedOrder = [
+        ...prevOrder.filter(c => uniqueCatsSet.has(c)),
+        ...uniqueLiveCategories.filter(c => !prevOrderSet.has(c))
+      ];
+      const hasChanged =
+        updatedOrder.length !== prevOrder.length ||
+        updatedOrder.some((val, index) => val !== prevOrder[index]);
+      if (hasChanged) {
+        void saveAppSetting('custom_category_order', updatedOrder);
+        return updatedOrder;
+      }
+      return prevOrder;
+    });
+  }, [uniqueLiveCategories, saveAppSetting]);
+
+  useEffect(() => {
+    if (uniqueSeriesCategories.length === 0) return;
+    setCustomSeriesCategoryOrder(prevOrder => {
+      const uniqueCatsSet = new Set(uniqueSeriesCategories);
+      const prevOrderSet = new Set(prevOrder);
+      const updatedOrder = [
+        ...prevOrder.filter(c => uniqueCatsSet.has(c)),
+        ...uniqueSeriesCategories.filter(c => !prevOrderSet.has(c))
+      ];
+      const hasChanged =
+        updatedOrder.length !== prevOrder.length ||
+        updatedOrder.some((val, index) => val !== prevOrder[index]);
+      if (hasChanged) {
+        void saveAppSetting('custom_series_category_order', updatedOrder);
+        return updatedOrder;
+      }
+      return prevOrder;
+    });
+  }, [uniqueSeriesCategories, saveAppSetting]);
+
+  useEffect(() => {
+    if (uniqueMovieCategories.length === 0) return;
+    setCustomMovieCategoryOrder(prevOrder => {
+      const uniqueCatsSet = new Set(uniqueMovieCategories);
+      const prevOrderSet = new Set(prevOrder);
+      const updatedOrder = [
+        ...prevOrder.filter(c => uniqueCatsSet.has(c)),
+        ...uniqueMovieCategories.filter(c => !prevOrderSet.has(c))
+      ];
+      const hasChanged =
+        updatedOrder.length !== prevOrder.length ||
+        updatedOrder.some((val, index) => val !== prevOrder[index]);
+      if (hasChanged) {
+        void saveAppSetting('custom_movie_category_order', updatedOrder);
+        return updatedOrder;
+      }
+      return prevOrder;
+    });
+  }, [uniqueMovieCategories, saveAppSetting]);
+
   const liveCat = useCategoryManager({
     domain: 'live',
     uniqueCategories: uniqueLiveCategories,

@@ -381,10 +381,8 @@ export function useAppProvider() {
 
   const isAppReady = loaded && isSeriesReady && isHomeReady;
 
-  const activeShowcaseList = useMemo(
-    () => (showcaseItems.length > 0 ? showcaseItems : HERO_BACKDROPS),
-    [showcaseItems],
-  );
+  const activeShowcaseList =
+    showcaseItems.length > 0 ? showcaseItems : HERO_BACKDROPS;
   const isPlaylistHero = showcaseItems.length > 0;
   const currentHeroItem = useMemo(
     () =>

@@ -2,7 +2,7 @@ import type { TmdbEndpoint, TmdbSearchResult, TmdbSearchResponse, TmdbTitleOverr
 import { cleanMediaTitle } from './seriesGroupers';
 
 // Global cache for TMDB poster lookups
-export const globalPosterPromises: Record<string, Promise<string | null> | undefined> = {};
+const globalPosterPromises: Record<string, Promise<string | null> | undefined> = {};
 export const globalSyncPosterMap = new Map<string, string>();
 const originalSet = globalSyncPosterMap.set.bind(globalSyncPosterMap);
 const MAX_POSTER_MAP_SIZE = 10000;

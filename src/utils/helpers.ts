@@ -31,7 +31,7 @@ export const getMockDetails = (title: string, group: string) => {
 };
 
 // Auto-generating realistic live EPG programs based on time
-export const getLiveEPG = (channelId: string, name: string): EPGProgram => {
+const getLiveEPG = (channelId: string, name: string): EPGProgram => {
   const hash = name.length + channelId.charCodeAt(0) || 0;
   const minute = new Date().getMinutes();
   const currentProgress = (minute + (hash % 15)) % 100;

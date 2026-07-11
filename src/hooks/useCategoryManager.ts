@@ -59,26 +59,7 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
   const keys = KEYS[domain];
   const labels = LABELS[domain];
 
-  // Sync custom category order with playlist items
-  useEffect(() => {
-    if (uniqueCategories.length === 0) return;
-    setCustomOrder(prevOrder => {
-      const uniqueCatsSet = new Set(uniqueCategories);
-      const prevOrderSet = new Set(prevOrder);
-      const updatedOrder = [
-        ...prevOrder.filter(c => uniqueCatsSet.has(c)),
-        ...uniqueCategories.filter(c => !prevOrderSet.has(c))
-      ];
-      const hasChanged =
-        updatedOrder.length !== prevOrder.length ||
-        updatedOrder.some((val, index) => val !== prevOrder[index]);
-      if (hasChanged) {
-        saveAppSetting(keys.customOrder, updatedOrder);
-        return updatedOrder;
-      }
-      return prevOrder;
-    });
-  }, [uniqueCategories, keys.customOrder, saveAppSetting, setCustomOrder]);
+
 
   // Actions
   const toggleFavorite = useCallback((categoryName: string, e: React.MouseEvent) => {
