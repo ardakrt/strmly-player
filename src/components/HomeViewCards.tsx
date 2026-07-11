@@ -35,11 +35,7 @@ export function LiveTvQuickChannelCard({
   } = useHoverPreview(cardRef);
 
   return (
-<<<<<<< HEAD
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handlePlayStream(channel))(); } }} tabIndex={0} role="button"
-=======
-    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handlePlayStream(channel))(e as any); } }} tabIndex={0} role="button"
->>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
       ref={cardRef}
       className="flex-shrink-0 w-[170px] md:w-[210px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035] hover:z-20"
       onClick={() => handlePlayStream(channel)}
@@ -125,11 +121,7 @@ export function ContinueWatchingCard({
   } = useHoverPreview(cardRef);
 
   return (
-<<<<<<< HEAD
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handlePlayStream(channel))(); } }} tabIndex={0} role="button"
-=======
-    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handlePlayStream(channel))(e as any); } }} tabIndex={0} role="button"
->>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
       ref={cardRef}
       className="flex-shrink-0 w-[200px] md:w-[240px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03]"
       onClick={() => handlePlayStream(channel)}
@@ -400,11 +392,7 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
   };
 
   return (
-<<<<<<< HEAD
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(); } }} tabIndex={0} role="button"
-=======
-    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(e as any); } }} tabIndex={0} role="button"
->>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
       ref={cardRef}
       className="home-poster-card flex-shrink-0 w-[176px] md:w-[208px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03] hover:z-20"
       onClick={handleCardClick}

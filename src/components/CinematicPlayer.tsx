@@ -516,11 +516,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
 
         <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
             onHideControls();
-<<<<<<< HEAD
           })(); } }} tabIndex={0} role="button"
-=======
-          })(e as any); } }} tabIndex={0} role="button"
->>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
           className="absolute inset-0 z-0 cursor-pointer"
           onClick={() => {
             onHideControls();

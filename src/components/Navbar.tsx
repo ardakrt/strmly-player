@@ -147,11 +147,7 @@ export const Navbar = memo(function Navbar({
 
             {profileDropdownOpen && (
               <>
-<<<<<<< HEAD
                 <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setProfileDropdownOpen(false))(); } }} tabIndex={0} role="button" className="fixed inset-0 z-40" onClick={() => setProfileDropdownOpen(false)} />
-=======
-                <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setProfileDropdownOpen(false))(e as any); } }} tabIndex={0} role="button" className="fixed inset-0 z-40" onClick={() => setProfileDropdownOpen(false)} />
->>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
                 <div className="absolute right-0 top-11 mt-2 w-60 bg-neutral-950/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_24px_70px_rgba(0,0,0,0.6)] overflow-hidden z-50 animate-scale-in">
                   <div className="p-3.5 border-b border-white/5 flex items-center gap-3 bg-white/[0.02]">
                     <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 flex items-center justify-center shadow-lg bg-white/[0.06]">
