@@ -381,22 +381,67 @@ const BROWSER_UNSAFE_AUDIO = new Set([
 ]);
 const BROWSER_SAFE_AUDIO = new Set(["aac", "mp3", "opus", "vorbis", "mp4a"]);
 
+const FFMPEG_HTTP_UA = "VLC/3.0.20 LibVLC/3.0.20";
+
+/**
+ * IPTV/play URLs often append a fake extension as a URL hash (e.g. `#.mkv`).
+ * Hash is not sent to the server and confuses FFmpeg; strip it before download.
+ */
+function sanitizeDownloadUrl(rawUrl) {
+  const s = String(rawUrl || "").trim();
+  if (!s) return s;
+  try {
+    const u = new URL(s);
+    if (u.hash) u.hash = "";
+    return u.toString();
+  } catch {
+    return s.replace(/#.*$/, "");
+  }
+}
+
+function ffmpegInputArgs(streamUrl) {
+  return [
+    "-user_agent",
+    FFMPEG_HTTP_UA,
+    "-reconnect",
+    "1",
+    "-reconnect_streamed",
+    "1",
+    "-reconnect_delay_max",
+    "30",
+    "-rw_timeout",
+    "15000000",
+    "-i",
+    streamUrl,
+  ];
+}
+
 async function probeStreamTracks(streamUrl, ffmpegPath) {
   return new Promise((resolve) => {
-    const proc = spawn(ffmpegPath, ["-hide_banner", "-i", streamUrl], {
-      windowsHide: true,
-    });
+    const proc = spawn(
+      ffmpegPath,
+      ["-hide_banner", ...ffmpegInputArgs(streamUrl)],
+      { windowsHide: true },
+    );
     let stderr = "";
+    let settled = false;
+    const finish = (tracks) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(tracks);
+    };
     const timeout = setTimeout(() => {
       try {
         proc.kill("SIGKILL");
       } catch {}
-    }, 4500);
+      // Ensure we don't hang forever if kill doesn't emit close promptly
+      setTimeout(() => finish([]), 500);
+    }, 8000);
     proc.stderr.on("data", (data) => {
       stderr += data.toString();
     });
     proc.on("close", () => {
-      clearTimeout(timeout);
       const tracks = [];
       const streamRegex =
         /Stream #0:(\d+)(?:\(([^)]+)\))?:\s*(Audio|Video|Subtitle):\s*([a-zA-Z0-9_]+)/gi;
@@ -409,11 +454,10 @@ async function probeStreamTracks(streamUrl, ffmpegPath) {
           codec: match[4] ? match[4].toLowerCase() : "unknown",
         });
       }
-      resolve(tracks);
+      finish(tracks);
     });
     proc.on("error", () => {
-      clearTimeout(timeout);
-      resolve([]);
+      finish([]);
     });
   });
 }
@@ -791,13 +835,31 @@ async function runFfmpegDownload({
   ffmpegPath,
   options,
 }) {
+  const inputUrl = sanitizeDownloadUrl(streamUrl);
+  if (inputUrl !== streamUrl) {
+    log(
+      "[DOWNLOAD] Stripped URL fragment for FFmpeg:",
+      d().redactSensitiveUrl(streamUrl),
+      "→",
+      d().redactSensitiveUrl(inputUrl),
+    );
+  }
+
   let mapArgs = [];
   let selectedAudioCodec = "unknown";
   let selectedVideoCodec = "unknown";
   let mappedSubtitle = false;
   try {
-    const tracks = await probeStreamTracks(streamUrl, ffmpegPath);
+    console.log("[DOWNLOAD] Probing stream tracks…", name);
+    log("[DOWNLOAD] Probing stream tracks…", name);
+    const tracks = await probeStreamTracks(inputUrl, ffmpegPath);
     log(`[DOWNLOAD] Probed tracks for ${name}: ${JSON.stringify(tracks)}`);
+    console.log(
+      "[DOWNLOAD] Probe done:",
+      name,
+      "tracks=",
+      tracks.length,
+    );
     const videoTrack = tracks.find((t) => t.type === "video");
     const audioTracks = tracks.filter((t) => t.type === "audio");
     const subtitleTracks = tracks.filter((t) => t.type === "subtitle");
@@ -870,9 +932,10 @@ async function runFfmpegDownload({
   );
 
   return new Promise((resolve) => {
+    // No +faststart here: it rewrites the whole file after copy and freezes UI at ~100%.
+    // Copy remux is enough for offline play via app-file://.
     const args = [
-      "-i",
-      streamUrl,
+      ...ffmpegInputArgs(inputUrl),
       ...mapArgs,
       "-c:v",
       "copy",
@@ -880,10 +943,9 @@ async function runFfmpegDownload({
         ? ["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"]
         : ["-c:a", "copy"]),
       ...(mappedSubtitle ? ["-c:s", "mov_text"] : ["-sn"]),
-      "-movflags",
-      "+faststart",
       "-progress",
       "pipe:1",
+      "-nostats",
       "-y",
       outputPath,
     ];
@@ -891,6 +953,12 @@ async function runFfmpegDownload({
       "[DOWNLOAD] FFmpeg command:",
       ffmpegPath,
       d().redactSensitiveText(args.join(" ")),
+    );
+    console.log(
+      "[DOWNLOAD] Starting FFmpeg remux for",
+      name,
+      "→",
+      path.basename(outputPath),
     );
 
     let proc;
@@ -917,90 +985,130 @@ async function runFfmpegDownload({
       lastTime: Date.now(),
     });
     let duration = 0;
-    let lastProgress = 0;
+    let lastProgress = -1;
     let stderrBuffer = "";
+    let lastSizeProgressAt = 0;
 
-    proc.stdout.on("data", async (data) => {
-      const lines = data.toString().split("\n");
-      for (const line of lines) {
-        if (line.startsWith("out_time_ms=")) {
-          const timeMs = parseInt(line.split("=")[1], 10) / 1000000;
-          if (duration > 0) {
-            const progress = Math.min(
-              100,
-              Math.round((timeMs / duration) * 100),
-            );
-            if (progress !== lastProgress) {
-              lastProgress = progress;
-              const elapsed =
-                (Date.now() -
-                  (activeDownloads.get(downloadId)?.startTime || Date.now())) /
-                1000;
-              const remaining =
-                progress > 0
-                  ? Math.round((elapsed / progress) * (100 - progress))
-                  : 0;
-              const timeLeft =
-                remaining > 60
-                  ? `${Math.floor(remaining / 60)}m ${remaining % 60}s`
-                  : `${remaining}s`;
-              try {
-                const stats = fs.statSync(outputPath);
-                const download = activeDownloads.get(downloadId);
-                const now = Date.now();
-                if (
-                  download &&
-                  (!download.lastSpaceCheck ||
-                    now - download.lastSpaceCheck > 5000)
-                ) {
-                  download.lastSpaceCheck = now;
-                  const space = await checkFreeSpace(outputPath);
-                  if (space < 30 * 1024 * 1024) {
-                    download.isDiskFull = true;
-                    proc.kill("SIGKILL");
-                    return;
-                  }
-                }
-                let speed = "";
-                if (download && (now - download.lastTime) / 1000 > 0.5) {
-                  const bytesPerSecond =
-                    (stats.size - download.lastBytes) /
-                    ((now - download.lastTime) / 1000);
-                  speed = `${((bytesPerSecond * 8) / (1024 * 1024)).toFixed(1)} Mbps`;
-                  download.lastBytes = stats.size;
-                  download.lastTime = now;
-                }
-                sendProgress({
-                  downloadId,
-                  progress,
-                  speed,
-                  timeLeft,
-                  size: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`,
-                  downloader: "ffmpeg",
-                });
-              } catch {}
-            }
+    const emitFfmpegProgress = async (rawProgress, phase) => {
+      // Cap at 99 until process exits successfully — avoids "100% forever" while still writing.
+      const progress = Math.max(0, Math.min(99, Math.round(rawProgress)));
+      if (progress === lastProgress && phase !== "size") return;
+      lastProgress = progress;
+      const download = activeDownloads.get(downloadId);
+      const elapsed =
+        (Date.now() - (download?.startTime || Date.now())) / 1000;
+      const remaining =
+        progress > 0 ? Math.round((elapsed / progress) * (100 - progress)) : 0;
+      const timeLeft =
+        remaining > 60
+          ? `${Math.floor(remaining / 60)}m ${remaining % 60}s`
+          : `${Math.max(0, remaining)}s`;
+      try {
+        const stats = fs.existsSync(outputPath)
+          ? fs.statSync(outputPath)
+          : { size: 0 };
+        const now = Date.now();
+        if (
+          download &&
+          (!download.lastSpaceCheck || now - download.lastSpaceCheck > 5000)
+        ) {
+          download.lastSpaceCheck = now;
+          const space = await checkFreeSpace(outputPath);
+          if (space < 30 * 1024 * 1024) {
+            download.isDiskFull = true;
+            try {
+              proc.kill("SIGKILL");
+            } catch {}
+            return;
           }
-        } else if (line.startsWith("duration=")) {
-          duration = parseFloat(line.split("=")[1]) || 0;
+        }
+        let speed = "";
+        if (download && (now - download.lastTime) / 1000 > 0.5) {
+          const bytesPerSecond =
+            (stats.size - download.lastBytes) /
+            ((now - download.lastTime) / 1000);
+          if (bytesPerSecond > 0) {
+            speed = `${((bytesPerSecond * 8) / (1024 * 1024)).toFixed(1)} Mbps`;
+          }
+          download.lastBytes = stats.size;
+          download.lastTime = now;
+        }
+        sendProgress({
+          downloadId,
+          progress,
+          speed,
+          timeLeft,
+          size: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`,
+          downloader: "ffmpeg",
+          phase: phase || "download",
+        });
+      } catch {
+        /* ignore stat races */
+      }
+    };
+
+    // Heartbeat: when Duration is unknown, still show size growth so UI is not stuck.
+    const sizeTicker = setInterval(() => {
+      if (!activeDownloads.has(downloadId)) return;
+      try {
+        if (!fs.existsSync(outputPath)) return;
+        const stats = fs.statSync(outputPath);
+        if (stats.size <= 0) return;
+        const now = Date.now();
+        if (now - lastSizeProgressAt < 1500) return;
+        lastSizeProgressAt = now;
+        if (duration > 0) return;
+        // Logarithmic-ish growth toward 95 without claiming completion
+        const mb = stats.size / (1024 * 1024);
+        const est = Math.min(95, Math.floor(10 + Math.log10(mb + 1) * 28));
+        void emitFfmpegProgress(est, "size");
+      } catch {
+        /* ignore */
+      }
+    }, 2000);
+
+    proc.stdout.on("data", (data) => {
+      const lines = data.toString().split(/\r?\n/);
+      for (const line of lines) {
+        if (line.startsWith("out_time_ms=") || line.startsWith("out_time_us=")) {
+          const raw = parseInt(line.split("=")[1], 10);
+          // FFmpeg historically labels us as out_time_ms; out_time_us is microseconds too.
+          const timeSec = Number.isFinite(raw) ? raw / 1e6 : 0;
+          if (duration > 0 && timeSec > 0) {
+            void emitFfmpegProgress((timeSec / duration) * 100, "time");
+          }
+        } else if (line.startsWith("out_time=") && duration > 0) {
+          // out_time=HH:MM:SS.microseconds
+          const m = line.match(/out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/);
+          if (m) {
+            const timeSec =
+              parseInt(m[1], 10) * 3600 +
+              parseInt(m[2], 10) * 60 +
+              parseFloat(m[3]);
+            void emitFfmpegProgress((timeSec / duration) * 100, "time");
+          }
         }
       }
     });
 
     proc.stderr.on("data", (data) => {
-      stderrBuffer += data.toString();
-      const durationMatch = data
-        .toString()
-        .match(/Duration:\s*(\d+):(\d+):(\d+)/);
+      const text = data.toString();
+      stderrBuffer += text;
+      if (stderrBuffer.length > 32000) {
+        stderrBuffer = stderrBuffer.slice(-16000);
+      }
+      const durationMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+)/);
       if (durationMatch) {
         duration =
           parseInt(durationMatch[1], 10) * 3600 +
           parseInt(durationMatch[2], 10) * 60 +
           parseInt(durationMatch[3], 10);
+        log(`[DOWNLOAD] Stream duration for ${name}: ${duration}s`);
       }
     });
 
     proc.on("close", (code) => {
+      clearInterval(sizeTicker);
       const wasDiskFull = activeDownloads.get(downloadId)?.isDiskFull;
       activeDownloads.delete(downloadId);
       if (wasDiskFull) {
@@ -1028,8 +1136,21 @@ async function runFfmpegDownload({
           }
           clearDownloadMarker(outputPath);
           const playUrl = d().appFileUrlFromPath(outputPath);
+          sendProgress({
+            downloadId,
+            progress: 100,
+            speed: "",
+            timeLeft: "0",
+            size: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`,
+            downloader: "ffmpeg",
+          });
           sendComplete({ downloadId, filePath: outputPath, playUrl });
           notifyDone(name, options.language);
+          console.log(
+            "[DOWNLOAD] FFmpeg finished OK:",
+            name,
+            `${(stats.size / (1024 * 1024)).toFixed(1)} MB`,
+          );
           return resolve({ success: true, filePath: outputPath, playUrl });
         } catch {
           cleanupPartialDownload(outputPath);
@@ -1040,7 +1161,9 @@ async function runFfmpegDownload({
         }
       }
       cleanupPartialDownload(outputPath);
-      const safeStderr = d().redactSensitiveText(stderrBuffer).slice(-200);
+      const safeStderr = d().redactSensitiveText(stderrBuffer).slice(-400);
+      console.error("[DOWNLOAD] FFmpeg failed:", code, safeStderr);
+      log("[DOWNLOAD] FFmpeg failed:", code, safeStderr);
       resolve({
         success: false,
         error: `FFmpeg exited with code ${code}: ${safeStderr}`,
@@ -1048,6 +1171,7 @@ async function runFfmpegDownload({
     });
 
     proc.on("error", (err) => {
+      clearInterval(sizeTicker);
       activeDownloads.delete(downloadId);
       cleanupPartialDownload(outputPath);
       resolve({ success: false, error: err.message });
@@ -1186,17 +1310,18 @@ function registerDownloadHandlers(dependencies) {
   ipcMain.handle(
     "download-stream",
     async (event, { downloadId, streamUrl, type, name }) => {
+      const cleanedUrl = sanitizeDownloadUrl(streamUrl);
       console.log(
         "[DOWNLOAD] Handler called:",
         downloadId,
-        d().redactSensitiveUrl(streamUrl),
+        d().redactSensitiveUrl(cleanedUrl),
         type,
         name,
       );
       log(
         "[DOWNLOAD] Handler called:",
         downloadId,
-        d().redactSensitiveUrl(streamUrl),
+        d().redactSensitiveUrl(cleanedUrl),
         type,
         name,
       );
@@ -1208,7 +1333,7 @@ function registerDownloadHandlers(dependencies) {
         type,
         name,
         downloadId,
-        streamUrl,
+        cleanedUrl,
       );
       const { outputPath, candidates } = lookup;
       const target = getDownloadTarget(type, name, downloadId, true);
@@ -1237,7 +1362,7 @@ function registerDownloadHandlers(dependencies) {
 
       markDownloadStarted(outputPath);
       writeDownloadMeta(outputPath, {
-        streamUrl,
+        streamUrl: cleanedUrl,
         name: name || "",
         type: target.downloadType,
         savedAt: Date.now(),
@@ -1246,11 +1371,11 @@ function registerDownloadHandlers(dependencies) {
       const config = await d().ensureConfigLoaded();
       const options = getDownloadOptions(config);
 
-      if (String(streamUrl).toLowerCase().includes("m3u8")) {
+      if (String(cleanedUrl).toLowerCase().includes("m3u8")) {
         try {
           const segmentedResult = await downloadHlsSegmented(
             downloadId,
-            streamUrl,
+            cleanedUrl,
             outputPath,
             name,
             options,
@@ -1288,7 +1413,7 @@ function registerDownloadHandlers(dependencies) {
 
       return runFfmpegDownload({
         downloadId,
-        streamUrl,
+        streamUrl: cleanedUrl,
         outputPath,
         name,
         ffmpegPath,
@@ -1492,4 +1617,5 @@ module.exports = {
   getMediaLibraryBaseDir,
   getLegacyDownloadsBaseDir,
   ensureDir,
+  sanitizeDownloadUrl,
 };
