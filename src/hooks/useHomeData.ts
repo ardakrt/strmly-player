@@ -16,6 +16,7 @@ import {
   isUnavailableCatalogItem,
   getStableMatchPercentage
 } from '../utils/searchHelpers';
+import { dailyStableScore, takeTopByScore } from '../utils/catalogFilters';
 
 interface UseHomeDataProps {
   items: PlaylistItem[];
@@ -357,60 +358,48 @@ export function useHomeData({
     };
   }, [activeFeaturedIndex, showcaseItems, tmdbApiKey, activeContentPreferences]);
 
-  // Memoized popular movies, excluding maintenance/test/backup items
+  // Memoized popular movies — top-80 by daily score without full N log-sort when N >> 80
   const populerFilmler = useMemo(() => {
     if (itemBuckets.movie.length === 0) return [];
     const daySeed = new Date().toISOString().slice(0, 10) + '-movies';
-    const scoreItem = (item: PlaylistItem) => {
-      const seed = `${daySeed}-${item.name}-${item.group || ''}`;
-      let score = 0;
-      for (let i = 0; i < seed.length; i++) {
-        score = (score + seed.charCodeAt(i)) % 997;
-      }
-      if (activeContentPreferences.includes('kids')) {
-        const nLower = getItemNameLower(item);
-        const gLower = getItemGroupLower(item, '');
-        const text = `${nLower} ${gLower}`;
-        if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1200;
-      }
-      return score;
-    };
-
-    const filtered = itemBuckets.movie.filter(item => !isUnavailableCatalogItem(item));
-
-    return filtered
-      .map(item => ({ item, score: scoreItem(item) }))
-      .sort((a, b) => b.score - a.score)
-      .map(entry => entry.item)
-      .slice(0, 80);
+    const kids = activeContentPreferences.includes('kids');
+    const candidates = itemBuckets.movie.filter(item => !isUnavailableCatalogItem(item));
+    return takeTopByScore(
+      candidates,
+      (item) => {
+        let score = dailyStableScore(`${daySeed}-${item.name}-${item.group || ''}`);
+        if (kids) {
+          const text = `${getItemNameLower(item)} ${getItemGroupLower(item, '')}`;
+          if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(k => text.includes(k))) {
+            score += 1200;
+          }
+        }
+        return score;
+      },
+      80,
+    );
   }, [itemBuckets.movie, activeContentPreferences]);
 
-  // Memoized popular series, excluding maintenance/test/backup items
+  // Memoized popular series — same top-K path as movies
   const populerDiziler = useMemo(() => {
     if (allGroupedSeries.length === 0) return [];
     const daySeed = new Date().toISOString().slice(0, 10) + '-series';
-    const scoreItem = (item: GroupedSeries) => {
-      const seed = `${daySeed}-${item.name}-${item.group || ''}`;
-      let score = 0;
-      for (let i = 0; i < seed.length; i++) {
-        score = (score + seed.charCodeAt(i)) % 997;
-      }
-      if (activeContentPreferences.includes('kids')) {
-        const nLower = getItemNameLower(item);
-        const gLower = getItemGroupLower(item, '');
-        const text = `${nLower} ${gLower}`;
-        if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1200;
-      }
-      return score;
-    };
-
-    const filtered = allGroupedSeries.filter(item => !isUnavailableCatalogItem(item));
-
-    return filtered
-      .map(item => ({ item, score: scoreItem(item) }))
-      .sort((a, b) => b.score - a.score)
-      .map(entry => entry.item)
-      .slice(0, 80);
+    const kids = activeContentPreferences.includes('kids');
+    const candidates = allGroupedSeries.filter(item => !isUnavailableCatalogItem(item));
+    return takeTopByScore(
+      candidates,
+      (item) => {
+        let score = dailyStableScore(`${daySeed}-${item.name}-${item.group || ''}`);
+        if (kids) {
+          const text = `${getItemNameLower(item)} ${getItemGroupLower(item, '')}`;
+          if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(k => text.includes(k))) {
+            score += 1200;
+          }
+        }
+        return score;
+      },
+      80,
+    );
   }, [allGroupedSeries, activeContentPreferences]);
 
   const homeDiscoveryItems = useMemo(() => {

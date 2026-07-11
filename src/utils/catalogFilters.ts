@@ -105,3 +105,56 @@ export function seriesMatchesQuality(series: GroupedSeries, qualityFilter: strin
   const rank = getQualityRank(series.name, nameLower);
   return matchesQualityFilter(rank, qualityFilter);
 }
+
+/**
+ * Daily-stable score used for home popular rows (same formula as prior useHomeData).
+ * Kept pure so top-K selection can be tested without React.
+ */
+export function dailyStableScore(seed: string): number {
+  let score = 0;
+  for (let i = 0; i < seed.length; i++) {
+    score = (score + seed.charCodeAt(i)) % 997;
+  }
+  return score;
+}
+
+/**
+ * Select top `limit` items by score without sorting the full list (partial insertion).
+ * Preserves prior semantics: higher score first; ties keep earlier encounter order.
+ */
+export function takeTopByScore<T>(
+  items: T[],
+  scoreOf: (item: T) => number,
+  limit: number,
+): T[] {
+  if (limit <= 0 || items.length === 0) return [];
+  if (items.length <= limit) {
+    return items
+      .map((item, index) => ({ item, score: scoreOf(item), index }))
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .map((e) => e.item);
+  }
+
+  type Entry = { item: T; score: number; index: number };
+  const top: Entry[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const score = scoreOf(item);
+    if (top.length < limit) {
+      top.push({ item, score, index: i });
+      if (top.length === limit) {
+        top.sort((a, b) => b.score - a.score || a.index - b.index);
+      }
+      continue;
+    }
+    const worst = top[top.length - 1];
+    if (score < worst.score || (score === worst.score && i > worst.index)) continue;
+    top[top.length - 1] = { item, score, index: i };
+    // Restore descending order (limit is small, e.g. 80)
+    top.sort((a, b) => b.score - a.score || a.index - b.index);
+  }
+  if (top.length < limit) {
+    top.sort((a, b) => b.score - a.score || a.index - b.index);
+  }
+  return top.map((e) => e.item);
+}

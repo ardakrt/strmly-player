@@ -116,25 +116,58 @@ export function isHdChannel(name: string, nameLower?: string): boolean {
   return rank >= 2;
 }
 
+const SERIES_NAME_PATTERNS = [
+  /[\s._-]s\s*\d+\s*e\s*\d+/i, // S01E02
+  /[\s._-]\d+x\d+/i, // 1x02
+  /[\s._-]se(?:zon|ason)[\s._-]*\d+/i,
+  /[\s._-]\d+[\s._-]*se(?:zon|ason)/i,
+  /[\s._-]bölüm[\s._-]*\d+/i,
+  /[\s._-]ep(?:isode)?[\s._-]*\d+/i,
+  /[\s._-]\d+[\s._-]*(?:bölüm|ep(?:isode)?)/i,
+  /[\s._-]s(?:ezon|eason)?\s*\d+/i,
+];
+
 function isSeriesName(name: string): boolean {
+  // Episode patterns always include a digit — cheap reject for most live titles
+  if (!/\d/.test(name)) return false;
   const nameLower = name.toLowerCase();
-  const seriesPatterns = [
-    /[\s._-]s\s*\d+\s*e\s*\d+/i, // S01E02, .S01E02, _S01E02
-    /[\s._-]\d+x\d+/i, // 1x02
-    /[\s._-]se(?:zon|ason)[\s._-]*\d+/i, // Sezon 1 / Season 1
-    /[\s._-]\d+[\s._-]*se(?:zon|ason)/i, // 1. Sezon / 1.Season
-    /[\s._-]bölüm[\s._-]*\d+/i, // Bölüm 2
-    /[\s._-]ep(?:isode)?[\s._-]*\d+/i, // Episode 2
-    /[\s._-]\d+[\s._-]*(?:bölüm|ep(?:isode)?)/i, // 2. Bölüm
-    /[\s._-]s(?:ezon|eason)?\s*\d+/i // S01
-  ];
-  return seriesPatterns.some(regex => regex.test(nameLower));
+  for (let i = 0; i < SERIES_NAME_PATTERNS.length; i++) {
+    if (SERIES_NAME_PATTERNS[i].test(nameLower)) return true;
+  }
+  return false;
+}
+
+/** True if URL looks like a file-based VOD path (extension before query/hash). */
+export function urlHasVodExtension(urlLower: string): boolean {
+  // Single scan for common VOD extensions without 5× includes per extension
+  const q = urlLower.indexOf('?');
+  const h = urlLower.indexOf('#');
+  let end = urlLower.length;
+  if (q >= 0) end = Math.min(end, q);
+  if (h >= 0) end = Math.min(end, h);
+  const pathPart = end < urlLower.length ? urlLower.slice(0, end) : urlLower;
+  const dot = pathPart.lastIndexOf('.');
+  if (dot < 0) return false;
+  const ext = pathPart.slice(dot);
+  switch (ext) {
+    case '.mp4':
+    case '.mkv':
+    case '.avi':
+    case '.mov':
+    case '.flv':
+    case '.mpeg':
+    case '.mpg':
+    case '.m4v':
+    case '.webm':
+    case '.wmv':
+      return true;
+    default:
+      return false;
+  }
 }
 
 // Pre-process playlist items for fast O(1) searches
 export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[] {
-  const vodExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.mpeg', '.mpg', '.m4v', '.webm', '.wmv'];
-
   // Count non-live logos to detect generic ones
   const counts: Record<string, number> = {};
   for (let i = 0; i < rawItems.length; i++) {
@@ -174,24 +207,21 @@ export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[
         deducedType = 'series';
       }
 
-      const hasVodExtension = vodExtensions.some(ext => 
-        urlLower.endsWith(ext) || 
-        urlLower.includes(ext + '?') || 
-        urlLower.includes(ext + '&') || 
-        urlLower.includes('#' + ext) || 
-        urlLower.includes('/' + ext)
-      );
-
-      const isVod = hasVodExtension || isSeriesName(item.name);
+      const seriesByName = isSeriesName(item.name);
+      const isVod = urlHasVodExtension(urlLower) || seriesByName;
 
       if (urlLower.includes('/movie/')) {
         item.type = 'movie';
       } else if (urlLower.includes('/series/')) {
         item.type = 'series';
       } else if (isVod) {
-        item.type = (deducedType === 'series' || isSeriesName(item.name)) ? 'series' : 'movie';
-      } else if (urlLower.includes('/live/') || urlLower.includes('/live.php') || 
-                 urlLower.includes('/hls/') || urlLower.includes('.m3u8')) {
+        item.type = deducedType === 'series' || seriesByName ? 'series' : 'movie';
+      } else if (
+        urlLower.includes('/live/') ||
+        urlLower.includes('/live.php') ||
+        urlLower.includes('/hls/') ||
+        urlLower.includes('.m3u8')
+      ) {
         item.type = 'live';
       } else if (urlLower.includes('/play/') || urlLower.includes('/stream/')) {
         item.type = 'live';

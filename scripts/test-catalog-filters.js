@@ -1,6 +1,6 @@
 /**
- * Unit tests for shipped catalog filter helpers.
- * Bundles the real TypeScript module via esbuild (npx), then asserts behavior.
+ * Unit tests for shipped catalog / preprocess / series-group helpers.
+ * Bundles real TypeScript modules via esbuild, then asserts behavior.
  * Run: node scripts/test-catalog-filters.js
  */
 const assert = require('assert');
@@ -10,20 +10,35 @@ const { execSync } = require('child_process');
 const os = require('os');
 
 const root = path.join(__dirname, '..');
-const outFile = path.join(os.tmpdir(), `strmly-catalog-filters-${process.pid}.cjs`);
+const tmp = os.tmpdir();
+const catalogOut = path.join(tmp, `strmly-catalog-filters-${process.pid}.cjs`);
+const searchOut = path.join(tmp, `strmly-search-helpers-${process.pid}.cjs`);
+const seriesOut = path.join(tmp, `strmly-series-groupers-${process.pid}.cjs`);
 
-execSync(
-  `npx --yes esbuild "${path.join(root, 'src/utils/catalogFilters.ts')}" --bundle --platform=node --format=cjs --outfile="${outFile}"`,
-  { cwd: root, stdio: 'pipe' },
-);
+function bundle(entry, outfile) {
+  execSync(
+    `npx --yes esbuild "${entry}" --bundle --platform=node --format=cjs --outfile="${outfile}"`,
+    { cwd: root, stdio: 'pipe' },
+  );
+}
+
+bundle(path.join(root, 'src/utils/catalogFilters.ts'), catalogOut);
+bundle(path.join(root, 'src/utils/searchHelpers.ts'), searchOut);
+bundle(path.join(root, 'src/utils/seriesGroupers.ts'), seriesOut);
 
 const {
   matchesQualityFilter,
   applyCatalogPostFilters,
   seriesMatchesQuery,
   sortByNameAzZa,
-} = require(outFile);
+  takeTopByScore,
+  dailyStableScore,
+} = require(catalogOut);
 
+const { urlHasVodExtension, preprocessPlaylistItems, getQualityRank } = require(searchOut);
+const { groupPlaylistItemsToSeries } = require(seriesOut);
+
+// --- quality / catalog filters ---
 assert.strictEqual(matchesQualityFilter(4, '4k'), true);
 assert.strictEqual(matchesQualityFilter(3, '4k'), false);
 assert.strictEqual(matchesQualityFilter(2, 'hd'), true);
@@ -64,10 +79,61 @@ const series = {
 assert.strictEqual(seriesMatchesQuery(series, 's01e01'), true);
 assert.strictEqual(seriesMatchesQuery(series, 'nomatch'), false);
 
-try {
-  fs.unlinkSync(outFile);
-} catch {
-  /* ignore */
+// --- takeTopByScore equivalence vs full sort ---
+const pool = [];
+for (let i = 0; i < 200; i++) {
+  pool.push({ id: i, name: `Item ${i}` });
+}
+const scoreOf = (x) => dailyStableScore(`seed-${x.name}`);
+const topK = takeTopByScore(pool, scoreOf, 80);
+const fullSortTop = pool
+  .map((item, index) => ({ item, score: scoreOf(item), index }))
+  .sort((a, b) => b.score - a.score || a.index - b.index)
+  .slice(0, 80)
+  .map((e) => e.item);
+assert.strictEqual(topK.length, 80);
+assert.deepStrictEqual(
+  topK.map((x) => x.id),
+  fullSortTop.map((x) => x.id),
+  'takeTopByScore matches full sort top-80',
+);
+
+// --- url / preprocess ---
+assert.strictEqual(urlHasVodExtension('http://x/a/movie.mp4'), true);
+assert.strictEqual(urlHasVodExtension('http://x/a/movie.mp4?token=1'), true);
+assert.strictEqual(urlHasVodExtension('http://x/live/stream.m3u8'), false);
+assert.strictEqual(getQualityRank('Film 1080p', 'film 1080p'), 3);
+
+const raw = [
+  { name: 'Live One', group: 'Live', url: 'http://x/live/1.m3u8', type: 'live' },
+  { name: 'Show S01E01', group: 'Dizi', url: 'http://x/files/show.mkv', type: 'live' },
+  { name: 'Film Name', group: 'Sinema', url: 'http://x/movie/1', type: 'live' },
+];
+preprocessPlaylistItems(raw);
+assert.strictEqual(raw[0].type, 'live');
+assert.strictEqual(raw[1].type, 'series', 'vod+episode name → series');
+assert.strictEqual(raw[2].type, 'movie', '/movie/ path → movie');
+assert.ok(raw[0].nameLower && raw[0].qualityRank);
+
+// --- series grouping dedup ---
+const eps = [
+  { name: 'Demo S01E01', group: 'Drama', url: 'u1', type: 'series', logo: 'a.png' },
+  { name: 'Demo S01E01', group: 'Drama', url: 'u1b', type: 'series', logo: '' }, // dup episode
+  { name: 'Demo S01E02', group: 'Drama', url: 'u2', type: 'series', logo: '' },
+];
+const grouped = groupPlaylistItemsToSeries(eps);
+assert.strictEqual(grouped.length, 1);
+assert.strictEqual(grouped[0].episodesCount, 2, 'duplicate episode not double-counted');
+assert.strictEqual(grouped[0].seasons[1].length, 2);
+assert.strictEqual(grouped[0].seasons[1][0].episodeNumber, 1);
+assert.strictEqual(grouped[0].seasons[1][1].episodeNumber, 2);
+
+for (const f of [catalogOut, searchOut, seriesOut]) {
+  try {
+    fs.unlinkSync(f);
+  } catch {
+    /* ignore */
+  }
 }
 
 console.log('catalog-filters tests passed');

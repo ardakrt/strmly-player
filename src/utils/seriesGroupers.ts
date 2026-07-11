@@ -193,39 +193,50 @@ export function getSeriesId(cleanTitle: string, group: string): string {
 }
 
 export function groupPlaylistItemsToSeries(items: PlaylistItem[]): GroupedSeries[] {
-  const groups: Record<string, GroupedSeries> = {};
+  // Map + per-season episode Set: O(1) dedup instead of O(season length) .some()
+  const groups = new Map<string, GroupedSeries>();
+  const seasonEpisodeKeys = new Map<string, Set<number>>();
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const parsed = parseSeriesEpisodeInfo(item.name);
+    const groupName = item.group || 'Genel';
     // Group key by cleanTitle + group to preserve category division
-    const key = `${parsed.cleanTitle}:::${item.group || 'Genel'}`;
+    const key = `${parsed.cleanTitle}:::${groupName}`;
 
-    if (!groups[key]) {
-      groups[key] = {
-        id: getSeriesId(parsed.cleanTitle, item.group || 'Genel'),
+    let series = groups.get(key);
+    if (!series) {
+      series = {
+        id: getSeriesId(parsed.cleanTitle, groupName),
         name: parsed.cleanTitle,
         logo: item.logo,
-        group: item.group || 'Genel',
+        group: groupName,
         type: 'series',
         seasons: {},
         episodesCount: 0,
-        isGenericLogo: item.isGenericLogo
+        isGenericLogo: item.isGenericLogo,
       };
+      groups.set(key, series);
     }
 
-    const series = groups[key];
-    if (!series.seasons[parsed.season]) {
-      series.seasons[parsed.season] = [];
+    let seasonList = series.seasons[parsed.season];
+    if (!seasonList) {
+      seasonList = [];
+      series.seasons[parsed.season] = seasonList;
     }
 
-    // Check for duplicates
-    const exists = series.seasons[parsed.season].some(ep => ep.episodeNumber === parsed.episode);
-    if (!exists) {
-      series.seasons[parsed.season].push({
+    const epKey = `${key}#${parsed.season}`;
+    let epSet = seasonEpisodeKeys.get(epKey);
+    if (!epSet) {
+      epSet = new Set<number>();
+      seasonEpisodeKeys.set(epKey, epSet);
+    }
+    if (!epSet.has(parsed.episode)) {
+      epSet.add(parsed.episode);
+      seasonList.push({
         episodeNumber: parsed.episode,
         seasonNumber: parsed.season,
-        item
+        item,
       });
       series.episodesCount++;
     }
@@ -235,7 +246,7 @@ export function groupPlaylistItemsToSeries(items: PlaylistItem[]): GroupedSeries
     }
   }
 
-  const result = Object.values(groups);
+  const result = Array.from(groups.values());
   for (let i = 0; i < result.length; i++) {
     const series = result[i];
     for (const seasonNo in series.seasons) {
