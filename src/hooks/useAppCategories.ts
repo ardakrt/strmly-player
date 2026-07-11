@@ -78,12 +78,12 @@ export function useAppCategories({
   const [draggedSeriesCategory, setDraggedSeriesCategory] = useState<string | null>(null);
   const [draggedMovieCategory, setDraggedMovieCategory] = useState<string | null>(null);
 
-  const [visibleLiveCategoryLimit, setVisibleLiveCategoryLimit] = useState(40);
+  const [visibleLiveCategoryLimit, setVisibleLiveCategoryLimit] = useState(24);
   const [visibleSeriesCategoryLimit, setVisibleSeriesCategoryLimit] = useState(40);
   const [visibleMovieCategoryLimit, setVisibleMovieCategoryLimit] = useState(40);
 
   useEffect(() => {
-    setVisibleLiveCategoryLimit(40);
+    setVisibleLiveCategoryLimit(24);
     setVisibleSeriesCategoryLimit(40);
     setVisibleMovieCategoryLimit(40);
   }, [selectedGroup, categorySearchQuery]);

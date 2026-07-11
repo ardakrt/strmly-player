@@ -15,7 +15,7 @@ function percentile(values, ratio) {
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
 }
 
-async function runPerformanceBenchmark(window, { iterations = 12, warmups = 2 } = {}) {
+async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } = {}) {
   const samples = await window.webContents.executeJavaScript(`(async () => {
     const pages = ${JSON.stringify(PAGES)};
     const iterations = ${iterations};

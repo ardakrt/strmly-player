@@ -9,7 +9,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Production build failed with exit code $LASTEXITCODE." }
 
   $env:STRMLY_PERF_BENCH = "1"
-  $env:STRMLY_PERF_ITERATIONS = if ($env:STRMLY_PERF_ITERATIONS) { $env:STRMLY_PERF_ITERATIONS } else { "12" }
+  $env:STRMLY_PERF_ITERATIONS = if ($env:STRMLY_PERF_ITERATIONS) { $env:STRMLY_PERF_ITERATIONS } else { "30" }
   $env:STRMLY_PERF_WARMUPS = if ($env:STRMLY_PERF_WARMUPS) { $env:STRMLY_PERF_WARMUPS } else { "2" }
   $previousErrorAction = $ErrorActionPreference
   $ErrorActionPreference = "Continue"

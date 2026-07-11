@@ -134,6 +134,7 @@ export function useAppBoot({
   useEffect(() => {
     if (bootStartedRef.current) return;
     bootStartedRef.current = true;
+    const bootTimers: any[] = [];
 
     const loadAppConfig = async () => {
       const isReload = sessionStorage.getItem('strmly_session_active') === 'true';
@@ -152,7 +153,7 @@ export function useAppBoot({
         await new Promise<void>((resolve) => {
           const api = window.electronAPI;
           if (!api || !api.checkForUpdates || !api.onUpdateStatus || !api.installUpdate) {
-            setTimeout(resolve, 800);
+            bootTimers.push(setTimeout(resolve, 800));
             return;
           }
 
@@ -164,6 +165,7 @@ export function useAppBoot({
             unsub();
             resolve();
           }, 3500);
+          bootTimers.push(safetyTimeout);
 
           const unsub = onUpdateStatus((data: any) => {
             if (data.status === 'checking') {
@@ -173,9 +175,9 @@ export function useAppBoot({
               clearTimeout(safetyTimeout);
             } else if (data.status === 'downloaded') {
               setSplashStatus(getTranslation('splash.updateDownloaded', language));
-              setTimeout(() => {
+              bootTimers.push(setTimeout(() => {
                 installUpdate();
-              }, 1200);
+              }, 1200));
             } else if (data.status === 'not-available' || data.status === 'error') {
               clearTimeout(safetyTimeout);
               unsub();
@@ -306,6 +308,9 @@ export function useAppBoot({
     };
 
     loadAppConfig();
+    return () => {
+      bootTimers.forEach(clearTimeout);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

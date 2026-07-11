@@ -296,12 +296,19 @@ function createWindow() {
   });
 
   if (isPerformanceBenchmark) {
+    mainWindow.webContents.session.webRequest.onBeforeRequest(
+      { urls: ["http://*/*", "https://*/*"] },
+      (_details, callback) => callback({ cancel: true }),
+    );
+  }
+
+  if (isPerformanceBenchmark) {
     mainWindow.webContents.once("did-finish-load", async () => {
       try {
         mainWindow.showInactive();
         const { runPerformanceBenchmark } = require("./performance-benchmark");
         const results = await runPerformanceBenchmark(mainWindow, {
-          iterations: Number(process.env.STRMLY_PERF_ITERATIONS) || 12,
+          iterations: Number(process.env.STRMLY_PERF_ITERATIONS) || 30,
           warmups: Number(process.env.STRMLY_PERF_WARMUPS) || 2,
         });
         console.log(`STRMLY_PERF_RESULT=${JSON.stringify(results)}`);
