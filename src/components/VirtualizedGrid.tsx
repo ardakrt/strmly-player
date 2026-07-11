@@ -83,7 +83,10 @@ export function VirtualizedGrid<T>({
 
 
 
-  const columns = getColumnsCount(containerWidth, cardLayoutSize);
+  const columns = useMemo(
+    () => getColumnsCount(containerWidth, cardLayoutSize),
+    [containerWidth, cardLayoutSize],
+  );
 
   const rowHeight = useMemo(() => {
     // Gap size is 24px (gap-6)
@@ -97,20 +100,26 @@ export function VirtualizedGrid<T>({
     return Math.ceil(cardHeight + extraHeight);
   }, [containerWidth, columns]);
 
-  const totalRows = Math.ceil(items.length / columns);
+  const totalRows = useMemo(
+    () => Math.ceil(items.length / columns) || 0,
+    [items.length, columns],
+  );
 
-  // Calculate visible rows without chunking the full item list.
+  // Calculate visible rows without materializing the full item list.
   const { startRow, endRow } = useMemo(() => {
-    const startRow = Math.max(0, Math.floor((scrollTop - buffer) / rowHeight));
-    const endRow = Math.min(totalRows, Math.ceil((scrollTop + clientHeight + buffer) / rowHeight));
-    return {
-      startRow,
-      endRow
-    };
+    if (rowHeight <= 0 || totalRows === 0) {
+      return { startRow: 0, endRow: 0 };
+    }
+    const start = Math.max(0, Math.floor((scrollTop - buffer) / rowHeight));
+    const end = Math.min(totalRows, Math.ceil((scrollTop + clientHeight + buffer) / rowHeight));
+    return { startRow: start, endRow: end };
   }, [totalRows, scrollTop, clientHeight, rowHeight, buffer]);
 
   const paddingTop = startRow * rowHeight;
-  const paddingBottom = (totalRows - endRow) * rowHeight;
+  const paddingBottom = Math.max(0, (totalRows - endRow) * rowHeight);
+
+  // Precompute visible row indices once per scroll window (avoid Array.from + map churn).
+  const visibleRowCount = Math.max(0, endRow - startRow);
 
   if (items.length === 0) {
     return (
@@ -132,27 +141,31 @@ export function VirtualizedGrid<T>({
     );
   }
 
+  const rows: React.ReactNode[] = [];
+  for (let rowIndex = 0; rowIndex < visibleRowCount; rowIndex++) {
+    const actualRowIndex = startRow + rowIndex;
+    const rowStart = actualRowIndex * columns;
+    const rowEnd = Math.min(items.length, rowStart + columns);
+    const cells: React.ReactNode[] = [];
+    for (let flatIndex = rowStart; flatIndex < rowEnd; flatIndex++) {
+      cells.push(
+        <React.Fragment key={flatIndex}>{renderItem(items[flatIndex], flatIndex)}</React.Fragment>,
+      );
+    }
+    rows.push(
+      <div
+        key={`row-${actualRowIndex}`}
+        className="grid gap-6"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {cells}
+      </div>,
+    );
+  }
+
   return (
     <div ref={containerRef} style={{ paddingTop, paddingBottom, width: '100%' }}>
-      <div className="flex flex-col gap-6 w-full">
-        {Array.from({ length: Math.max(0, endRow - startRow) }, (_, rowIndex) => {
-          const actualRowIndex = startRow + rowIndex;
-          const rowStart = actualRowIndex * columns;
-          const rowItems = items.slice(rowStart, rowStart + columns);
-          return (
-            <div 
-              key={`row-${actualRowIndex}`} 
-              className="grid gap-6"
-              style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-            >
-              {rowItems.map((item, itemIndex) => {
-                const flatIndex = actualRowIndex * columns + itemIndex;
-                return renderItem(item, flatIndex);
-              })}
-            </div>
-          );
-        })}
-      </div>
+      <div className="flex flex-col gap-6 w-full">{rows}</div>
     </div>
   );
 }

@@ -2,12 +2,11 @@ import { useMemo } from 'react';
 import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import {
-  getItemGroupLower,
-  getItemNameLower,
-  getQualityRank,
-  isHdChannel,
-  itemMatchesQuery
-} from '../utils/searchHelpers';
+  applyCatalogPostFilters,
+  seriesMatchesQuality,
+  seriesMatchesQuery,
+  sortByNameAzZa,
+} from '../utils/catalogFilters';
 
 interface UseFilteredCatalogProps {
   items: PlaylistItem[];
@@ -31,8 +30,6 @@ interface UseFilteredCatalogProps {
   qualityFilter: string;
 }
 
-const turkishCollator = new Intl.Collator('tr', { sensitivity: 'base', numeric: true });
-
 export function useFilteredCatalog({
   items,
   itemBuckets,
@@ -50,10 +47,10 @@ export function useFilteredCatalog({
   sortOption,
   qualityFilter
 }: UseFilteredCatalogProps) {
-  
-  // 1. filteredDisplayItems
+
+  // 1. filteredDisplayItems — select base once, then single-pass post-filters
   const filteredDisplayItems = useMemo(() => {
-    let base = items;
+    let base: PlaylistItem[] = items;
     if (selectedGroup === 'Favorilerim') {
       const favSet = new Set(globalFavorites || []);
       base = items.filter((ch: PlaylistItem) => favSet.has(ch.id));
@@ -79,129 +76,50 @@ export function useFilteredCatalog({
       base = playlistIndex.displayGroupMap.get(selectedGroup) || [];
     }
 
-    if (deferredSearchQuery.trim()) {
-      base = (base as PlaylistItem[]).filter((ch: PlaylistItem) => itemMatchesQuery(ch, deferredSearchQuery));
-    }
-
-    // Filter national channels to only show HD versions
-    base = (base as PlaylistItem[]).filter((ch: PlaylistItem) => {
-      const gLower = getItemGroupLower(ch);
-      if (gLower.includes('ulusal')) return isHdChannel(ch.name);
-      return true;
-    });
-
-    // Filter by quality / resolution
-    if (qualityFilter !== 'all') {
-      base = (base as PlaylistItem[]).filter((ch: PlaylistItem) => {
-        const rank = ch.qualityRank || getQualityRank(ch.name, ch.nameLower);
-        if (qualityFilter === '4k') return rank === 4;
-        if (qualityFilter === 'fhd') return rank === 3;
-        if (qualityFilter === 'hd') return rank === 2;
-        if (qualityFilter === 'sd') return rank === 1;
-        return true;
-      });
-    }
-
-    // Sort items (A-Z / Z-A)
-    if (sortOption === 'az') {
-      base = base.toSorted((a, b) => turkishCollator.compare(a.name, b.name));
-    } else if (sortOption === 'za') {
-      base = base.toSorted((a, b) => turkishCollator.compare(b.name, a.name));
-    }
-
-    return base;
+    base = applyCatalogPostFilters(base as PlaylistItem[], deferredSearchQuery, qualityFilter);
+    return sortByNameAzZa(base, sortOption);
   }, [items, itemBuckets.live, playlistIndex, selectedGroup, globalFavorites, activeLiveCategory, hiddenCategories, activeMovieCategory, hiddenMovieCategories, deferredSearchQuery, sortOption, qualityFilter]);
 
-  // 2. groupedSeriesList
+  // 2. groupedSeriesList — single-pass category + search + quality
   const groupedSeriesList = useMemo(() => {
     if (selectedGroup !== 'Diziler') return [];
 
-    let base = allGroupedSeries;
-
-    // Filter by Category
     const hiddenSet = new Set(hiddenSeriesCategories || []);
-    if (activeSeriesCategory !== 'Tümü') {
-      base = base.filter(series => (series.group || 'Genel') === activeSeriesCategory);
-    } else {
-      base = base.filter(series => !hiddenSet.has(series.group || 'Genel'));
+    const query = deferredSearchQuery.trim();
+    const hasSearch = query.length > 0;
+    const hasQuality = qualityFilter !== 'all';
+    const out: GroupedSeries[] = [];
+
+    for (let i = 0; i < allGroupedSeries.length; i++) {
+      const series = allGroupedSeries[i];
+      const group = series.group || 'Genel';
+      if (activeSeriesCategory !== 'Tümü') {
+        if (group !== activeSeriesCategory) continue;
+      } else if (hiddenSet.has(group)) {
+        continue;
+      }
+      if (hasSearch && !seriesMatchesQuery(series, deferredSearchQuery)) continue;
+      if (hasQuality && !seriesMatchesQuality(series, qualityFilter)) continue;
+      out.push(series);
     }
 
-    // Filter by Search Query
-    if (deferredSearchQuery.trim()) {
-      const query = deferredSearchQuery.trim().toLocaleLowerCase('tr-TR');
-      base = base.filter(series => {
-        const sNameLower = getItemNameLower(series);
-        const sGroupLower = getItemGroupLower(series);
-        if (sNameLower.includes(query) || sGroupLower.includes(query)) return true;
-
-        const seasons = Object.values(series.seasons);
-        for (let s = 0; s < seasons.length; s++) {
-          const episodes = seasons[s];
-          for (let e = 0; e < episodes.length; e++) {
-            const ep = episodes[e];
-            const epNameLower = ep.item.nameLower || ep.item.name.toLocaleLowerCase('tr-TR');
-            if (epNameLower.includes(query)) return true;
-          }
-        }
-        return false;
-      });
-    }
-
-    // Filter by quality / resolution
-    if (qualityFilter !== 'all') {
-      base = base.filter(series => {
-        const nameLower = getItemNameLower(series);
-        const is4k = nameLower.includes('4k') || nameLower.includes('uhd') || nameLower.includes('2160p');
-        const isFhd = nameLower.includes('fhd') || nameLower.includes('1080p') || nameLower.includes('1080i');
-        const isHd = (nameLower.includes('hd') && !nameLower.includes('fhd')) || nameLower.includes('720p') || nameLower.includes('720i');
-        const isSd = nameLower.includes('sd') || nameLower.includes('576p') || nameLower.includes('480p') || (!is4k && !isFhd && !isHd);
-
-        if (qualityFilter === '4k') return is4k;
-        if (qualityFilter === 'fhd') return isFhd;
-        if (qualityFilter === 'hd') return isHd;
-        if (qualityFilter === 'sd') return isSd;
-        return true;
-      });
-    }
-
-    // Sort items (A-Z / Z-A)
-    if (sortOption === 'az') {
-      base = base.toSorted((a, b) => turkishCollator.compare(a.name, b.name));
-    } else if (sortOption === 'za') {
-      base = base.toSorted((a, b) => turkishCollator.compare(b.name, a.name));
-    }
-
-    return base;
+    return sortByNameAzZa(out, sortOption);
   }, [allGroupedSeries, selectedGroup, activeSeriesCategory, hiddenSeriesCategories, deferredSearchQuery, sortOption, qualityFilter]);
 
   // 3. favoriteSeriesList
   const favoriteSeriesList = useMemo(() => {
     const favSet = new Set(globalFavorites || []);
-    let base = allGroupedSeries.filter(series => favSet.has(series.id));
-    if (deferredSearchQuery.trim()) {
-      const query = deferredSearchQuery.trim().toLocaleLowerCase('tr-TR');
-      base = base.filter(series => {
-        const sNameLower = getItemNameLower(series);
-        const sGroupLower = getItemGroupLower(series);
-        if (sNameLower.includes(query) || sGroupLower.includes(query)) return true;
-
-        const seasons = Object.values(series.seasons);
-        for (let s = 0; s < seasons.length; s++) {
-          const episodes = seasons[s];
-          for (let e = 0; e < episodes.length; e++) {
-            const ep = episodes[e];
-            const epNameLower = ep.item.nameLower || ep.item.name.toLocaleLowerCase('tr-TR');
-            if (epNameLower.includes(query)) return true;
-          }
-        }
-        return false;
-      });
+    const query = deferredSearchQuery.trim();
+    const hasSearch = query.length > 0;
+    const out: GroupedSeries[] = [];
+    for (let i = 0; i < allGroupedSeries.length; i++) {
+      const series = allGroupedSeries[i];
+      if (!favSet.has(series.id)) continue;
+      if (hasSearch && !seriesMatchesQuery(series, deferredSearchQuery)) continue;
+      out.push(series);
     }
-    return base;
+    return out;
   }, [allGroupedSeries, globalFavorites, deferredSearchQuery]);
-
-
-
 
   return {
     filteredDisplayItems,

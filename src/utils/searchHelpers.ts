@@ -110,9 +110,10 @@ export function getQualityRank(name: string, nameLower?: string): number {
 }
 
 // Check if a channel name indicates HD/UHD quality (used for "Ulusal" category filtering)
-export function isHdChannel(name: string): boolean {
-  const n = name.toLowerCase();
-  return n.includes('hd') || n.includes('fhd') || n.includes('uhd') || n.includes('4k') || n.includes('1080');
+export function isHdChannel(name: string, nameLower?: string): boolean {
+  // Prefer precomputed nameLower; fall back once. Quality rank 2+ is HD/FHD/4K.
+  const rank = getQualityRank(name, nameLower);
+  return rank >= 2;
 }
 
 function isSeriesName(name: string): boolean {
