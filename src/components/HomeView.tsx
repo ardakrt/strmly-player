@@ -315,7 +315,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   };
 
   return (
-    <div
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(e as any); } }} tabIndex={0} role="button"
       ref={cardRef}
       className="home-poster-card flex-shrink-0 w-[176px] md:w-[208px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.035] hover:z-20"
       onClick={handleCardClick}
@@ -602,7 +602,13 @@ export const HomeView = memo(function HomeView({
   }
 
   const renderRailCard = (channel: PlaylistItem, keyPrefix: string) => (
-    <div
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
+        if (channel.type === 'live') {
+          handlePlayStream(channel);
+        } else {
+          handleOpenDetails(channel);
+        }
+      })(e as any); } }} tabIndex={0} role="button"
       key={`${keyPrefix}-${channel.id}`}
       className="flex-shrink-0 w-[170px] md:w-[210px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035] hover:z-20"
       onClick={() => {
@@ -837,7 +843,9 @@ export const HomeView = memo(function HomeView({
               className="flex gap-6 overflow-x-auto pb-6 pt-2 pr-24 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
             >
               {uniqueRecentlyWatched.map(channel => (
-                <div
+                <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
+                    handlePlayStream(channel);
+                  })(e as any); } }} tabIndex={0} role="button"
                   key={`recent-${channel.id}`}
                   className="flex-shrink-0 w-[200px] md:w-[240px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03]"
                   onClick={() => {

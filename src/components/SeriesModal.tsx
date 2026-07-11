@@ -356,7 +356,7 @@ export const SeriesModal = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 md:p-8 select-none animate-fade-in">
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
+      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
       <div className="relative w-full max-w-5xl h-[85vh] max-h-[820px] bg-neutral-950 border border-white/10 rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-[0_32px_80px_rgba(0,0,0,0.85)] z-10 glass-modal-enter">
         <button type="button"
           onClick={onClose}
@@ -429,7 +429,7 @@ export const SeriesModal = ({
           </div>
           {cast.length > 0 && (
             <div className="flex flex-col gap-2.5 bg-white/[0.02] border border-white/5 rounded-xl p-4 shrink-0">
-              <div 
+              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(e as any); } }} tabIndex={0} role="button" 
                 onClick={() => setShowCastModal(true)}
                 className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0"
               >
@@ -441,7 +441,7 @@ export const SeriesModal = ({
                   </svg>
                 </span>
               </div>
-              <div 
+              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(e as any); } }} tabIndex={0} role="button" 
                 onClick={() => setShowCastModal(true)}
                 className="flex gap-3 overflow-x-auto pb-1.5 hide-scrollbar select-none cursor-pointer"
               >
@@ -688,7 +688,7 @@ export const SeriesModal = ({
                         fallbackPoster={tmdbData?.poster}
                         stillPath={meta.stillPath}
                       />
-                      <div
+                      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => playEpisode(ep.item))(e as any); } }} tabIndex={0} role="button"
                         onClick={() => playEpisode(ep.item)}
                         className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
                       >
@@ -791,11 +791,11 @@ export const SeriesModal = ({
  
       </div>
       {showCastModal && (
-        <div 
+        <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(false))(e as any); } }} tabIndex={0} role="button" 
           className="fixed inset-0 z-[4000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
           onClick={() => setShowCastModal(false)}
         >
-          <div 
+          <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button" 
             className="w-full max-w-lg bg-neutral-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl relative animate-scale-in flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >

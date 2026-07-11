@@ -105,7 +105,7 @@ export const MovieCard = React.memo(({
 
   const quality = getQualityLabel(channel.name);
   return (
-    <div
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => onClick(channel))(e as any); } }} role="button"
       className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
       tabIndex={0}
       onClick={() => onClick(channel)}

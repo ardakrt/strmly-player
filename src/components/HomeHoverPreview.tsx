@@ -423,7 +423,7 @@ export function HoverPreviewPortal({
     : (language === 'tr' ? 'Favorilere ekle' : 'Add to favorites');
 
   return createPortal(
-    <div
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((event) => event.stopPropagation())(e as any); } }} tabIndex={0} role="button"
       className={`home-hover-preview fixed z-40 w-[330px] overflow-hidden rounded-[20px] border border-white/[0.08] bg-neutral-950/98 shadow-[0_30px_90px_rgba(0,0,0,0.9)] backdrop-blur-2xl ${
         isClosing ? 'preview-shrink' : 'animate-preview-grow'
       }`}
