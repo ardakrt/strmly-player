@@ -602,12 +602,15 @@ export const SeriesModal = ({
                         ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
                         : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
                     }
-                   aria-label={allSeasonSaved
+                    aria-label={allSeasonSaved
                       ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
                       : seasonDownloading
                       ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
                       : savedCount > 0
-                        ? (language === 'tr' ? `Eksikleri indir (${missingCount}>
+                        ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
+                        : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
+                    }
+                  >
                     {allSeasonSaved
                       ? <CheckCircle2 size={14} strokeWidth={2.5} />
                       : <Download size={14} strokeWidth={2.5} className={seasonDownloading ? 'animate-bounce' : ''} />}
