@@ -11,7 +11,7 @@ const PAGES = [
 ];
 
 function percentile(values, ratio) {
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = values.toSorted((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
 }
 
