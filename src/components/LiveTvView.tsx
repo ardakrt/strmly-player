@@ -280,6 +280,8 @@ export const LiveTvView = React.memo(function LiveTvView({
   const previewChannel = selectedChannel && filteredDisplayItems.some(item => item.id === selectedChannel.id)
     ? selectedChannel
     : (filteredDisplayItems[0] || null);
+
+  const favoritesSet = React.useMemo(() => new Set(globalFavorites), [globalFavorites]);
   
   // Persisted view mode: 'list' | 'grid'
   const [viewMode, setViewMode] = React.useState<'list' | 'grid'>(() => {
@@ -532,7 +534,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                       channel={channel}
                       onClick={handlePlayStream}
                       isOnline={checkedStatusMap[channel.id]}
-                      isFavorite={globalFavorites.includes(channel.id)}
+                      isFavorite={favoritesSet.has(channel.id)}
                       onToggleFavorite={toggleFavorite}
                       onContextMenu={openContextMenu}
                       onActive={setSelectedChannel}
