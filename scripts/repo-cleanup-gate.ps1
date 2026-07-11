@@ -15,12 +15,21 @@ New-Item -ItemType Directory -Force -Path $ScratchDir | Out-Null
 
 $AbandonedPatterns = @(
   '^\?\? \.grok',
+  '^\?\? \.agents',
   '^\?\? mcps',
   '^\?\? test_image',
   '^\?\? \.env$',
   '^\?\? dist/',
   '^\?\? node_modules/'
 )
+
+function Clear-BrokenCodexRefs {
+  # Codex session turn-diff checkpoints can reappear and break fetch/log --all
+  if (Test-Path ".git/refs/codex") {
+    Remove-Item -Recurse -Force ".git/refs/codex"
+    Write-Host "Removed .git/refs/codex (broken/orphan session refs)"
+  }
+}
 
 $ProductPrefixes = @(
   'src/',
@@ -91,6 +100,7 @@ function Invoke-BulkAbsorb([int]$pass) {
 }
 
 function Write-AtomicEvidence([string]$Reason) {
+  Clear-BrokenCodexRefs
   git fetch --prune origin 2>&1 | Out-Null
 
   $ts = Get-Date -Format o
@@ -196,6 +206,7 @@ function Write-AtomicEvidence([string]$Reason) {
 
 Write-Host "=== repo-cleanup-gate start ==="
 Write-Host "scratch=$ScratchDir cleanSamples=$CleanSamplesRequired interval=${SampleIntervalSeconds}s"
+Clear-BrokenCodexRefs
 
 $absorbPass = 0
 $cleanStreak = 0
