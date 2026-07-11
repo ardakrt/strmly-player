@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Heart, Tv, Film } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
@@ -34,6 +34,7 @@ export function FavoritesView({
 }: FavoritesViewProps) {
   const { t, language } = useSettings();
   const [activeTab, setActiveTab] = useState<'all' | 'live' | 'movie' | 'series'>('all');
+  const favoritesSet = useMemo(() => new Set(globalFavorites), [globalFavorites]);
 
   if (selectedGroup !== 'Favorilerim') return null;
 
@@ -97,7 +98,7 @@ export function FavoritesView({
                    channel={channel}
                    onClick={handlePlayStream}
                    isOnline={checkedStatusMap[channel.id]}
-                   isFavorite={globalFavorites.includes(channel.id)}
+                   isFavorite={favoritesSet.has(channel.id)}
                    onToggleFavorite={toggleFavorite}
                 />
               ))}
@@ -117,7 +118,7 @@ export function FavoritesView({
                    channel={movie}
                    onClick={handleOpenDetails}
                    isOnline={checkedStatusMap[movie.id]}
-                   isFavorite={globalFavorites.includes(movie.id)}
+                   isFavorite={favoritesSet.has(movie.id)}
                    onToggleFavorite={toggleFavorite}
                    isGenericLogo={!!movie.isGenericLogo}
                 />
@@ -137,7 +138,7 @@ export function FavoritesView({
                    key={series.id}
                    series={series}
                    onClick={handleOpenSeriesModalDirect}
-                   isFavorite={globalFavorites.includes(series.id)}
+                   isFavorite={favoritesSet.has(series.id)}
                    onToggleFavorite={toggleFavorite}
                    isGenericLogo={!!series.isGenericLogo}
                    seasonsCount={Object.keys(series.seasons).length}
