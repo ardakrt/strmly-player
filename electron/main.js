@@ -396,7 +396,9 @@ function createWindow() {
 
   // In development, load Vite dev server. In production, load build folder.
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
-  if (isDev) {
+  if (isPerformanceBenchmark) {
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+  } else if (isDev) {
     mainWindow.loadURL(process.env.STRMLY_DEV_SERVER_URL || "http://localhost:5173");
     if (process.env.STRMLY_OPEN_DEVTOOLS === "1") {
       mainWindow.webContents.openDevTools();
