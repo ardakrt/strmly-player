@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSettings } from '../context/SettingsContext';
 
+const getColumnsCount = (width: number, size: string) => {
+  if (size === 'small') {
+    if (width < 480) return 3;
+    if (width < 768) return 4;
+    if (width < 1024) return 5;
+    if (width < 1280) return 6;
+    return 7;
+  } else if (size === 'large') {
+    if (width < 540) return 2;
+    if (width < 960) return 3;
+    return 4;
+  } else { // medium
+    if (width < 540) return 2;
+    if (width < 800) return 3;
+    if (width < 1100) return 4;
+    return 5;
+  }
+};
+
 interface VirtualizedGridProps<T> {
   items: T[];
   renderItem: (item: T, index: number) => React.ReactNode;
@@ -62,24 +81,7 @@ export function VirtualizedGrid<T>({
     };
   }, []);
 
-  const getColumnsCount = (width: number, size: string) => {
-    if (size === 'small') {
-      if (width < 480) return 3;
-      if (width < 768) return 4;
-      if (width < 1024) return 5;
-      if (width < 1280) return 6;
-      return 7;
-    } else if (size === 'large') {
-      if (width < 540) return 2;
-      if (width < 960) return 3;
-      return 4;
-    } else { // medium
-      if (width < 540) return 2;
-      if (width < 800) return 3;
-      if (width < 1100) return 4;
-      return 5;
-    }
-  };
+
 
   const columns = getColumnsCount(containerWidth, cardLayoutSize);
 
