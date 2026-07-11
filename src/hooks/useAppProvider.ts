@@ -530,19 +530,26 @@ export function useAppProvider() {
     activeProfileId,
   });
 
+  const uniqueLiveSet = useMemo(() => new Set(uniqueLiveCategories), [uniqueLiveCategories]);
+  const hiddenLiveSet = useMemo(() => new Set(hiddenCategories), [hiddenCategories]);
+  const uniqueSeriesSet = useMemo(() => new Set(uniqueSeriesCategories), [uniqueSeriesCategories]);
+  const hiddenSeriesSet = useMemo(() => new Set(hiddenSeriesCategories), [hiddenSeriesCategories]);
+  const uniqueMovieSet = useMemo(() => new Set(uniqueMovieCategories), [uniqueMovieCategories]);
+  const hiddenMovieSet = useMemo(() => new Set(hiddenMovieCategories), [hiddenMovieCategories]);
+
   const liveFavCatsToShow = favoriteCategories.filter(
     (group) =>
-      uniqueLiveCategories.includes(group) && !hiddenCategories.includes(group),
+      uniqueLiveSet.has(group) && !hiddenLiveSet.has(group),
   );
   const seriesFavCatsToShow = favoriteSeriesCategories.filter(
     (group) =>
-      uniqueSeriesCategories.includes(group) &&
-      !hiddenSeriesCategories.includes(group),
+      uniqueSeriesSet.has(group) &&
+      !hiddenSeriesSet.has(group),
   );
   const movieFavCatsToShow = favoriteMovieCategories.filter(
     (group) =>
-      uniqueMovieCategories.includes(group) &&
-      !hiddenMovieCategories.includes(group),
+      uniqueMovieSet.has(group) &&
+      !hiddenMovieSet.has(group),
   );
 
   return {

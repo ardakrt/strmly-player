@@ -406,16 +406,19 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
 
                 {enteringProfile?.contentPreferences?.length ? (
                   <div className="mt-3.5 flex flex-wrap justify-center gap-1.5">
-                    {contentPreferenceLabels.filter(option => enteringProfile.contentPreferences?.includes(option.id)).map(option => {
-                      const optLabel = option.id === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') :
-                                       option.id === 'movies' ? (language === 'tr' ? 'Film' : 'Movies') :
-                                       option.id === 'sports' ? (language === 'tr' ? 'Spor' : 'Sports') :
-                                       option.id === 'live' ? (language === 'tr' ? 'Canlı TV' : 'Live TV') :
-                                       (language === 'tr' ? 'Çocuk' : 'Kids');
-                      return (
-                        <span key={option.id} className="rounded-full border border-white/5 bg-white/[0.04] px-2.5 py-1 text-[8px] font-bold text-neutral-400">{optLabel}</span>
-                      );
-                    })}
+                    {(() => {
+                      const prefsSet = new Set(enteringProfile.contentPreferences || []);
+                      return contentPreferenceLabels.filter(option => prefsSet.has(option.id)).map(option => {
+                        const optLabel = option.id === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') :
+                                         option.id === 'movies' ? (language === 'tr' ? 'Film' : 'Movies') :
+                                         option.id === 'sports' ? (language === 'tr' ? 'Spor' : 'Sports') :
+                                         option.id === 'live' ? (language === 'tr' ? 'Canlı TV' : 'Live TV') :
+                                         (language === 'tr' ? 'Çocuk' : 'Kids');
+                        return (
+                          <span key={option.id} className="rounded-full border border-white/5 bg-white/[0.04] px-2.5 py-1 text-[8px] font-bold text-neutral-400">{optLabel}</span>
+                        );
+                      });
+                    })()}
                   </div>
                 ) : null}
 

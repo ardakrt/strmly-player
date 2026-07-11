@@ -63,9 +63,11 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
   useEffect(() => {
     if (uniqueCategories.length === 0) return;
     setCustomOrder(prevOrder => {
+      const uniqueCatsSet = new Set(uniqueCategories);
+      const prevOrderSet = new Set(prevOrder);
       const updatedOrder = [
-        ...prevOrder.filter(c => uniqueCategories.includes(c)),
-        ...uniqueCategories.filter(c => !prevOrder.includes(c))
+        ...prevOrder.filter(c => uniqueCatsSet.has(c)),
+        ...uniqueCategories.filter(c => !prevOrderSet.has(c))
       ];
       const hasChanged =
         updatedOrder.length !== prevOrder.length ||
@@ -135,9 +137,11 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
 
     let newFavs = [...favorites];
 
+    const uniqueCatsSet = new Set(uniqueCategories);
+    const customOrderSet = new Set(customOrder);
     const newOrder = [
-      ...customOrder.filter(c => uniqueCategories.includes(c)),
-      ...uniqueCategories.filter(c => !customOrder.includes(c))
+      ...customOrder.filter(c => uniqueCatsSet.has(c)),
+      ...uniqueCategories.filter(c => !customOrderSet.has(c))
     ];
 
     if (isDraggedFav && isTargetFav) {

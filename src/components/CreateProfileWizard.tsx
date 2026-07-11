@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowLeft, ArrowRight, Baby, Check, ChevronLeft, Clapperboard, Clock3, Film, Link2, LoaderCircle, Plus, Search, Server, Sparkles, Trophy, Tv, UserRound, X } from 'lucide-react';
 import type { AvatarSearchResult, ContentPreference } from '../types';
 import { useSettings } from '../context/SettingsContext';
@@ -98,6 +98,7 @@ export function CreateProfileWizard({
 }: CreateProfileWizardProps) {
   const { t, language } = useSettings();
   const hasTmdbApiKey = Boolean(getTmdbApiKey());
+  const contentPreferencesSet = useMemo(() => new Set(contentPreferences), [contentPreferences]);
   const [step, setStep] = useState(1);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
@@ -475,7 +476,7 @@ export function CreateProfileWizard({
                   <span className="block mt-2 text-xs font-bold text-white">
                     {contentPreferences.length
                       ? contentPreferenceOptions
-                          .filter(option => contentPreferences.includes(option.id))
+                          .filter(option => contentPreferencesSet.has(option.id))
                           .map(option => option.id === 'series' ? t('navbar.series') :
                                           option.id === 'movies' ? t('navbar.movies') :
                                           option.id === 'live' ? t('navbar.liveTv') :

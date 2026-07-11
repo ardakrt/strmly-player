@@ -810,20 +810,22 @@ async function runFfmpegDownload({
 
     if (audioTracks.length > 0) {
       const prefLang = options.language || "tr";
-      const targetLangs =
+      const targetLangs = new Set(
         prefLang === "tr"
           ? ["tur", "tr", "turkish", "turkey"]
-          : ["eng", "en", "english"];
+          : ["eng", "en", "english"]
+      );
       let matchedAudio = audioTracks.find(
-        (t) => t.lang && targetLangs.includes(t.lang),
+        (t) => t.lang && targetLangs.has(t.lang),
       );
       if (!matchedAudio) {
-        const fallback =
+        const fallback = new Set(
           prefLang === "tr"
             ? ["eng", "en", "english"]
-            : ["tur", "tr", "turkish", "turkey"];
+            : ["tur", "tr", "turkish", "turkey"]
+        );
         matchedAudio = audioTracks.find(
-          (t) => t.lang && fallback.includes(t.lang),
+          (t) => t.lang && fallback.has(t.lang),
         );
       }
       if (!matchedAudio) matchedAudio = audioTracks[0];
@@ -837,17 +839,17 @@ async function runFfmpegDownload({
 
     if (subtitleTracks.length > 0) {
       const prefLang = options.language || "tr";
-      const targetLangs =
+      const targetLangs = new Set(
         prefLang === "tr"
           ? ["tur", "tr", "turkish", "turkey"]
-          : ["eng", "en", "english"];
+          : ["eng", "en", "english"]
+      );
+      const codecExclusions = new Set(["hdmv_pgs_subtitle", "dvd_subtitle", "dvdsub", "pgssub"]);
       const matchedSub = subtitleTracks.find(
         (t) =>
           t.lang &&
-          targetLangs.includes(t.lang) &&
-          !["hdmv_pgs_subtitle", "dvd_subtitle", "dvdsub", "pgssub"].includes(
-            t.codec || "",
-          ),
+          targetLangs.has(t.lang) &&
+          !codecExclusions.has(t.codec || ""),
       );
       if (matchedSub) {
         mapArgs.push("-map", matchedSub.index);
