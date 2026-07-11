@@ -41,7 +41,7 @@ interface QueueItem {
 const DOWNLOADS_SETTING_KEY = "strmly_downloads";
 // Pre-profile-scoping key. Kept only to migrate a user's existing downloads
 // (saved before downloads became profile-aware) into their current profile.
-const LEGACY_LOCAL_STORAGE_KEY = "strmly_downloads";
+const LEGACY_LOCAL_STORAGE_KEY = "strmly_downloads:v1";
 
 let downloadsState: DownloadItem[] = [];
 let queue: QueueItem[] = [];
