@@ -185,7 +185,11 @@ export function SpotlightSearch({
   };
 
   return (
+<<<<<<< HEAD
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowSpotlight(false))(); } }} tabIndex={0} role="button"
+=======
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowSpotlight(false))(e as any); } }} tabIndex={0} role="button"
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
       className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
       onClick={() => setShowSpotlight(false)}
     >
@@ -307,7 +311,11 @@ export function SpotlightSearch({
                     const isFocused = focusedResultIndex === idx;
 
                     return (
+<<<<<<< HEAD
                       <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(); } }} tabIndex={0} role="button"
+=======
+                      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(e as any); } }} tabIndex={0} role="button"
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
                         key={`recent-${item.id}-${idx}`}
                         onClick={() => handleSelectResult(match)}
                         onMouseEnter={() => setFocusedResultIndex(idx)}
@@ -416,7 +424,11 @@ export function SpotlightSearch({
               const isFocused = focusedResultIndex === idx;
 
               return (
+<<<<<<< HEAD
                 <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(); } }} tabIndex={0} role="button"
+=======
+                <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(e as any); } }} tabIndex={0} role="button"
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
                   key={`${type}-${item.id}`}
                   onClick={() => handleSelectResult(match)}
                   onMouseEnter={() => setFocusedResultIndex(idx)}

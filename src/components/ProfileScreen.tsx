@@ -636,11 +636,16 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
 
         {profileSelectMode === 'edit' && (
           <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4 select-none page-transition-enter">
+<<<<<<< HEAD
             <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
               setProfileSelectMode(editingProfileId ? 'manage' : 'select');
               setEditingProfileId(null);
               setIsAvatarPickerOpen(false);
             })(); } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={() => {
+=======
+            <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (() => {
+              setProfileSelectMode(editingProfileId) { 'manage'(e as any); } else { 'select');(e as any); } } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={() => {
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
               setProfileSelectMode(editingProfileId ? 'manage' : 'select');
               setEditingProfileId(null);
               setIsAvatarPickerOpen(false);
@@ -934,7 +939,11 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 select-none animate-fade-in">
+<<<<<<< HEAD
           <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowDeleteConfirm(false))(); } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setShowDeleteConfirm(false)} />
+=======
+          <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowDeleteConfirm(false))(e as any); } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setShowDeleteConfirm(false)} />
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
           
           <div className="relative w-full max-w-md transition-all duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] bg-[#070709]/95 border border-white/10 rounded-[32px] p-6 md:p-8 flex flex-col items-center text-center shadow-[0_36px_130px_rgba(0,0,0,0.8)] z-10 overflow-hidden">
             <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-red-500/35 to-transparent pointer-events-none" />

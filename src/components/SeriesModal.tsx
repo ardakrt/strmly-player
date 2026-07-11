@@ -429,7 +429,11 @@ export const SeriesModal = ({
           </div>
           {cast.length > 0 && (
             <div className="flex flex-col gap-2.5 bg-white/[0.02] border border-white/5 rounded-xl p-4 shrink-0">
+<<<<<<< HEAD
               <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(); } }} tabIndex={0} role="button" 
+=======
+              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(e as any); } }} tabIndex={0} role="button" 
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
                 onClick={() => setShowCastModal(true)}
                 className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0"
               >
@@ -441,7 +445,11 @@ export const SeriesModal = ({
                   </svg>
                 </span>
               </div>
+<<<<<<< HEAD
               <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(); } }} tabIndex={0} role="button" 
+=======
+              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(e as any); } }} tabIndex={0} role="button" 
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
                 onClick={() => setShowCastModal(true)}
                 className="flex gap-3 overflow-x-auto pb-1.5 hide-scrollbar select-none cursor-pointer"
               >
@@ -688,7 +696,11 @@ export const SeriesModal = ({
                         fallbackPoster={tmdbData?.poster}
                         stillPath={meta.stillPath}
                       />
+<<<<<<< HEAD
                       <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => playEpisode(ep.item))(); } }} tabIndex={0} role="button"
+=======
+                      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => playEpisode(ep.item))(e as any); } }} tabIndex={0} role="button"
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
                         onClick={() => playEpisode(ep.item)}
                         className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
                       >
@@ -791,7 +803,11 @@ export const SeriesModal = ({
  
       </div>
       {showCastModal && (
+<<<<<<< HEAD
         <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(false))(); } }} tabIndex={0} role="button" 
+=======
+        <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(false))(e as any); } }} tabIndex={0} role="button" 
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
           className="fixed inset-0 z-[4000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
           onClick={() => setShowCastModal(false)}
         >

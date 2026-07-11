@@ -103,7 +103,11 @@ export const SeriesCard = React.memo(({
 
   const quality = getQualityLabel(series.name);
   return (
+<<<<<<< HEAD
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => onClick(series))(); } }} role="button"
+=======
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => onClick(series))(e as any); } }} role="button"
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
       className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
       tabIndex={0}
       onClick={() => onClick(series)}

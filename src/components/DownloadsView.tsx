@@ -697,7 +697,11 @@ const DownloadItemRow = memo(function DownloadItemRow({
           } else {
             onPlay(download);
           }
+<<<<<<< HEAD
         })(); } }} tabIndex={0} role="button"
+=======
+        })(e as any); } }} tabIndex={0} role="button"
+>>>>>>> e7193502944587c0e2e5b766aff7f4e46bf08d6f
         className="group flex flex-row items-center gap-4 transition-all duration-300 cursor-pointer"
         onClick={() => {
           if (download.type === "series") {
