@@ -6,6 +6,7 @@ $electronLog = Join-Path $env:TEMP "strmly-performance-electron.log"
 try {
   Push-Location $projectRoot
   npm run build | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "Production build failed with exit code $LASTEXITCODE." }
 
   $env:STRMLY_PERF_BENCH = "1"
   $env:STRMLY_PERF_ITERATIONS = if ($env:STRMLY_PERF_ITERATIONS) { $env:STRMLY_PERF_ITERATIONS } else { "12" }
