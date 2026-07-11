@@ -230,7 +230,7 @@ export const ChannelModal = ({
           aria-label={language === 'tr' ? 'Kapat' : 'Close'}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowCastModal(false); }}
         >
-          <div 
+          <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button" 
             className="w-full max-w-lg bg-neutral-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl relative animate-scale-in flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >

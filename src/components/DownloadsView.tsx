@@ -691,7 +691,13 @@ const DownloadItemRow = memo(function DownloadItemRow({
   return (
     <div className="flex flex-col border-b border-white/5 py-4">
       {/* Main Row Block */}
-      <div
+      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
+          if (download.type === "series") {
+            onToggle();
+          } else {
+            onPlay(download);
+          }
+        })(); } }} tabIndex={0} role="button"
         className="group flex flex-row items-center gap-4 transition-all duration-300 cursor-pointer"
         onClick={() => {
           if (download.type === "series") {
@@ -845,7 +851,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
         </div>
 
         {/* Action buttons (Netflix-style simple actions) */}
-        <div
+        <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
           className="flex items-center gap-2 shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
@@ -1017,7 +1023,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
           {download.episodes.map((ep) => {
             const epInfo = parseSeriesEpisodeInfo(ep.name);
             return (
-              <div
+              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
                 key={ep.id}
                 className="flex items-center justify-between py-1 group/ep"
                 onClick={(e) => e.stopPropagation()}

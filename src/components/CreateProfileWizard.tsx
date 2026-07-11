@@ -156,7 +156,7 @@ export function CreateProfileWizard({
 
   return (
     <div className="fixed inset-0 z-[4500] flex items-center justify-center p-4 md:p-7 page-transition-enter select-none">
-      <div className="absolute inset-0 bg-black/88 backdrop-blur-2xl" onClick={isSaving ? undefined : onClose} />
+      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!(isSaving)) { onClose(); } } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/88 backdrop-blur-2xl" onClick={isSaving ? undefined : onClose} />
 
       <div className="relative w-full max-w-[1320px] h-[min(720px,94vh)] overflow-hidden rounded-[36px] border border-white/12 bg-[#08080a]/98 shadow-[0_40px_150px_rgba(0,0,0,0.85)] flex">
         <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent pointer-events-none" />

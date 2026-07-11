@@ -474,7 +474,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
           ))}
         </video>
         {channel.type === 'series' && nextEpisode && duration > 35 && (duration - currentTime <= 35) && (duration - currentTime > 1) && !isAutoplayCancelled && (
-          <div
+          <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-28 right-8 z-30 bg-neutral-950/90 border border-white/10 backdrop-blur-2xl p-5 rounded-2xl shadow-2xl flex flex-col gap-3 min-w-[280px] max-w-[90%] animate-scale-in"
           >
@@ -514,7 +514,9 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
         )}
 
 
-        <div
+        <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
+            onHideControls();
+          })(); } }} tabIndex={0} role="button"
           className="absolute inset-0 z-0 cursor-pointer"
           onClick={() => {
             onHideControls();

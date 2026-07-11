@@ -185,11 +185,11 @@ export function SpotlightSearch({
   };
 
   return (
-    <div
+    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowSpotlight(false))(); } }} tabIndex={0} role="button"
       className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
       onClick={() => setShowSpotlight(false)}
     >
-      <div
+      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
         className="relative w-full max-w-3xl bg-neutral-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden glass-slide-up max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -307,7 +307,7 @@ export function SpotlightSearch({
                     const isFocused = focusedResultIndex === idx;
 
                     return (
-                      <div
+                      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(); } }} tabIndex={0} role="button"
                         key={`recent-${item.id}-${idx}`}
                         onClick={() => handleSelectResult(match)}
                         onMouseEnter={() => setFocusedResultIndex(idx)}
@@ -416,7 +416,7 @@ export function SpotlightSearch({
               const isFocused = focusedResultIndex === idx;
 
               return (
-                <div
+                <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(); } }} tabIndex={0} role="button"
                   key={`${type}-${item.id}`}
                   onClick={() => handleSelectResult(match)}
                   onMouseEnter={() => setFocusedResultIndex(idx)}
