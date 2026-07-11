@@ -474,7 +474,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             onClick={() => setSelectedGroup("Ayarlar")}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
             title="Geri Dön"
-          >
+           aria-label="Geri Dön">
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -505,7 +505,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             <button type="button"
               onClick={() => setQuery("")}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors cursor-pointer"
-            >
+             aria-label="Close">
               <X size={13} />
             </button>
           )}
@@ -545,7 +545,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             <button type="button"
               onClick={pauseAll}
               className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border border-white/5 rounded-full cursor-pointer bg-white/[0.02] hover:bg-amber-500/10 hover:border-amber-500/20 text-neutral-400 hover:text-amber-400"
-            >
+             aria-label="Pause">
               <Pause size={11} />
               <span>{language === "tr" ? "Tümünü Duraklat" : "Pause All"}</span>
             </button>
@@ -555,7 +555,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             <button type="button"
               onClick={resumeAll}
               className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border border-white/5 rounded-full cursor-pointer bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/20 text-neutral-400 hover:text-emerald-400"
-            >
+             aria-label="Play">
               <Play size={11} fill="currentColor" />
               <span>{language === "tr" ? "Tümünü Başlat" : "Resume All"}</span>
             </button>
@@ -891,7 +891,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                 onClick={() => onCancel(download)}
                 title={language === "tr" ? "Duraklat" : "Pause"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all active:scale-95"
-              >
+               aria-label={language === "tr" ? "Duraklat" : "Pause"}>
                 <Pause size={10} fill="currentColor" />
               </button>
 
@@ -900,7 +900,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "İptal Et" : "Cancel"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-              >
+               aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
                 <X size={12} />
               </button>
             </>
@@ -913,7 +913,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "İptal Et" : "Cancel"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-              >
+               aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
                 <X size={12} />
               </button>
             </>
@@ -934,7 +934,15 @@ const DownloadItemRow = memo(function DownloadItemRow({
                       : "Retry"
                 }
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-500/10 bg-blue-500/5 text-blue-400 hover:bg-blue-500/15 cursor-pointer transition-all active:scale-95"
-              >
+               aria-label={
+                  language === "tr"
+                    ? isPaused
+                      ? "Devam Et"
+                      : "Yeniden Dene"
+                    : isPaused
+                      ? "Resume"
+                      : "Retry"
+                }>
                 {isPaused ? (
                   <Play size={10} fill="currentColor" className="ml-0.5" />
                 ) : (
@@ -945,7 +953,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "Sil" : "Delete"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-              >
+               aria-label={language === "tr" ? "Sil" : "Delete"}>
                 <Trash2 size={12} />
               </button>
             </>
@@ -966,7 +974,15 @@ const DownloadItemRow = memo(function DownloadItemRow({
                       : "Play"
                 }
                 className="flex h-8.5 px-3 items-center justify-center rounded-full bg-white text-black hover:bg-neutral-200 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-md text-[10px] font-bold gap-1"
-              >
+               aria-label={
+                  download.type === "series"
+                    ? language === "tr"
+                      ? "Bölümleri Gör"
+                      : "See Episodes"
+                    : language === "tr"
+                      ? "Oynat"
+                      : "Play"
+                }>
                 {download.type === "series" ? (
                   <>
                     <Info size={11} />
@@ -985,7 +1001,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                 onClick={() => onDelete(download)}
                 title={language === "tr" ? "Sil" : "Delete"}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-              >
+               aria-label={language === "tr" ? "Sil" : "Delete"}>
                 <Trash2 size={12} />
               </button>
             </>
@@ -1050,7 +1066,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                           onClick={() => void onPlayEpisode(ep.id)}
                           title={language === "tr" ? "Oynat" : "Play"}
                           className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-black hover:bg-neutral-200 cursor-pointer transition-all active:scale-95 shadow-sm"
-                        >
+                         aria-label={language === "tr" ? "Oynat" : "Play"}>
                           <Play
                             size={10}
                             fill="currentColor"
@@ -1061,7 +1077,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                           onClick={() => onDeleteEpisode(ep.id)}
                           title={language === "tr" ? "Sil" : "Delete"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                        >
+                         aria-label={language === "tr" ? "Sil" : "Delete"}>
                           <Trash2 size={11} />
                         </button>
                       </>
@@ -1077,14 +1093,18 @@ const DownloadItemRow = memo(function DownloadItemRow({
                               : "Download Now (Prioritize)"
                           }
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--accent-color)]/20 bg-[var(--accent-color)]/5 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/15 cursor-pointer transition-all active:scale-95 shadow-sm"
-                        >
+                         aria-label={
+                            language === "tr"
+                              ? "Şimdi İndir (Öncelik Ver)"
+                              : "Download Now (Prioritize)"
+                          }>
                           <Zap size={10} fill="currentColor" />
                         </button>
                         <button type="button"
                           onClick={() => onCancelEpisode(ep.id)}
                           title={language === "tr" ? "İptal Et" : "Cancel"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                        >
+                         aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
                           <X size={11} />
                         </button>
                       </>
@@ -1096,14 +1116,14 @@ const DownloadItemRow = memo(function DownloadItemRow({
                           onClick={() => onCancelEpisode(ep.id)}
                           title={language === "tr" ? "Duraklat" : "Pause"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all active:scale-95"
-                        >
+                         aria-label={language === "tr" ? "Duraklat" : "Pause"}>
                           <Pause size={10} fill="currentColor" />
                         </button>
                         <button type="button"
                           onClick={() => onDeleteEpisode(ep.id)}
                           title={language === "tr" ? "İptal Et" : "Cancel"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                        >
+                         aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
                           <X size={11} />
                         </button>
                       </>
@@ -1123,7 +1143,15 @@ const DownloadItemRow = memo(function DownloadItemRow({
                                 : "Retry"
                           }
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-blue-500/10 bg-blue-500/5 text-blue-400 hover:bg-blue-500/15 cursor-pointer transition-all active:scale-95"
-                        >
+                         aria-label={
+                            language === "tr"
+                              ? ep.status === "paused"
+                                ? "Devam Et"
+                                : "Yeniden Dene"
+                              : ep.status === "paused"
+                                ? "Resume"
+                                : "Retry"
+                          }>
                           {ep.status === "paused" ? (
                             <Play
                               size={9}
@@ -1138,7 +1166,7 @@ const DownloadItemRow = memo(function DownloadItemRow({
                           onClick={() => onDeleteEpisode(ep.id)}
                           title={language === "tr" ? "Sil" : "Delete"}
                           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                        >
+                         aria-label={language === "tr" ? "Sil" : "Delete"}>
                           <Trash2 size={11} />
                         </button>
                       </>

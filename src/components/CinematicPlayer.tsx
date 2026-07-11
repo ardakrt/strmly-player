@@ -494,7 +494,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                   onChannelChange(nextEpisode);
                 }}
                 className="flex-1 py-2 bg-white text-black font-bold text-xs rounded-xl hover:bg-neutral-200 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-              >
+               aria-label="Play">
                 <Play size={12} fill="#000" />
                 {language === 'tr' ? 'Şimdi Oynat' : 'Play Now'}
               </button>
@@ -583,7 +583,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               }}
               className="pointer-events-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/30 hover:bg-black/45 border border-white/10 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl backdrop-blur-sm group/skip"
               title={language === 'tr' ? '10 Sn Geri' : '10 Sec Backward'}
-            >
+             aria-label={language === 'tr' ? '10 Sn Geri' : '10 Sec Backward'}>
               <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                 <path d="M3 3v5h5" />
@@ -599,7 +599,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             }}
             className="pointer-events-auto w-16 h-16 md:w-20 md:h-20 rounded-full bg-black/30 hover:bg-black/45 border border-white/10 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-90 shadow-2xl backdrop-blur-sm group/play"
             title={isPlaying ? (language === 'tr' ? 'Durdur' : 'Pause') : (language === 'tr' ? 'Başlat' : 'Play')}
-          >
+           aria-label={isPlaying ? (language === 'tr' ? 'Durdur' : 'Pause') : (language === 'tr' ? 'Başlat' : 'Play')}>
             {isPlaying ? (
               <Pause size={28} fill="#fff" className="text-white transition-transform group-hover/play:scale-110" />
             ) : (
@@ -615,7 +615,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               }}
               className="pointer-events-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/30 hover:bg-black/45 border border-white/10 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl backdrop-blur-sm group/skip"
               title={language === 'tr' ? '10 Sn İleri' : '10 Sec Forward'}
-            >
+             aria-label={language === 'tr' ? '10 Sn İleri' : '10 Sec Forward'}>
               <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
                 <path d="M21 3v5h-5" />
@@ -665,7 +665,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                   }}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95"
                   title={language === 'tr' ? 'Önceki Bölüm' : 'Previous Episode'}
-                >
+                 aria-label={language === 'tr' ? 'Önceki Bölüm' : 'Previous Episode'}>
                   <SkipBack size={12} fill="currentColor" />
                 </button>
                 {prevEpisode && (
@@ -680,7 +680,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             <button type="button"
               className="w-10 h-10 shrink-0 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
               onClick={onTogglePlay}
-            >
+             aria-label="Play">
               {isPlaying ? <Pause size={18} fill="#000" /> : <Play size={18} fill="#000" className="ml-0.5" />}
             </button>
             {channel.type === 'series' && (
@@ -693,7 +693,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                   }}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95"
                   title={language === 'tr' ? 'Sonraki Bölüm' : 'Next Episode'}
-                >
+                 aria-label={language === 'tr' ? 'Sonraki Bölüm' : 'Next Episode'}>
                   <SkipForward size={12} fill="currentColor" />
                 </button>
                 {nextEpisode && (
@@ -799,7 +799,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                     setCurrentSubmenu('main');
                   }}
                   title={t('settings.title')}
-                >
+                 aria-label={t('settings.title')}>
                   <Settings size={14} className={`transition-transform duration-300 ${showSettingsMenu ? 'rotate-45' : ''}`} />
                 </button>
 
@@ -816,7 +816,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                             onClick={() => setShowSettingsMenu(false)}
                             className="flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.06] text-white/50 transition-colors hover:bg-white/10 hover:text-white"
                             title={language === 'tr' ? 'Kapat' : 'Close'}
-                          >
+                           aria-label={language === 'tr' ? 'Kapat' : 'Close'}>
                             <X size={13} />
                           </button>
                         </div>
@@ -888,7 +888,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
-                          >
+                           aria-label="Previous">
                             <ChevronLeft size={14} />
                           </button>
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{language === 'tr' ? 'Oynatma Hızı' : 'Playback Speed'}</span>
@@ -913,7 +913,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
-                          >
+                           aria-label="Previous">
                             <ChevronLeft size={14} />
                           </button>
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{language === 'tr' ? 'Kalite' : 'Quality'}</span>
@@ -955,7 +955,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
-                          >
+                           aria-label="Previous">
                             <ChevronLeft size={14} />
                           </button>
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{t('player.subtitles')}</span>
@@ -1001,7 +1001,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
-                          >
+                           aria-label="Previous">
                             <ChevronLeft size={14} />
                           </button>
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{language === 'tr' ? 'Video Ölçeği' : 'Aspect Ratio'}</span>
@@ -1035,7 +1035,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                           <button type="button"
                             onClick={() => setCurrentSubmenu('main')}
                             className="w-6 h-6 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition-colors"
-                          >
+                           aria-label="Previous">
                             <ChevronLeft size={14} />
                           </button>
                           <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">{t('player.audio')}</span>

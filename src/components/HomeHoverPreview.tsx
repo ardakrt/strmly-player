@@ -507,7 +507,7 @@ export function HoverPreviewPortal({
               toggleFavorite(channel.id, event);
             }}
             title={favLabel}
-          >
+           aria-label={favLabel}>
             {isInFavorites ? <Heart size={14} fill="currentColor" className="text-red-500" /> : <Plus size={16} />}
           </button>
 
@@ -517,7 +517,7 @@ export function HoverPreviewPortal({
               className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/[0.06] border border-white/[0.04] text-neutral-300 transition-all hover:bg-white/[0.12] hover:text-white active:scale-95 cursor-pointer"
               onClick={() => handleOpenDetails(channel)}
               title={language === 'tr' ? 'Detaylar' : 'Details'}
-            >
+             aria-label={language === 'tr' ? 'Detaylar' : 'Details'}>
               <Info size={14} />
             </button>
           )}

@@ -231,7 +231,7 @@ export function SpotlightSearch({
             <button type="button"
               onClick={() => setSpotlightSearchInput('')}
               className="p-1 rounded-lg hover:bg-white/5 text-neutral-400 hover:text-white transition-all shrink-0 cursor-pointer"
-            >
+             aria-label="Close">
               <X size={14} />
             </button>
           )}
@@ -345,7 +345,7 @@ export function SpotlightSearch({
                             isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                           }`}
                           title={language === 'tr' ? 'Kaldır' : 'Remove'}
-                        >
+                         aria-label={language === 'tr' ? 'Kaldır' : 'Remove'}>
                           <Trash2 size={11} />
                         </button>
                       </div>

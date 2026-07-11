@@ -612,7 +612,7 @@ export const LiveTvView = React.memo(function LiveTvView({
               <button type="button"
                 onClick={() => handlePlayStream(previewChannel)}
                 className="w-full py-3 bg-white hover:bg-neutral-200 text-black rounded-xl flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
-              >
+               aria-label="Play">
                 <Play size={12} fill="#000" /> {language === 'tr' ? 'Kanalı İzle' : 'Watch Channel'}
               </button>
               

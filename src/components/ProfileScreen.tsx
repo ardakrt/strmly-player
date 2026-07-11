@@ -214,7 +214,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
               onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)}
               className="group aspect-[2/3] rounded-xl overflow-hidden border border-transparent hover:border-white/20 transition-all duration-300 transform hover:scale-105 cursor-pointer relative shadow-lg"
               title={item.name}
-            >
+             aria-label={item.name}>
               <img src={item.posterUrl} className="w-full h-full object-cover" alt={item.name} loading="lazy" />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center">
                 <span className="text-[8px] font-black text-white text-center truncate w-full">
@@ -242,7 +242,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             onClick={() => onFetchSeriesCast(series.id, series.name, 'tv')}
             className="group aspect-[2/3] rounded-xl overflow-hidden border border-transparent hover:border-white/20 transition-all duration-300 transform hover:scale-105 cursor-pointer relative shadow-lg"
             title={series.name}
-          >
+           aria-label={series.name}>
             <img src={series.posterUrl} className="w-full h-full object-cover" alt={series.name} loading="lazy" />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center">
               <span className="text-[8px] font-black text-white text-center truncate w-full">
@@ -672,7 +672,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                     setIsAvatarPickerOpen(false);
                   }}
                   className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0"
-                >
+                 aria-label="Close">
                   <X size={14} />
                 </button>
               </div>
@@ -687,7 +687,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                       onClick={() => setIsAvatarPickerOpen(!isAvatarPickerOpen)}
                       className="relative w-24 h-24 md:w-28 md:h-28 rounded-[28px] p-1.5 border border-white/12 hover:border-white/35 bg-white/[0.04] shadow-[0_22px_70px_rgba(0,0,0,0.42)] overflow-hidden transition-all duration-300 hover:scale-[1.025] active:scale-[0.98] cursor-pointer block"
                       title={language === 'tr' ? 'Profil resmi seç / değiştir' : 'Select / change profile picture'}
-                    >
+                     aria-label={language === 'tr' ? 'Profil resmi seç / değiştir' : 'Select / change profile picture'}>
                       <div className="w-full h-full rounded-[21px] overflow-hidden flex items-center justify-center bg-black/45">
                         {profileFormAvatar ? (
                           profileFormAvatar.startsWith('linear-gradient') ? (
@@ -896,7 +896,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
                     onClick={() => setShowDeleteConfirm(true)}
                     className="px-4.5 h-11 bg-red-950/40 hover:bg-red-900/40 border border-red-500/20 hover:border-red-500/40 text-red-400 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer shrink-0"
                     title={language === 'tr' ? 'Profili Sil' : 'Delete Profile'}
-                  >
+                   aria-label={language === 'tr' ? 'Profili Sil' : 'Delete Profile'}>
                     <Trash2 size={13} fill="none" className="text-red-400" /> {language === 'tr' ? 'Sil' : 'Delete'}
                   </button>
                 )}

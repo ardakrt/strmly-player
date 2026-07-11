@@ -466,14 +466,14 @@ export const SeriesModal = ({
                 <button type="button"
                   onClick={() => playEpisode(resumeEpisode.item)}
                   className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
-                >
+                 aria-label="Play">
                   <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Devam Et' : 'Resume Watching'}
                 </button>
               ) : (
                 <button type="button"
                   onClick={() => playEpisode(firstEpisode.item)}
                   className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
-                >
+                 aria-label="Play">
                   <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Başla' : 'Start Watching'}
                 </button>
               )}
@@ -602,7 +602,12 @@ export const SeriesModal = ({
                         ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
                         : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
                     }
-                  >
+                   aria-label={allSeasonSaved
+                      ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
+                      : seasonDownloading
+                      ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
+                      : savedCount > 0
+                        ? (language === 'tr' ? `Eksikleri indir (${missingCount}>
                     {allSeasonSaved
                       ? <CheckCircle2 size={14} strokeWidth={2.5} />
                       : <Download size={14} strokeWidth={2.5} className={seasonDownloading ? 'animate-bounce' : ''} />}
@@ -758,7 +763,11 @@ export const SeriesModal = ({
                           : episodeSaving
                             ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
                             : (language === 'tr' ? 'Kaydet' : 'Save')}
-                      >
+                       aria-label={episodeSaved
+                          ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
+                          : episodeSaving
+                            ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
+                            : (language === 'tr' ? 'Kaydet' : 'Save')}>
                         {episodeSaved ? (
                           <Play size={13} fill="currentColor" className="ml-0.5" />
                         ) : episodeSaving ? (

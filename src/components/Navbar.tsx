@@ -206,7 +206,7 @@ export const Navbar = memo(function Navbar({
                     <button type="button"
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer focusable-item"
                       onClick={() => { setProfileDropdownOpen(false); setSelectedGroup('Ayarlar'); }}
-                    >
+                     aria-label="Settings">
                       <Settings size={13} className="text-neutral-400" /> {t('navbar.advancedSettings')}
                     </button>
                   </div>

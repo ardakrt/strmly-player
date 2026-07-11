@@ -327,7 +327,7 @@ export function CreateProfileWizard({
                     ) : (
                       <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-4 max-h-[390px] overflow-y-auto hide-scrollbar pr-1 pb-1">
                         {seriesCatalog.map(item => (
-                          <button type="button" key={`${item.mediaType}-${item.id}`} onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)} title={item.name} className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-transparent hover:border-white/45 transition-all hover:-translate-y-1 bg-neutral-900">
+                          <button type="button" key={`${item.mediaType}-${item.id}`} onClick={() => onFetchSeriesCast(item.id, item.name, item.mediaType)} title={item.name} className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-transparent hover:border-white/45 transition-all hover:-translate-y-1 bg-neutral-900" aria-label={item.name}>
                             <img src={item.posterUrl} className="w-full h-full object-cover" alt={item.name} />
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/5 to-transparent" />
                             <span className="absolute inset-x-2 bottom-2 truncate text-[9px] font-black text-white">{item.name}</span>
@@ -341,7 +341,7 @@ export function CreateProfileWizard({
             ) : (
               <div className="grid lg:grid-cols-[240px_1fr] gap-10 items-center min-h-[400px] animate-fade-in">
                 <div className="flex flex-col items-center">
-                  <button type="button" onClick={() => setAvatarPickerOpen(true)} className="group relative w-48 h-48 rounded-[38px] overflow-hidden border-2 border-white/15 hover:border-white/50 bg-neutral-950 shadow-[0_28px_80px_rgba(0,0,0,0.55)] transition-all hover:-translate-y-1" title={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'}>
+                  <button type="button" onClick={() => setAvatarPickerOpen(true)} className="group relative w-48 h-48 rounded-[38px] overflow-hidden border-2 border-white/15 hover:border-white/50 bg-neutral-950 shadow-[0_28px_80px_rgba(0,0,0,0.55)] transition-all hover:-translate-y-1" title={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'} aria-label={language === 'tr' ? 'Profil resmi seç' : 'Select profile avatar'}>
                     {avatar ? renderAvatar(avatar, 'w-full h-full') : <div className="w-full h-full flex items-center justify-center"><UserRound size={46} className="text-neutral-600" /></div>}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 h-14 flex items-center justify-center gap-2 text-[10px] font-black text-white opacity-80 group-hover:opacity-100">

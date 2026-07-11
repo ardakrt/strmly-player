@@ -393,14 +393,14 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               disabled={isParsing}
               onClick={() => onRefreshPlaylist(playlist)}
               title={language === 'tr' ? 'Listeyi Güncelle' : 'Update Playlist'}
-            >
+             aria-label={language === 'tr' ? 'Listeyi Güncelle' : 'Update Playlist'}>
               <RefreshCw size={12} className={isParsing && isActive ? 'animate-spin text-[var(--accent-color)]' : ''} />
             </button>
             <button type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/15 bg-red-950/15 text-red-300 hover:bg-red-900/20 transition-all active:scale-95 cursor-pointer"
               onClick={() => onDeletePlaylist(playlist.id)}
               title={language === 'tr' ? 'Listeyi Sil' : 'Delete Playlist'}
-            >
+             aria-label={language === 'tr' ? 'Listeyi Sil' : 'Delete Playlist'}>
               <Trash2 size={12} />
             </button>
           </div>
@@ -487,7 +487,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     onClick={() => restore(group)}
                     className="inline-flex h-7.5 items-center justify-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400 hover:text-white hover:border-[var(--accent-color)]/30 hover:bg-[var(--accent-color)]/10 transition-all cursor-pointer shrink-0"
                     title={language === 'tr' ? 'Kategoriyi Göster' : 'Show Category'}
-                  >
+                   aria-label={language === 'tr' ? 'Kategoriyi Göster' : 'Show Category'}>
                     <Eye size={11} className="shrink-0" />
                     <span>{language === 'tr' ? 'Göster' : 'Show'}</span>
                   </button>
@@ -970,7 +970,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       <button type="button" 
                         onClick={() => setCategorySearch('')}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
-                      >
+                       aria-label="Close">
                         <X size={13} />
                       </button>
                     )}
@@ -990,7 +990,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       (categorySubTab === 'series' && safeHiddenSeriesCategories.length === 0) ||
                       (categorySubTab === 'movie' && safeHiddenMovieCategories.length === 0)
                     }
-                  >
+                   aria-label="View">
                     <Eye size={13} /> {language === 'tr' ? 'Seçilileri Göster' : 'Show Selected'}
                   </button>
                 </div>

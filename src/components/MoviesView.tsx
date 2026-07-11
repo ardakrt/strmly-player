@@ -152,7 +152,7 @@ export const MovieCard = React.memo(({
                     : 'bg-white/90 text-black border-white/20 hover:bg-white'
                 }`}
                 title={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}
-              >
+               aria-label={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}>
                 <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
               </button>
             )}
@@ -176,7 +176,7 @@ export const MovieCard = React.memo(({
             isFavorite ? 'opacity-100 text-red-500 border-red-500/20' : 'opacity-0 group-hover:opacity-100'
           }`}
           title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-        >
+         aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}>
           <Heart size={11} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
         </button>
       </div>
@@ -294,14 +294,14 @@ export const MoviesView = React.memo(function MoviesView({
                         onClick={(e) => movieCat.toggleFavorite(group, e)}
                         className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                         title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
-                      >
+                       aria-label={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}>
                         <Heart size={11} fill="currentColor" />
                       </button>
                       <button type="button"
                         onClick={(e) => movieCat.handleHide(group, e)}
                         className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                         title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                      >
+                       aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}>
                         <Trash2 size={11} />
                       </button>
                     </div>
@@ -344,14 +344,14 @@ export const MoviesView = React.memo(function MoviesView({
                       onClick={(e) => movieCat.toggleFavorite(group, e)}
                       className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
-                    >
+                     aria-label={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}>
                       <Heart size={11} />
                     </button>
                     <button type="button"
                       onClick={(e) => movieCat.handleHide(group, e)}
                       className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
                       title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                    >
+                     aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}>
                       <Trash2 size={11} />
                     </button>
                   </div>

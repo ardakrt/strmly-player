@@ -371,7 +371,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
           }}
           className="absolute bottom-3 right-3 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-lg"
           title="Favorilere Ekle"
-        >
+         aria-label="Favorilere Ekle">
           <Heart size={14} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
         <div className="absolute inset-x-0 bottom-0 z-20 p-3.5 pr-12 pt-12 bg-gradient-to-t from-black via-black/90 to-transparent pointer-events-none">
@@ -462,7 +462,7 @@ export const HomeView = memo(function HomeView({
   showToast
 }: HomeViewProps) {
   const { t, language } = useSettings();
-  const [visibleHomeBlocks, setVisibleHomeBlocks] = useState(2);
+  const [visibleHomeBlocks, setVisibleHomeBlocks] = useState(1);
   const homeSectionOrder = useMemo(() => {
     const preferredSections = contentPreferences.map(preference => {
       if (preference === 'series') return 'series';
@@ -549,8 +549,8 @@ export const HomeView = memo(function HomeView({
 
   useEffect(() => {
     if (selectedGroup !== 'Ana Sayfa' || searchQuery.trim() !== '') return;
-    setVisibleHomeBlocks(2);
-    const timers = [3, 4, 5, 6].map((count, index) => (
+    setVisibleHomeBlocks(1);
+    const timers = [2, 3, 4, 5, 6].map((count, index) => (
       window.setTimeout(() => setVisibleHomeBlocks(count), 80 + index * 90)
     ));
     return () => timers.forEach(timer => window.clearTimeout(timer));
@@ -633,7 +633,7 @@ export const HomeView = memo(function HomeView({
           onClick={(e) => toggleFavorite(channel.id, e)}
           className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110"
           title="Favorilere Ekle"
-        >
+         aria-label="Favorilere Ekle">
           <Heart size={12} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
         <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
@@ -753,7 +753,7 @@ export const HomeView = memo(function HomeView({
                   }
                 }}
                 className="h-11 px-6 bg-white text-black font-extrabold rounded-full flex items-center gap-2 hover:bg-neutral-200 transition-all duration-200 shadow-[0_8px_20px_rgba(0,0,0,0.28)] transform active:scale-95 text-xs"
-              >
+               aria-label="Play">
                 <Play size={13} fill="#000" className="ml-0.5" /> {language === 'tr' ? 'Şimdi İzle' : 'Watch Now'}
               </button>
               <button type="button"
@@ -765,7 +765,7 @@ export const HomeView = memo(function HomeView({
                   }
                 }}
                 className="h-11 px-5 bg-white/[0.09] hover:bg-white/[0.15] backdrop-blur-xl border border-white/[0.12] text-white font-bold rounded-full transition-all duration-300 transform active:scale-95 text-xs flex items-center gap-2"
-              >
+               aria-label="Info">
                 <Info size={14} /> {language === 'tr' ? 'Detaylar' : 'Details'}
               </button>
             </div>

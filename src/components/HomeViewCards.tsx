@@ -65,7 +65,7 @@ export function LiveTvQuickChannelCard({
           }}
           className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-sm"
           title="Favorilere Ekle"
-        >
+         aria-label="Favorilere Ekle">
           <Heart size={12} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
         <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
@@ -471,7 +471,7 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
           }}
           className="absolute bottom-3 right-3 z-30 w-8 h-8 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-lg cursor-pointer"
           title={isInFavorites ? (language === 'tr' ? 'Favorilerden çıkar' : 'Remove from favorites') : (language === 'tr' ? 'Favorilere ekle' : 'Add to favorites')}
-        >
+         aria-label={isInFavorites ? (language === 'tr' ? 'Favorilerden çıkar' : 'Remove from favorites') : (language === 'tr' ? 'Favorilere ekle' : 'Add to favorites')}>
           <Heart size={13} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
 
@@ -483,7 +483,7 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
           }}
           className="absolute bottom-3 right-12 z-30 w-8 h-8 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-white transition-all transform hover:scale-110 shadow-lg cursor-pointer"
           title={language === 'tr' ? 'Detaylar' : 'Details'}
-        >
+         aria-label={language === 'tr' ? 'Detaylar' : 'Details'}>
           <Info size={13} />
         </button>
 
