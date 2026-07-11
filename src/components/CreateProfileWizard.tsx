@@ -223,7 +223,7 @@ export function CreateProfileWizard({
               onClick={onClose}
               disabled={isSaving}
               className="w-10 h-10 rounded-full border border-white/8 bg-white/[0.035] hover:bg-white/10 disabled:opacity-40 flex items-center justify-center text-neutral-400 hover:text-white transition-all"
-            >
+             aria-label="Close">
               <X size={15} />
             </button>
           </header>

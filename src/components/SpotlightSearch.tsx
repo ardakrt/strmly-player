@@ -223,7 +223,7 @@ export function SpotlightSearch({
                 : 'bg-white/[0.02] border-white/5 text-neutral-400 hover:text-white hover:bg-white/5'
             }`}
             title={language === 'tr' ? 'Sesle Ara' : 'Voice Search'}
-          >
+           aria-label={language === 'tr' ? 'Sesle Ara' : 'Voice Search'}>
             <Mic size={14} />
           </button>
 

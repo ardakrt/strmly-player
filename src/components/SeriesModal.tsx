@@ -361,7 +361,7 @@ export const SeriesModal = ({
         <button type="button"
           onClick={onClose}
           className="absolute top-5 right-5 z-50 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-xl transition-all duration-300 hover:scale-105 shadow-lg cursor-pointer"
-        >
+         aria-label="Close">
           <X size={16} />
         </button>
         <div className="w-full md:w-[38%] flex flex-col gap-4 p-5 md:p-6 border-b md:border-b-0 md:border-r border-white/5 bg-black/20 overflow-y-auto shrink-0 select-none hide-scrollbar">
@@ -392,7 +392,7 @@ export const SeriesModal = ({
                 onClick={onToggleFavorite}
                 className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 transition-all duration-300 active:scale-90 shrink-0 shadow-md cursor-pointer"
                 title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-              >
+               aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}>
                 <Heart size={18} fill={isFavorite ? "currentColor" : "none"} className={isFavorite ? "text-red-500" : ""} />
               </button>
             </div>

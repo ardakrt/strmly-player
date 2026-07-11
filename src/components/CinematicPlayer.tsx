@@ -710,7 +710,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0"
                 onClick={onToggleMute}
                 title={language === 'tr' ? 'Sessiz (M)' : 'Mute (M)'}
-              >
+               aria-label={language === 'tr' ? 'Sessiz (M)' : 'Mute (M)'}>
                 {playerMuted || playerVolume === 0 ? (
                   <VolumeX size={17} className="text-neutral-400 hover:text-red-400 transition-colors duration-300" />
                 ) : playerVolume < 0.35 ? (
@@ -1064,7 +1064,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 className="w-8 h-8 rounded-full hover:bg-white/20 text-white flex items-center justify-center transition-colors"
                 onClick={onToggleFullscreen}
                 title={language === 'tr' ? 'Tam Ekran (F)' : 'Fullscreen (F)'}
-              >
+               aria-label={language === 'tr' ? 'Tam Ekran (F)' : 'Fullscreen (F)'}>
                 {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               </button>
             </div>

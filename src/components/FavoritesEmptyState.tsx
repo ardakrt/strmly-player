@@ -22,13 +22,13 @@ export function FavoritesEmptyState({ onGoToLiveTv, onGoToHome }: FavoritesEmpty
           <button type="button"
             onClick={onGoToLiveTv}
             className="h-11 px-5 rounded-full bg-white text-black hover:bg-neutral-200 transition-all font-bold text-xs flex items-center gap-2"
-          >
+           aria-label="TV">
             <Tv size={15} /> Canlı TV&apos;ye Git
           </button>
           <button type="button"
             onClick={onGoToHome}
             className="h-11 px-5 rounded-full bg-white/8 hover:bg-white/14 border border-white/10 transition-all font-bold text-xs text-white flex items-center gap-2"
-          >
+           aria-label="Play">
             <Play size={14} fill="currentColor" /> {APP_VIEWS.home}
           </button>
         </div>

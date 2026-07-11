@@ -527,7 +527,7 @@ export function HoverPreviewPortal({
             className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/[0.06] border border-white/[0.04] text-neutral-300 hover:text-red-400 transition-all hover:bg-white/[0.12] active:scale-95 cursor-pointer"
             onClick={onClose}
             title={hideLabel}
-          >
+           aria-label={hideLabel}>
             <Ban size={15} />
           </button>
         </div>
