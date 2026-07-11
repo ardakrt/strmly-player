@@ -466,13 +466,22 @@ app.whenReady().then(async () => {
   protocol.handle("app-file", async (request) => {
     try {
       const parsedUrl = new URL(request.url);
-      let filePath = decodeURIComponent(parsedUrl.pathname);
+      let filePath = decodeURIComponent(parsedUrl.pathname || "");
       if (process.platform === "win32") {
-        if (/^\/[a-zA-Z]:\//.test(filePath)) {
+        // pathToFileURL → app-file:///E:/path  → pathname "/E:/path"
+        // Some parsers yield app-file://E:/path → host "E:" + pathname "/path"
+        // which otherwise becomes "\path" and loses the drive letter.
+        const host = String(parsedUrl.host || parsedUrl.hostname || "");
+        if (/^[a-zA-Z]:?$/i.test(host)) {
+          const drive = host.replace(":", "").toUpperCase() + ":";
+          const rest = filePath.startsWith("/") ? filePath : `/${filePath}`;
+          filePath = drive + rest;
+        } else if (/^\/[a-zA-Z]:[\\/]/.test(filePath) || /^\/[a-zA-Z]:\//.test(filePath)) {
           filePath = filePath.substring(1);
         } else if (/^[a-zA-Z]\//.test(filePath)) {
           filePath = filePath[0] + ":" + filePath.substring(1);
         }
+        filePath = filePath.replace(/\//g, path.sep);
       } else {
         filePath = filePath.replace(/^\/+/, "/");
       }
@@ -628,16 +637,27 @@ app.on("will-quit", () => {
 
 function appFileOrFileUrlToPath(rawUrl) {
   try {
-    const normalized = String(rawUrl || "").replace(/^app-file:/i, "file:");
-    const parsed = new URL(normalized);
+    // Keep host (drive letter) when parsing Windows app-file://E:/... forms.
+    const raw = String(rawUrl || "");
+    const parsed = new URL(
+      raw.startsWith("app-file:")
+        ? raw.replace(/^app-file:/i, "file:")
+        : raw,
+    );
     if (parsed.protocol !== "file:") return null;
     let filePath = decodeURIComponent(parsed.pathname || "");
     if (process.platform === "win32") {
-      if (/^\/[a-zA-Z]:\//.test(filePath)) {
+      const host = String(parsed.host || parsed.hostname || "");
+      if (/^[a-zA-Z]:?$/i.test(host)) {
+        const drive = host.replace(":", "").toUpperCase() + ":";
+        const rest = filePath.startsWith("/") ? filePath : `/${filePath}`;
+        filePath = drive + rest;
+      } else if (/^\/[a-zA-Z]:[\\/]/.test(filePath) || /^\/[a-zA-Z]:\//.test(filePath)) {
         filePath = filePath.substring(1);
       } else if (/^[a-zA-Z]\//.test(filePath)) {
         filePath = filePath[0] + ":" + filePath.substring(1);
       }
+      filePath = filePath.replace(/\//g, path.sep);
     } else {
       filePath = filePath.replace(/^\/+/, "/");
     }
@@ -1052,7 +1072,11 @@ ipcMain.handle(
     }
 
     stopFfmpegProxy();
-    const { inputUrl, hostHeader } = await prepareFfmpegInput(url);
+    const {
+      inputUrl,
+      hostHeader,
+      isLocal = false,
+    } = await prepareFfmpegInput(url);
     const isLive = contentType === "live";
     const seekSeconds =
       startTime && Number.isFinite(Number(startTime)) && Number(startTime) > 0
@@ -1061,7 +1085,12 @@ ipcMain.handle(
     // Mid-stream seeks already proved the source works — use a faster probe/encode path.
     const isSeekRestart = seekSeconds > 0;
     // Copy mode re-encodes audio only. Full mode re-encodes both for bad timestamps.
-    const mode = transcodeMode === "copy" ? "copy" : "full";
+    // Local library files are already remuxed on download — never full re-encode (slow + wasteful).
+    const mode = isLocal
+      ? "copy"
+      : transcodeMode === "copy"
+        ? "copy"
+        : "full";
 
     return new Promise((resolve) => {
       let resolved = false;
@@ -1169,21 +1198,24 @@ ipcMain.handle(
       // VOD/series need larger probe windows and stable timestamps.
       // Live keeps low-latency flags. Seek restarts use a lighter profile so
       // jumping from e.g. 2:00 → 15:00 does not re-probe for several seconds.
-      const args = [
-        "-hide_banner",
-        "-loglevel",
-        "warning",
-        "-user_agent",
-        "VLC/3.0.20 LibVLC/3.0.20",
-        "-reconnect",
-        "1",
-        "-reconnect_at_eof",
-        "1",
-        "-reconnect_streamed",
-        "1",
-        "-reconnect_delay_max",
-        isLive ? "2" : "5",
-      ];
+      // IMPORTANT: -user_agent / -reconnect are HTTP demuxer options only.
+      // Applying them to local files makes FFmpeg fail with "Option user_agent not found".
+      const args = ["-hide_banner", "-loglevel", "warning"];
+
+      if (!isLocal) {
+        args.push(
+          "-user_agent",
+          "VLC/3.0.20 LibVLC/3.0.20",
+          "-reconnect",
+          "1",
+          "-reconnect_at_eof",
+          "1",
+          "-reconnect_streamed",
+          "1",
+          "-reconnect_delay_max",
+          isLive ? "2" : "5",
+        );
+      }
 
       if (isLive) {
         args.push(
@@ -1196,6 +1228,21 @@ ipcMain.handle(
           "-probesize",
           "500000",
         );
+      } else if (isLocal) {
+        // Local library file: small probe, no network reconnect flags.
+        args.push(
+          "-fflags",
+          "+genpts+discardcorrupt",
+          "-analyzeduration",
+          isSeekRestart ? "500000" : "2000000",
+          "-probesize",
+          isSeekRestart ? "500000" : "2000000",
+          "-thread_queue_size",
+          "512",
+        );
+        if (isSeekRestart) {
+          args.push("-noaccurate_seek");
+        }
       } else if (isSeekRestart) {
         // Fast seek: keyframe-ish jump, small probe, low first-frame latency.
         args.push(
@@ -1228,7 +1275,7 @@ ipcMain.handle(
         args.push("-ss", String(seekSeconds));
       }
 
-      if (hostHeader) {
+      if (hostHeader && !isLocal) {
         args.push("-headers", `Host: ${hostHeader}\r\n`);
       }
       args.push("-i", inputUrl);
