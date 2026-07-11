@@ -104,9 +104,9 @@ export function useFilteredCatalog({
 
     // Sort items (A-Z / Z-A)
     if (sortOption === 'az') {
-      base = [...base].sort((a, b) => turkishCollator.compare(a.name, b.name));
+      base = base.toSorted((a, b) => turkishCollator.compare(a.name, b.name));
     } else if (sortOption === 'za') {
-      base = [...base].sort((a, b) => turkishCollator.compare(b.name, a.name));
+      base = base.toSorted((a, b) => turkishCollator.compare(b.name, a.name));
     }
 
     return base;
@@ -166,9 +166,9 @@ export function useFilteredCatalog({
 
     // Sort items (A-Z / Z-A)
     if (sortOption === 'az') {
-      base = [...base].sort((a, b) => turkishCollator.compare(a.name, b.name));
+      base = base.toSorted((a, b) => turkishCollator.compare(a.name, b.name));
     } else if (sortOption === 'za') {
-      base = [...base].sort((a, b) => turkishCollator.compare(b.name, a.name));
+      base = base.toSorted((a, b) => turkishCollator.compare(b.name, a.name));
     }
 
     return base;
