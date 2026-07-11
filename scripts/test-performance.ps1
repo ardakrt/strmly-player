@@ -9,16 +9,16 @@ if (-not (Test-Path $electronExe)) {
 
 try {
   Push-Location $projectRoot
-  # Vite-only production bundle for the Electron bench path. Full `npm run build`
-  # (tsc -b && vite) remains the ship gate (D6); the bench needs a loadable dist/.
-  npx vite build | Out-Host
-  if ($LASTEXITCODE -ne 0) { throw "Vite production build failed with exit code $LASTEXITCODE." }
+  # Full ship build (tsc -b && vite) — same gate as D6; do not soft-replace with vite-only.
+  npm run build | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "Production build failed with exit code $LASTEXITCODE." }
   if (-not (Test-Path (Join-Path $projectRoot "dist\index.html"))) {
-    throw "dist/index.html missing after vite build."
+    throw "dist/index.html missing after production build."
   }
 
-  $iterations = if ($env:STRMLY_PERF_ITERATIONS) { $env:STRMLY_PERF_ITERATIONS } else { "6" }
-  $warmups = if ($env:STRMLY_PERF_WARMUPS) { $env:STRMLY_PERF_WARMUPS } else { "1" }
+  # Defaults match electron/main.js / performance-benchmark expectations (30 iters, 2 warmups).
+  $iterations = if ($env:STRMLY_PERF_ITERATIONS) { $env:STRMLY_PERF_ITERATIONS } else { "30" }
+  $warmups = if ($env:STRMLY_PERF_WARMUPS) { $env:STRMLY_PERF_WARMUPS } else { "2" }
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $electronExe
@@ -48,7 +48,7 @@ try {
   if ($combined -notmatch "STRMLY_PERF_RESULT=") {
     throw "Performance benchmark exited without producing results."
   }
-  Write-Host "Performance benchmark completed successfully."
+  Write-Host "Performance benchmark completed successfully (iterations=$iterations warmups=$warmups)."
 } finally {
   Pop-Location
 }

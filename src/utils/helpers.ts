@@ -1,5 +1,3 @@
-import type { EPGProgram } from '../types';
-
 // Helper to generate elegant gradient background classes dynamically based on a channel name hash
 export const getFallbackGradient = (name: string) => {
   const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);

@@ -262,7 +262,10 @@ let mainWindow;
 // instances at once causes both processes to fight over the same GPU/disk
 // cache directory, which triggers "Unable to move the cache: Erişim
 // engellendi" errors and a slow/black-screen startup.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+// Perf bench must not lose the single-instance lock race against a leftover Electron.
+const gotSingleInstanceLock = process.env.STRMLY_PERF_BENCH === "1"
+  ? true
+  : app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
@@ -314,7 +317,7 @@ function createWindow() {
         console.log(`STRMLY_PERF_RESULT=${JSON.stringify(results)}`);
         app.exit(0);
       } catch (error) {
-        console.error("STRMLY_PERF_ERROR", error);
+        console.log(`STRMLY_PERF_ERROR=${error?.stack || error}`);
         app.exit(1);
       }
     });
