@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveConfig: (key, value) => ipcRenderer.invoke('save-config', { key, value }),
   saveConfigSync: (key, value) => ipcRenderer.sendSync('save-config-sync', { key, value }),
   saveConfigBatchSync: (entries) => ipcRenderer.sendSync('save-config-batch-sync', entries),
+  deleteProfileData: (profileId) => ipcRenderer.invoke('delete-profile-data', { profileId }),
   loadConfig: (key) => ipcRenderer.invoke('load-config', { key }),
   savePlaylistItems: (id, items) => ipcRenderer.invoke('save-playlist-items', { id, items }),
   loadPlaylistItems: (id) => ipcRenderer.invoke('load-playlist-items', { id }),

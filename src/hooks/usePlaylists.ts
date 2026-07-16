@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
 import { preprocessPlaylistItems } from '../utils/searchHelpers';
@@ -47,6 +47,7 @@ export function usePlaylists({
 }: UsePlaylistsProps) {
   const [playlists, setPlaylists] = useState<SavedPlaylist[]>([]);
   const [activePlaylistId, setActivePlaylistId] = useState<string>('');
+  const activePlaylistIdRef = useRef('');
   const [items, setItems] = useState<PlaylistItem[]>([]);
   
   const [playlistFormName, setPlaylistFormName] = useState('');
@@ -58,6 +59,10 @@ export function usePlaylists({
   const [showAddPlaylistForm, setShowAddPlaylistForm] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
   const autoUpdateTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    activePlaylistIdRef.current = activePlaylistId;
+  }, [activePlaylistId]);
 
   const savePlaylistData = async (id: string, playlistItems: PlaylistItem[]) => {
     if (window.electronAPI && window.electronAPI.savePlaylistItems) {
@@ -90,7 +95,11 @@ export function usePlaylists({
     }
   };
 
-  const scheduleAutoUpdate = (playlist: SavedPlaylist, currentActiveId: string) => {
+  const scheduleAutoUpdate = (
+    playlist: SavedPlaylist,
+    currentActiveId: string,
+    delayOverrideMs?: number,
+  ) => {
     clearAutoUpdateTimer();
     const mode = playlist.playlistMode || (playlist.xtreamUrl ? 'xtream' : (playlist.url ? 'm3u' : undefined));
     if (!mode) return;
@@ -98,7 +107,9 @@ export function usePlaylists({
     const intervalHours = normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours);
     const lastUpdatedAt = Number(playlist.lastAutoUpdatedAt || Date.now());
     const dueAt = lastUpdatedAt + intervalHours * 60 * 60 * 1000;
-    const delayMs = Math.max(1500, dueAt - Date.now());
+    const delayMs = delayOverrideMs !== undefined
+      ? Math.max(1500, delayOverrideMs)
+      : Math.max(1500, dueAt - Date.now());
 
     autoUpdateTimerRef.current = window.setTimeout(() => {
       autoUpdatePlaylist({ ...playlist, autoUpdateIntervalHours: intervalHours }, currentActiveId);
@@ -111,7 +122,7 @@ export function usePlaylists({
 
     if (!mode || (mode === 'm3u' && !url)) {
       if (isManual) {
-        showToast(`Yerel M3U dosyaları otomatik güncellenemez. (DEBUG: mode=${playlist.playlistMode || 'tanımsız'}, xUrl=${playlist.xtreamUrl ? 'var' : 'yok'}, url=${playlist.url ? 'var' : 'yok'})`);
+        showToast('Yerel M3U dosyaları otomatik güncellenemez.');
       }
       return;
     }
@@ -167,7 +178,7 @@ export function usePlaylists({
       });
 
       // If this is currently the active playlist, update items in state
-      if (currentActiveId === playlist.id) {
+      if (activePlaylistIdRef.current === playlist.id) {
         setItems(parsedItems);
         scheduleAutoUpdate({
           ...playlist,
@@ -180,6 +191,9 @@ export function usePlaylists({
       }
     } catch (err: any) {
       console.warn(`[Auto-Update] Failed to update playlist ${playlist.name}:`, err.message);
+      if (activePlaylistIdRef.current === playlist.id) {
+        scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
+      }
       if (isManual) {
         showToast(`Güncelleme başarısız: ${err.message}`);
       }
@@ -293,6 +307,7 @@ export function usePlaylists({
       setActivePlaylistId(newList.id);
       await saveAppSetting('cinema_active_playlist', newList.id);
       setItems(parsedItems);
+      scheduleAutoUpdate(newList, newList.id);
 
       setM3uUrl('');
       setPlaylistFormName('');
@@ -352,6 +367,7 @@ export function usePlaylists({
       setActivePlaylistId(newList.id);
       await saveAppSetting('cinema_active_playlist', newList.id);
       setItems(parsedItems);
+      scheduleAutoUpdate(newList, newList.id);
 
       setXtreamUrl('');
       setXtreamUser('');

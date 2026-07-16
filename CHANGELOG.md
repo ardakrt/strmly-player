@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.0 - 2026-07-16
+
+### Highlights
+
+- Redesigned the home, Live TV, movies, series, favorites, and saved-content experiences with denser responsive layouts, richer metadata, improved artwork handling, and consistent hover interactions.
+- Rebuilt the saved-content library with grouped series downloads, active and completed sections, search, filtering, sorting, storage summaries, and clearer download actions.
+- Added reusable title-logo, media-label, playback-preference, settings-backup, and VOD helper layers to keep behavior consistent across the application.
+
+### Downloads and Playback
+
+- Fixed HLS downloads restarting from zero after a manual pause or when playback temporarily pauses the active download.
+- Preserved downloaded segment checkpoints and immediately restored visible progress when a download resumes.
+- Improved player source recovery, remembered playback settings, process launching, and next-episode behavior.
+
+### Reliability and Performance
+
+- Improved catalog grouping, filtering, search-worker behavior, TMDB enrichment, image fallback handling, and theme extraction.
+- Reduced unnecessary saved-content card renders and removed stale debug output and unused code.
+- Expanded regression, catalog, security, accessibility, and performance coverage in the release verification pipeline.
+
 ## 1.5.27 - 2026-07-01
 
 ### Fixes

@@ -23,6 +23,9 @@ declare global {
         success: boolean;
         error?: string;
       };
+      deleteProfileData?: (
+        profileId: string,
+      ) => Promise<{ success: boolean; deletedKeys?: number; error?: string }>;
       loadConfig: (key: string) => Promise<any>;
       savePlaylistItems: (
         id: string,
@@ -260,6 +263,8 @@ export interface ImageWithFallbackProps {
   aspect?: "portrait" | "landscape";
   cover?: boolean;
   lazy?: boolean;
+  /** Use playlist artwork as a last resort when TMDB has no usable image. */
+  fallbackToPlaylist?: boolean;
 }
 
 export interface EpisodeThumbProps {

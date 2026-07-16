@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Search, Heart, Trash2, Tv, Play, Download,
-  Trophy, Film, Newspaper, Music, Gamepad, Compass,
-  Sparkles, Star, Radio
+  Search, Heart, Trash2, Tv, Play, Download, Star
 } from 'lucide-react';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import { ImageWithFallback } from './ImageWithFallback';
@@ -12,24 +10,14 @@ import { useSettings } from '../context/SettingsContext';
 import { cleanMovieName, getCachedTmdbResult } from '../utils/tmdb';
 import { useDownloads } from '../hooks/useDownloads';
 
-// Helper to map category names to Lucide icons dynamically
-export const getCategoryIcon = (name: string) => {
-  const upper = name.toUpperCase();
-  if (upper.includes('SPOR') || upper.includes('SPORT')) return Trophy;
-  if (upper.includes('SİNEMA') || upper.includes('FİLM') || upper.includes('MOVIE') || upper.includes('CİNEMA') || upper.includes('ACTION') || upper.includes('VOD') || upper.includes('VİZYON')) return Film;
-  if (upper.includes('HABER') || upper.includes('NEWS') || upper.includes('INFO')) return Newspaper;
-  if (upper.includes('MÜZİK') || upper.includes('MUSIC') || upper.includes('KLİP')) return Music;
-  if (upper.includes('ÇOCUK') || upper.includes('KİD') || upper.includes('GAME') || upper.includes('GAMİNG') || upper.includes('ANİME') || upper.includes('KARTON')) return Gamepad;
-  if (upper.includes('BELGESEL') || upper.includes('DOCUMENTARY') || upper.includes('WİLD') || upper.includes('NAT') || upper.includes('GEOGRAPHIC')) return Compass;
-  if (
-    upper.includes('NETFLIX') || upper.includes('AMAZON') || upper.includes('HBO') || 
-    upper.includes('DISNEY') || upper.includes('TOD') || upper.includes('BEIN') || 
-    upper.includes('EXXEN') || upper.includes('GAIN') || upper.includes('PREMIUM') || 
-    upper.includes('VIP') || upper.includes('ÖZEL') || upper.includes('SEÇKİN') || 
-    upper.includes('PLATINUM')
-  ) return Sparkles;
-  if (upper.includes('FAVORİ') || upper.includes('FAV')) return Star;
-  return Tv;
+const getCategoryPresentation = (name: string) => {
+  const label = name
+    .replace(/\[[^\]]+\]\s*/g, '')
+    .replace(/\bDiziler?\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return label || name;
 };
 
 interface SeriesViewProps {
@@ -221,163 +209,198 @@ export const SeriesView = React.memo(function SeriesView({
 
   const otherCategories = seriesCat.filteredOtherCategories;
 
+  const categoryBtnClass = (isActive: boolean, editPad = false) =>
+    `series-category-item ${isActive ? 'is-active' : ''} w-full flex items-center text-left px-3 py-1.5 rounded-lg border text-[11.5px] font-medium transition-colors focusable-item ${
+      editPad ? 'pr-14' : ''
+    } ${
+      isActive
+        ? 'border-white/[0.07] text-white'
+        : 'border-transparent text-white/52 hover:bg-white/[0.035] hover:text-white/82'
+    }`;
+
+  const activeTitle =
+    activeSeriesCategory === 'Tümü'
+      ? language === 'tr'
+        ? 'Tüm Diziler'
+        : 'All Series'
+      : activeSeriesCategory;
+
+  const visibleCategories = otherCategories.slice(0, visibleSeriesCategoryLimit);
+
+  const renderCategoryRow = (group: string, favorite = false) => {
+    const isActive = activeSeriesCategory === group;
+    const label = getCategoryPresentation(group);
+
+    return (
+      <div
+        key={`${favorite ? 'favorite' : 'category'}-${group}`}
+        className={`relative flex items-center group ${
+          seriesCat.draggedCategory === group ? 'opacity-50' : ''
+        } ${seriesCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        draggable={seriesCat.editMode}
+        onDragStart={(event) => seriesCat.handleDragStart(event, group)}
+        onDragOver={handleDragOverHelper}
+        onDrop={(event) => seriesCat.handleDrop(event, group)}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSeriesCategory(group);
+            setVisibleCount(100);
+          }}
+          className={categoryBtnClass(isActive, seriesCat.editMode)}
+          title={group}
+          aria-current={isActive ? 'true' : undefined}
+        >
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+        </button>
+
+        {seriesCat.editMode && (
+          <div className="absolute right-1.5 flex items-center gap-0.5 z-20">
+            <button
+              type="button"
+              onClick={(event) => seriesCat.toggleFavorite(group, event)}
+              className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                favorite ? 'text-red-400 hover:bg-red-400/10' : 'text-white/35 hover:bg-white/[0.06] hover:text-red-300'
+              }`}
+              title={favorite
+                ? language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'
+                : language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
+              aria-label={favorite
+                ? language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'
+                : language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
+            >
+              <Heart size={11} fill={favorite ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => seriesCat.handleHide(group, event)}
+              className="w-6 h-6 rounded-lg text-white/35 hover:text-red-400 hover:bg-red-400/10 flex items-center justify-center transition-colors cursor-pointer"
+              title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+              aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] page-transition-enter pb-12" onContextMenu={() => setContextMenu(null)}>
-      {/* 1. Left Categories Sidebar */}
-      <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
-        <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
-          <button type="button"
+    <div
+      className="series-catalog-shell grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[218px_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-3"
+      onContextMenu={() => setContextMenu(null)}
+    >
+      {/* Categories — flush rail, full height under navbar */}
+      <aside className="series-catalog-panel series-category-panel flex min-h-0 max-h-[36vh] flex-col gap-0.5 overflow-y-auto rounded-2xl border border-white/[0.06] p-3 select-none hide-scrollbar md:max-h-none">
+        <div className="mb-1.5 flex items-center justify-between px-1">
+          <span className="text-[9px] tracking-[0.16em] font-bold text-white/28 uppercase">
+            {language === 'tr' ? 'Kategoriler' : 'Categories'}
+          </span>
+          <button
+            type="button"
             onClick={() => seriesCat.setEditMode(!seriesCat.editMode)}
-            className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors focusable-item ${seriesCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
+            className={`h-6 rounded-md border border-transparent px-1.5 text-[8.5px] font-bold uppercase transition-colors focusable-item cursor-pointer ${
+              seriesCat.editMode
+                ? 'bg-white/[0.08] text-white'
+                : 'text-white/35 hover:bg-white/[0.04] hover:text-white/70'
+            }`}
           >
             {seriesCat.editMode ? (language === 'tr' ? 'Bitti' : 'Done') : t('common.edit')}
           </button>
         </div>
+
         <div className="relative mb-2 shrink-0">
-          <Search size={11} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/28" />
           <input
             type="text"
-            placeholder={language === 'tr' ? 'Kategori ara...' : 'Search category...'}
+            placeholder={language === 'tr' ? 'Kategori ara…' : 'Search category…'}
             value={categorySearchQuery}
             onChange={(e) => setCategorySearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/5 focus:border-[var(--accent-color)] rounded-lg text-[11px] text-white outline-none placeholder-neutral-500 transition-all focusable-item"
+            className="h-8 w-full rounded-lg border border-white/[0.06] bg-black/15 pl-8 pr-3 text-[10.5px] text-white outline-none transition-colors placeholder:text-white/25 focus:border-white/12 focus:bg-white/[0.035] focusable-item"
           />
         </div>
 
-        {/* All Series Button */}
-        <button type="button"
-          onClick={() => { setActiveSeriesCategory('Tümü'); setVisibleCount(100); }}
-          className={`flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${
-            activeSeriesCategory === 'Tümü'
-              ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
-              : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
-          }`}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSeriesCategory('Tümü');
+            setVisibleCount(100);
+          }}
+          className={categoryBtnClass(activeSeriesCategory === 'Tümü')}
+          aria-current={activeSeriesCategory === 'Tümü' ? 'true' : undefined}
         >
-          <Radio size={14} className={activeSeriesCategory === 'Tümü' ? 'text-[var(--accent-color)]' : 'text-neutral-500'} />
-          <span>{language === 'tr' ? 'Tüm Diziler' : 'All Series'}</span>
+          <span className="min-w-0 flex-1 truncate">{language === 'tr' ? 'Tüm Diziler' : 'All Series'}</span>
         </button>
 
-        {/* Favorites Categories Section */}
         {seriesFavCatsToShow.length > 0 && (
-          <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/5">
-            <span className="text-[9px] tracking-widest font-extrabold text-red-500/50 uppercase px-2 mb-1 flex items-center gap-1.5"><Heart size={10} /> {t('navbar.favorites')}</span>
-            {seriesFavCatsToShow.map(group => {
-              const CatIcon = getCategoryIcon(group);
-              const isCatActive = activeSeriesCategory === group;
-              return (
-                <div
-                  key={`fav-series-${group}`}
-                  className={`relative flex items-center group transition-transform ${seriesCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${seriesCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                  draggable={seriesCat.editMode}
-                  onDragStart={(e) => seriesCat.handleDragStart(e, group)}
-                  onDragOver={handleDragOverHelper}
-                  onDrop={(e) => seriesCat.handleDrop(e, group)}
-                >
-                  <button type="button"
-                    onClick={() => { setActiveSeriesCategory(group); setVisibleCount(100); }}
-                    className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${
-                      isCatActive
-                        ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
-                        : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
-                    }`}
-                  >
-                    <CatIcon size={14} className={isCatActive ? 'text-[var(--accent-color)] animate-pulse' : 'text-neutral-500'} />
-                    <span className="truncate">{group}</span>
-                  </button>
-                  {seriesCat.editMode && (
-                    <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                      <button type="button"
-                        onClick={(e) => seriesCat.toggleFavorite(group, e)}
-                        className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                        title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
-                       aria-label={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}>
-                        <Heart size={11} fill="currentColor" />
-                      </button>
-                      <button type="button"
-                        onClick={(e) => seriesCat.handleHide(group, e)}
-                        className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                        title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                       aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}>
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="flex flex-col gap-0.5 mt-2 pt-2 border-t border-white/[0.05]">
+            <span className="text-[9px] tracking-[0.14em] font-bold text-red-400/45 uppercase px-2 mb-1 flex items-center gap-1.5">
+              <Heart size={10} /> {t('navbar.favorites')}
+            </span>
+            {seriesFavCatsToShow.map((group) => renderCategoryRow(group, true))}
           </div>
         )}
 
-        {/* Other Categories Section */}
-        <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/5">
-          <span className="text-[9px] tracking-widest font-extrabold text-neutral-600 uppercase px-2 mb-1">{language === 'tr' ? 'Diğerleri' : 'Others'}</span>
-          {otherCategories.slice(0, visibleSeriesCategoryLimit).map(group => {
-            const CatIcon = getCategoryIcon(group);
-            const isCatActive = activeSeriesCategory === group;
-            return (
-              <div
-                key={group}
-                className={`relative flex items-center group transition-transform ${seriesCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${seriesCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                draggable={seriesCat.editMode}
-                onDragStart={(e) => seriesCat.handleDragStart(e, group)}
-                onDragOver={handleDragOverHelper}
-                onDrop={(e) => seriesCat.handleDrop(e, group)}
-              >
-                <button type="button"
-                  onClick={() => { setActiveSeriesCategory(group); setVisibleCount(100); }}
-                  className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${seriesCat.editMode ? 'pr-16' : 'pr-4'} ${
-                    isCatActive
-                      ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
-                      : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
-                  }`}
-                >
-                  <CatIcon size={14} className={isCatActive ? 'text-[var(--accent-color)] animate-pulse' : 'text-neutral-500'} />
-                  <span className="truncate">{group}</span>
-                </button>
-                {seriesCat.editMode && (
-                  <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                    <button type="button"
-                      onClick={(e) => seriesCat.toggleFavorite(group, e)}
-                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                      title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
-                     aria-label={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}>
-                      <Heart size={11} />
-                    </button>
-                    <button type="button"
-                      onClick={(e) => seriesCat.handleHide(group, e)}
-                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                      title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                     aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}>
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {otherCategories.length > visibleSeriesCategoryLimit && (
-            <button type="button"
-              onClick={() => setVisibleSeriesCategoryLimit(prev => prev + 50)}
-              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item cursor-pointer"
-            >
-              {language === 'tr' ? 'Daha Fazla Göster' : 'Show More'} (+{otherCategories.length - visibleSeriesCategoryLimit})
-            </button>
-          )}
-        </div>
-      </div>
+        {visibleCategories.length > 0 && (
+          <div className="flex flex-col gap-0.5 mt-2 pt-2 border-t border-white/[0.05]">
+            <span className="text-[9px] tracking-[0.14em] font-bold text-white/22 uppercase px-2 mb-1">
+              {language === 'tr' ? 'Diğerleri' : 'Others'}
+            </span>
+            {visibleCategories.map((group) => renderCategoryRow(group))}
+          </div>
+        )}
 
-      {/* 2. Middle Content Grid */}
-      <div className="flex-1 flex flex-col gap-3 h-full">
-        <div className="flex-1 overflow-y-auto bg-neutral-950/20 border border-white/5 rounded-[24px] p-2 md:p-4 shadow-inner" onScroll={handleMainScroll}>
+        {otherCategories.length > visibleSeriesCategoryLimit && (
+          <button
+            type="button"
+            onClick={() => setVisibleSeriesCategoryLimit((prev) => prev + 50)}
+            className="w-full py-2 mt-2 rounded-xl text-[10px] font-semibold text-white/35 hover:text-white/70 hover:bg-white/[0.04] transition-colors tracking-wide focusable-item cursor-pointer"
+          >
+            {language === 'tr' ? 'Daha fazla' : 'Show more'} (+
+            {otherCategories.length - visibleSeriesCategoryLimit})
+          </button>
+        )}
+      </aside>
+
+      {/* Series grid — edge-to-edge; divider runs full height of shell content */}
+      <section className="series-catalog-panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-white/[0.07]">
+        <header className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3.5 lg:px-6">
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+              {language === 'tr' ? 'Diziler' : 'Series'}
+            </p>
+            <h2 className="truncate text-[18px] font-bold tracking-[-0.02em] text-white/92 lg:text-[20px]">
+              {activeTitle}
+            </h2>
+          </div>
+          <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[10px] font-semibold tabular-nums text-white/38">
+            {groupedSeriesList.length > 0
+              ? language === 'tr'
+                ? `${groupedSeriesList.length} dizi`
+                : `${groupedSeriesList.length} series`
+              : null}
+          </span>
+        </header>
+
+        <div
+          className="hide-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5"
+          onScroll={handleMainScroll}
+        >
           {groupedSeriesList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center p-20 opacity-50 select-none">
-              <Tv size={32} className="text-neutral-500 mb-3" />
-              <h3 className="text-base font-semibold text-neutral-300">{language === 'tr' ? 'Dizi Bulunamadı' : 'No Series Found'}</h3>
+            <div className="flex min-h-full flex-col items-center justify-center py-20 text-center select-none">
+              <div className="mb-4 grid h-14 w-14 place-items-center rounded-[20px] border border-white/[0.07] bg-white/[0.035] text-white/30 shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
+                <Tv size={24} />
+              </div>
+              <h3 className="text-sm font-semibold text-white/55">
+                {language === 'tr' ? 'Dizi bulunamadı' : 'No series found'}
+              </h3>
             </div>
           ) : (
             <VirtualizedGrid
               items={groupedSeriesList}
+              compactLargeCards
               renderItem={(series) => {
                 const firstEpisode = series.seasons[1]?.[0]?.item;
                 return (
@@ -398,23 +421,25 @@ export const SeriesView = React.memo(function SeriesView({
             />
           )}
         </div>
-      </div>
-      {contextMenu && (() => {
-        const firstEpisode = contextMenu.item.seasons[1]?.[0]?.item;
-        return (
-          <MediaCardContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            item={contextMenu.item}
-            isFavorite={globalFavorites.includes(contextMenu.item.id)}
-            isDownloading={firstEpisode ? isDownloading(firstEpisode.url) : false}
-            onClose={() => setContextMenu(null)}
-            onOpenDetails={(item) => handleOpenSeriesModalDirect(item as GroupedSeries)}
-            onToggleFavorite={(id) => toggleFavorite(id)}
-            onDownload={firstEpisode ? () => addDownload(firstEpisode) : undefined}
-          />
-        );
-      })()}
+      </section>
+
+      {contextMenu &&
+        (() => {
+          const firstEpisode = contextMenu.item.seasons[1]?.[0]?.item;
+          return (
+            <MediaCardContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              item={contextMenu.item}
+              isFavorite={globalFavorites.includes(contextMenu.item.id)}
+              isDownloading={firstEpisode ? isDownloading(firstEpisode.url) : false}
+              onClose={() => setContextMenu(null)}
+              onOpenDetails={(item) => handleOpenSeriesModalDirect(item as GroupedSeries)}
+              onToggleFavorite={(id) => toggleFavorite(id)}
+              onDownload={firstEpisode ? () => addDownload(firstEpisode) : undefined}
+            />
+          );
+        })()}
     </div>
   );
 });

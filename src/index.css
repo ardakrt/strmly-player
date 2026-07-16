@@ -549,27 +549,41 @@ input[type="range"]:hover::-webkit-slider-thumb {
   box-shadow: 0 0 50px rgba(255, 255, 255, 0.05);
 }
 
-/* Fading edge effect for horizontal slider rows to prevent hard cutoffs */
+/* Fading edge — only the last ~40px, never whole cards (old 88% fade ate the 3rd card) */
 .slider-fading-mask {
-  mask-image: linear-gradient(to right, transparent 0%, black 4%, black 88%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 88%, transparent 100%);
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    transparent 100%
+  );
 }
 
 .premium-card {
   position: relative;
   width: 100%;
   aspect-ratio: 2 / 3;
-  border-radius: 16px; /* rounded-2xl */
+  border-radius: 20px;
   overflow: hidden;
+  isolation: isolate;
   background-color: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  transform: scale(1);
-  transition: all 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: translateY(0);
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms ease,
+    box-shadow 220ms ease;
 }
 
 .group:hover .premium-card {
-  transform: scale(1.058);
+  transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.16) !important;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.72) !important;
 }
@@ -577,6 +591,57 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .premium-card-title {
   color: #f5f5f7;
   transition: color 0.3s ease;
+}
+
+.series-catalog-shell {
+  isolation: isolate;
+}
+
+.series-catalog-panel {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 42%),
+    rgba(7, 7, 9, 0.64);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 18px 48px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+.series-category-panel {
+  background: rgba(7, 7, 9, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.series-category-item {
+  position: relative;
+}
+
+.series-category-item.is-active {
+  border-color: rgba(255, 255, 255, 0.075);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent-color, #fff) 10%, rgba(255, 255, 255, 0.045)),
+      rgba(255, 255, 255, 0.035) 62%,
+      rgba(255, 255, 255, 0.018)
+    );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.series-category-item.is-active::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 2px;
+  height: 14px;
+  border-radius: 0 999px 999px 0;
+  background: var(--accent-color, #fff);
+  transform: translateY(-50%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-color, #fff) 35%, transparent);
 }
 
 .group:hover .premium-card-title {
@@ -734,6 +799,154 @@ button.focusable-item:focus-visible {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
+/* ── Prime hover preview (Netflix-style card portal) ── */
+.prime-hover-card {
+  border-radius: 18px;
+  background: #0c0c0e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  isolation: isolate;
+  will-change: transform, opacity;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.prime-hover-card--in {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.prime-hover-card--out {
+  opacity: 0;
+  transform: scale(0.94);
+  pointer-events: none;
+}
+
+/* ── Series detail modal — black glass (no cool/blue cast) ── */
+.series-modal-sheet {
+  background:
+    linear-gradient(
+      165deg,
+      rgba(12, 12, 12, 0.78) 0%,
+      rgba(6, 6, 6, 0.88) 55%,
+      rgba(4, 4, 4, 0.92) 100%
+    );
+  -webkit-backdrop-filter: blur(40px) saturate(1.15) brightness(0.92);
+  backdrop-filter: blur(40px) saturate(1.15) brightness(0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+  color: #fff;
+  isolation: isolate;
+}
+
+.series-modal-left {
+  background: rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  min-width: 0;
+}
+
+.series-modal-right {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.series-modal-divider {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.series-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.6);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.series-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Offline / saved episode check — must beat base .series-icon-btn color */
+.series-icon-btn.is-saved {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.series-icon-btn.is-saved:hover {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.5);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.series-season-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.series-season-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.series-season-chip.is-active {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.12);
+}
+
+.series-ep-row {
+  border-radius: 14px;
+  transition: background 0.15s ease;
+}
+
+.series-ep-row:hover,
+.series-ep-row.is-active {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.series-ep-thumb {
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
 .home-hero-fullbleed {
   width: 100vw;
   margin-left: calc(50% - 50vw);
@@ -754,6 +967,15 @@ button.focusable-item:focus-visible {
   text-shadow:
     0 2px 18px rgba(0, 0, 0, 0.62),
     0 0 34px rgba(255, 255, 255, 0.035);
+}
+
+/* TMDB title art can be authored in black, which disappears into the hero scrim. */
+.home-hero-title-logo {
+  filter:
+    grayscale(1)
+    brightness(0)
+    invert(1)
+    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.58));
 }
 
 .home-hero-color-grade {
@@ -818,11 +1040,23 @@ div.focusable-item:focus-visible {
   z-index: 40 !important;
 }
 
-div.focusable-item:focus .premium-card,
 div.focusable-item:focus-visible .premium-card {
-  transform: scale(1.04) !important;
+  transform: translateY(0) !important;
   border-color: var(--accent-color, #ffffff) !important;
   box-shadow: 0 0 0 2px var(--accent-color, #ffffff), 0 12px 28px rgba(0, 0, 0, 0.65) !important;
+}
+
+/* Category selection owns its focus treatment; avoid the generic white pill ring. */
+button.series-category-item:focus,
+button.series-category-item:focus-visible {
+  transform: none !important;
+  border-color: rgba(255, 255, 255, 0.075) !important;
+  box-shadow: none !important;
+}
+
+button.series-category-item.is-active:focus,
+button.series-category-item.is-active:focus-visible {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
 }
 
 /* Dynamic Island Toast Notification */
@@ -1028,4 +1262,276 @@ div.focusable-item:focus-visible .premium-card {
   transform: scale(0.63) !important;
   opacity: 0 !important;
   transform-origin: center center;
+}
+
+/* -- Spotlight search (command palette) -- */
+.spotlight-backdrop {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, color-mix(in srgb, var(--accent-color, #fff) 8%, transparent), transparent 70%),
+    radial-gradient(ellipse 55% 40% at 50% 18%, rgba(255, 255, 255, 0.04), transparent 65%),
+    rgba(0, 0, 0, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+
+.spotlight-panel {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      165deg,
+      rgba(18, 18, 20, 0.88) 0%,
+      rgba(8, 8, 10, 0.94) 48%,
+      rgba(5, 5, 7, 0.96) 100%
+    );
+  -webkit-backdrop-filter: blur(40px) saturate(1.35) brightness(0.96);
+  backdrop-filter: blur(40px) saturate(1.35) brightness(0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+    0 0 80px color-mix(in srgb, var(--accent-color, #fff) 6%, transparent);
+  color: #fff;
+}
+
+.spotlight-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 4%,
+    color-mix(in srgb, var(--accent-color, #fff) 45%, transparent) 50%,
+    transparent 96%
+  );
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.spotlight-field {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  height: 3rem;
+  padding: 0 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(0, 0, 0, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.spotlight-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent-color, #fff) 35%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%),
+    rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 3px color-mix(in srgb, var(--accent-color, #fff) 12%, transparent),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.spotlight-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.85rem;
+  padding: 0 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.42);
+  background: transparent;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.spotlight-scope:hover {
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.spotlight-scope.is-active {
+  color: #0a0a0c;
+  background: #fff;
+  border-color: #fff;
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.14);
+  font-weight: 700;
+}
+
+.spotlight-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.spotlight-row:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.spotlight-row.is-active {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent-color, #fff) 10%, transparent),
+      rgba(255, 255, 255, 0.06) 40%,
+      rgba(255, 255, 255, 0.04)
+    );
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.spotlight-thumb {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spotlight-thumb--live {
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 12px;
+  padding: 0.35rem;
+}
+
+.spotlight-thumb--vod {
+  width: 2.35rem;
+  height: 3.15rem;
+}
+
+.spotlight-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1.25rem;
+  padding: 0 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.spotlight-type-chip--live {
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(16, 185, 129, 0.1);
+  color: rgba(110, 231, 183, 0.9);
+}
+
+.spotlight-row.is-active .spotlight-type-chip:not(.spotlight-type-chip--live) {
+  border-color: color-mix(in srgb, var(--accent-color, #fff) 28%, transparent);
+  background: color-mix(in srgb, var(--accent-color, #fff) 12%, transparent);
+  color: color-mix(in srgb, var(--accent-color, #fff) 85%, white);
+}
+
+.spotlight-match {
+  background: transparent;
+  color: var(--accent-color, #fff);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.spotlight-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1.55rem;
+  padding: 0 0.55rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0a0a0c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.spotlight-row.is-active .spotlight-action {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.spotlight-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+}
+
+.spotlight-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.spotlight-empty-orb {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 1.1rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--accent-color, #fff) 18%, transparent), transparent 55%),
+    rgba(255, 255, 255, 0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.35);
+  color: color-mix(in srgb, var(--accent-color, #fff) 70%, white);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-row,
+  .spotlight-action,
+  .spotlight-scope,
+  .spotlight-field {
+    transition: none !important;
+  }
 }

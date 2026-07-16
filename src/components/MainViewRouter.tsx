@@ -31,6 +31,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
             fallbackHeroItem={home.fallbackHeroItem}
             currentHeroItem={home.currentHeroItem}
             activeFeaturedIndex={home.activeFeaturedIndex}
+            displayFeaturedIndex={home.displayFeaturedIndex}
             setActiveFeaturedIndex={home.setActiveFeaturedIndex}
             activeShowcaseList={home.activeShowcaseList}
             playlists={catalog.playlists}
@@ -110,7 +111,9 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
       )}
 
       {selectedGroup === APP_VIEWS.series && (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={<div className="flex-1 min-h-0" />}
+        >
           <SeriesView
             selectedGroup={selectedGroup}
             activeSeriesCategory={catalog.activeSeriesCategory}
@@ -132,7 +135,9 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
       )}
 
       {selectedGroup === APP_VIEWS.movies && (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={<div className="flex-1 min-h-0" />}
+        >
           <MoviesView
             selectedGroup={selectedGroup}
             activeMovieCategory={catalog.activeMovieCategory}

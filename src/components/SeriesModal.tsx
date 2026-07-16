@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { CheckCircle2, Clock3, Play, X, ChevronDown, Heart, Download } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { CheckCircle2, Clock3, Play, X, Heart, Download, Info } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { EpisodeThumb } from './EpisodeThumb';
 import { cleanMediaTitle } from '../utils/seriesGroupers';
@@ -17,6 +17,7 @@ interface TmdbData {
   desc: string;
   poster?: string;
   backdrop?: string;
+  genres?: string[];
 }
 
 interface SeriesModalProps {
@@ -101,9 +102,10 @@ export const SeriesModal = ({
   onToggleFavorite,
   onNavigateToDownloads
 }: SeriesModalProps) => {
-  const { t, language } = useSettings();
+  const { language } = useSettings();
   const { downloads, addDownload, getDownloadByStreamUrl } = useDownloads();
   const [savedEpisodeUrls, setSavedEpisodeUrls] = useState<Set<string>>(() => new Set());
+  const [descExpanded, setDescExpanded] = useState(false);
   const seasonsList = Object.keys(series.seasons).map(Number).sort((a, b) => a - b);
   const episodes = useMemo(() => series.seasons[activeSeason] || [], [activeSeason, series.seasons]);
   const seriesCleanName = series.name.toLowerCase();
@@ -220,8 +222,6 @@ export const SeriesModal = ({
     };
   };
 
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [episodeMeta, setEpisodeMeta] = useState<Record<number, EpisodeMeta>>({});
   
   const [cast, setCast] = useState<CastMember[]>([]);
@@ -325,16 +325,6 @@ export const SeriesModal = ({
     };
   }, [tmdbShowId, tmdbData?.id]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   // Akıllı Kaldığın Yerden Devam Et / Başla Mekanizması
   let resumeEpisode: SeriesEpisode | null = null;
   let bestHistoryIndex = -1;
@@ -354,22 +344,87 @@ export const SeriesModal = ({
   const firstSeasonEpisodes = series.seasons[firstSeasonNum] || [];
   const firstEpisode = firstSeasonEpisodes[0] || null;
 
+  // Playlist groups are noisy: "[TR] HBO MAX / PARAMOUNT+"
+  const cleanedGroup = useMemo(() => {
+    if (!series.group) return '';
+    let s = String(series.group)
+      .replace(/\[[^\]]*]/g, ' ')
+      .replace(/\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|hdr|dv|atmos)\b/gi, ' ')
+      .replace(/[|/\\]+/g, ' · ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (s.length > 32) s = `${s.slice(0, 30).trim()}…`;
+    return s;
+  }, [series.group]);
+
+  const metaParts = useMemo(() => {
+    const parts: { text: string; accent?: boolean }[] = [];
+    if (tmdbData?.match) {
+      const score = String(tmdbData.match).replace(/[^0-9]/g, '');
+      if (score) {
+        parts.push({
+          text: language === 'tr' ? `%${score} Eşleşme` : `${score}% Match`,
+          accent: true,
+        });
+      }
+    }
+    if (tmdbData?.year) parts.push({ text: tmdbData.year });
+    if (tmdbData?.rating) {
+      const rating = tmdbData.rating.replace('★ ', '').trim();
+      if (rating) parts.push({ text: `★ ${rating}` });
+    }
+    parts.push({
+      text: language === 'tr'
+        ? `${seasonsList.length} Sezon`
+        : `${seasonsList.length} Season${seasonsList.length > 1 ? 's' : ''}`,
+    });
+    return parts;
+  }, [tmdbData, language, seasonsList.length]);
+
+  const seasonWatchStats = useMemo(() => {
+    let watched = 0;
+    let inProgress = 0;
+    for (const ep of episodes) {
+      const h = recentlyWatched.find((x) => x.id === ep.item.id);
+      if (!h) continue;
+      const p = h.progress ?? 0;
+      if (p >= 90) watched += 1;
+      else if (p > 0) inProgress += 1;
+    }
+    return { watched, inProgress, total: episodes.length };
+  }, [episodes, recentlyWatched]);
+
+  useEffect(() => {
+    setDescExpanded(false);
+  }, [series.id, series.name]);
+
   return (
-    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 md:p-8 select-none animate-fade-in">
-      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }} tabIndex={0} role="button" className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
-      <div className="relative w-full max-w-5xl h-[85vh] max-h-[820px] bg-neutral-950 border border-white/10 rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-[0_32px_80px_rgba(0,0,0,0.85)] z-10 glass-modal-enter">
-        <button type="button"
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-3 md:p-8 select-none animate-fade-in">
+      <div
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+        tabIndex={0}
+        role="button"
+        className="absolute inset-0 bg-black/70 backdrop-blur-xl"
+        onClick={onClose}
+      />
+
+      <div className="series-modal-sheet relative z-10 flex h-[min(86vh,820px)] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] md:flex-row glass-modal-enter">
+        <button
+          type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 z-50 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-xl transition-all duration-300 hover:scale-105 shadow-lg cursor-pointer"
-         aria-label="Close">
+          className="series-icon-btn absolute top-3.5 right-3.5 z-50 cursor-pointer"
+          aria-label={language === 'tr' ? 'Kapat' : 'Close'}
+        >
           <X size={16} />
         </button>
-        <div className="w-full md:w-[38%] flex flex-col gap-4 p-5 md:p-6 border-b md:border-b-0 md:border-r border-white/5 bg-black/20 overflow-y-auto shrink-0 select-none hide-scrollbar">
-          <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)] group/poster border border-white/5 shrink-0 bg-white/[0.02]">
+
+        {/* Left — identity: hero + scrollable info + sticky play */}
+        <aside className="series-modal-left series-modal-divider flex w-full shrink-0 flex-col overflow-hidden border-b md:w-[38%] md:border-b-0 md:border-r">
+          <div className="relative aspect-video w-full shrink-0 bg-black/40">
             {tmdbData?.backdrop || tmdbData?.poster ? (
               <img
                 src={tmdbData.backdrop || tmdbData.poster}
-                className="absolute inset-0 w-full h-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover"
                 alt={series.name}
               />
             ) : (
@@ -381,197 +436,203 @@ export const SeriesModal = ({
                 itemType="series"
               />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/15" />
+            {tmdbData?.poster ? (
+              <img
+                src={tmdbData.poster}
+                alt=""
+                className="absolute bottom-3 left-3 h-[4.5rem] w-[3.15rem] rounded-lg object-cover shadow-[0_10px_28px_rgba(0,0,0,0.55)] ring-1 ring-white/15"
+              />
+            ) : null}
           </div>
-          <div className="flex flex-col gap-1 shrink-0">
-            <div className="flex items-start justify-between gap-4">
-              <h2 className="text-xl md:text-2xl font-black tracking-tight text-white leading-tight flex-1">
-                {series.name}
-              </h2>
-              <button type="button"
-                onClick={onToggleFavorite}
-                className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 transition-all duration-300 active:scale-90 shrink-0 shadow-md cursor-pointer"
-                title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-               aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}>
-                <Heart size={18} fill={isFavorite ? "currentColor" : "none"} className={isFavorite ? "text-red-500" : ""} />
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-[11px] font-bold shrink-0">
-            {tmdbData && (
-              <>
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-300/20 text-emerald-300">{t('common.matchScore').replace('{{score}}', (tmdbData.match || '95').replace(/[^0-9]/g, ''))}</span>
-                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">{tmdbData.year}</span>
-                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">★ {tmdbData.rating.replace('★ ', '')}</span>
-              </>
-            )}
-            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">
-              {language === 'tr'
-                ? `${seasonsList.length} Sezon`
-                : `${seasonsList.length} Season${seasonsList.length > 1 ? 's' : ''}`}
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300">
-              {language === 'tr'
-                ? `${series.episodesCount} Bölüm`
-                : `${series.episodesCount} Episode${series.episodesCount > 1 ? 's' : ''}`}
-            </span>
-            {series.group && (
-              <span className="px-2.5 py-1 rounded-lg bg-[var(--accent-color)]/10 border border-[var(--accent-color)]/25 text-[var(--accent-color)] uppercase tracking-wider">
-                {series.group}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col gap-2 bg-white/[0.02] border border-white/5 rounded-xl p-4 shrink-0">
-            <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-neutral-500">{language === 'tr' ? 'Özet' : 'Overview'}</span>
-            <p className="text-xs text-neutral-400 font-light leading-relaxed">
-              {tmdbData?.desc || (language === 'tr' ? 'Bu dizi için özet bulunmuyor.' : 'No overview available for this series.')}
-            </p>
-          </div>
-          {cast.length > 0 && (
-            <div className="flex flex-col gap-2.5 bg-white/[0.02] border border-white/5 rounded-xl p-4 shrink-0">
-              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(); } }} tabIndex={0} role="button" 
-                onClick={() => setShowCastModal(true)}
-                className="flex items-center justify-between cursor-pointer group/cast-header select-none shrink-0"
-              >
-                <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-neutral-500 group-hover/cast-header:text-neutral-300 transition-colors">{language === 'tr' ? 'Oyuncular' : 'Cast'}</span>
-                <span className="text-[9px] text-neutral-500 group-hover/cast-header:text-[var(--accent-color)] font-bold uppercase tracking-wider transition-colors flex items-center gap-1">
-                  {language === 'tr' ? 'TÜMÜNÜ GÖR' : 'SEE ALL'}
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </span>
-              </div>
-              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(true))(); } }} tabIndex={0} role="button" 
-                onClick={() => setShowCastModal(true)}
-                className="flex gap-3 overflow-x-auto pb-1.5 hide-scrollbar select-none cursor-pointer"
-              >
-                {cast.slice(0, 6).map((member, idx) => (
-                  <div key={idx} className="flex flex-col items-center gap-1.5 shrink-0 w-14 text-center transition-transform hover:-translate-y-0.5 duration-200">
-                    <img
-                      src={member.avatarUrl}
-                      alt={member.name}
-                      className="w-10 h-10 rounded-full object-cover border border-white/15 shadow-[0_6px_18px_rgba(0,0,0,0.38)]"
-                    />
-                    <span className="text-[8px] text-neutral-200 font-bold truncate w-full leading-tight" title={member.name}>
-                      {member.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {firstEpisode && (
-            <div className="flex flex-col gap-2 mt-auto shrink-0">
-              {resumeEpisode ? (
-                <button type="button"
-                  onClick={() => playEpisode(resumeEpisode.item)}
-                  className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
-                 aria-label="Play">
-                  <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Devam Et' : 'Resume Watching'}
-                </button>
-              ) : (
-                <button type="button"
-                  onClick={() => playEpisode(firstEpisode.item)}
-                  className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] cursor-pointer"
-                 aria-label="Play">
-                  <Play size={13} fill="#000" /> {language === 'tr' ? 'İzlemeye Başla' : 'Start Watching'}
-                </button>
-              )}
-              {resumeEpisode && (
-                <span className="text-[10px] text-center text-neutral-500 font-medium">
-                  {language === 'tr'
-                    ? `Kaldığın yer: ${resumeEpisode.seasonNumber}. Sezon ${resumeEpisode.episodeNumber}. Bölüm`
-                    : `Where you left off: Season ${resumeEpisode.seasonNumber} Episode ${resumeEpisode.episodeNumber}`}
-                </span>
-              )}
-            </div>
-          )}
 
-        </div>
-        <div className="flex-1 flex flex-col min-w-0 bg-transparent select-none text-left">
-          <div className="p-6 md:p-8 md:pr-20 pb-4 border-b border-white/[0.05] flex flex-col gap-3.5 shrink-0">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40">{language === 'tr' ? 'Sezonlar' : 'Seasons'}</span>
-              <span className="text-[10px] font-bold text-neutral-500">
-                {language === 'tr'
-                  ? `${seasonsList.length} Sezon Seçeneği`
-                  : `${seasonsList.length} Season Option${seasonsList.length > 1 ? 's' : ''}`}
-              </span>
-            </div>
-            {seasonsList.length >= 3 ? (
-              <div className="relative" ref={dropdownRef}>
-                <button type="button"
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="w-full md:w-56 px-5 py-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-white/10 text-xs font-bold text-white flex items-center justify-between transition-all duration-300 shadow-md active:scale-98 cursor-pointer"
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-3 pt-4 hide-scrollbar">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-[1.35rem] font-semibold leading-tight tracking-tight text-white">
+                    {series.name}
+                  </h2>
+                  {cleanedGroup ? (
+                    <p className="mt-1 truncate text-[11px] text-white/32">{cleanedGroup}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={onToggleFavorite}
+                  className={`series-icon-btn shrink-0 cursor-pointer ${isFavorite ? 'text-red-400 hover:text-red-300' : ''}`}
+                  title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
+                  aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] shadow-[0_0_8px_var(--accent-glow)] animate-pulse" />
-                    {language === 'tr' ? `${activeSeason}. Sezon` : `Season ${activeSeason}`}
-                  </span>
-                  <ChevronDown size={14} className={`text-neutral-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-white' : ''}`} />
+                  <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
                 </button>
+              </div>
 
-                {isDropdownOpen && (
-                  <div className="absolute z-[100] left-0 mt-2 w-full md:w-64 max-h-64 overflow-y-auto bg-neutral-950/95 border border-white/15 rounded-2xl p-2.5 shadow-2xl backdrop-blur-2xl animate-scale-in hide-scrollbar">
-                    <div className="grid grid-cols-2 gap-1.5 p-0.5">
-                      {seasonsList.map(seasonNum => (
-                        <button type="button"
-                          key={`season-${seasonNum}`}
-                          onClick={() => {
-                            onSetActiveSeason(seasonNum);
-                            onSetExpandedEpisodeId(null);
-                            setIsDropdownOpen(false);
-                          }}
-                          className={`py-2 px-3 rounded-xl text-[11px] font-black transition-all duration-200 cursor-pointer text-center ${
-                            activeSeason === seasonNum
-                              ? 'bg-[var(--accent-color)] text-black font-black scale-102 shadow-md shadow-[var(--accent-glow)]'
-                              : 'bg-white/[0.02] hover:bg-white/[0.06] text-neutral-400 hover:text-white border border-transparent hover:border-white/5'
-                          }`}
-                        >
-                          {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
-                        </button>
-                      ))}
-                    </div>
+              {metaParts.length > 0 && (
+                <p className="text-[11px] font-medium tracking-wide text-white/42">
+                  {metaParts.map((part, i) => (
+                    <span key={`${part.text}-${i}`}>
+                      {i > 0 ? <span className="mx-1.5 text-white/15">·</span> : null}
+                      <span className={part.accent ? 'text-emerald-400/90' : undefined}>{part.text}</span>
+                    </span>
+                  ))}
+                </p>
+              )}
+
+              {tmdbData?.genres && tmdbData.genres.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {tmdbData.genres.slice(0, 4).map((g) => (
+                    <span
+                      key={g}
+                      className="rounded-full border border-white/[0.07] bg-white/[0.05] px-2.5 py-0.5 text-[10px] font-medium text-white/50"
+                    >
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {tmdbData?.desc ? (
+                <div className="space-y-1.5">
+                  <p className={`text-[12px] leading-relaxed text-white/48 ${descExpanded ? '' : 'line-clamp-3'}`}>
+                    {tmdbData.desc}
+                  </p>
+                  {tmdbData.desc.length > 140 && (
+                    <button
+                      type="button"
+                      onClick={() => setDescExpanded((v) => !v)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-white/40 transition-colors hover:text-white/70 cursor-pointer"
+                    >
+                      <Info size={12} className="opacity-70" />
+                      {descExpanded
+                        ? (language === 'tr' ? 'Daha az' : 'Show less')
+                        : (language === 'tr' ? 'Daha fazla bilgi' : 'More info')}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+
+              {resumeEpisode && (
+                <button
+                  type="button"
+                  onClick={() => playEpisode(resumeEpisode!.item)}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07] cursor-pointer"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">
+                    {language === 'tr' ? 'Kaldığın yer' : 'Continue watching'}
+                  </p>
+                  <p className="mt-1 text-[12px] font-medium text-white/80">
+                    S{resumeEpisode.seasonNumber} · B{resumeEpisode.episodeNumber}
+                    {(() => {
+                      const h = recentlyWatched.find((x) => x.id === resumeEpisode!.item.id);
+                      const p = h?.progress;
+                      return p && p > 0 && p < 95
+                        ? ` · %${Math.round(p)}`
+                        : '';
+                    })()}
+                  </p>
+                </button>
+              )}
+
+              {cast.length > 0 && (
+                <div className="space-y-2.5 pb-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/30">
+                      {language === 'tr' ? 'Oyuncular' : 'Cast'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCastModal(true)}
+                      className="text-[11px] font-medium text-white/30 transition-colors hover:text-white/55 cursor-pointer"
+                    >
+                      {language === 'tr' ? 'Tümü' : 'All'}
+                    </button>
                   </div>
+                  <div
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowCastModal(true); } }}
+                    tabIndex={0}
+                    role="button"
+                    onClick={() => setShowCastModal(true)}
+                    className="flex gap-3 overflow-x-auto pb-0.5 hide-scrollbar cursor-pointer select-none"
+                  >
+                    {cast.slice(0, 6).map((member, idx) => (
+                      <div key={idx} className="flex w-[3.25rem] shrink-0 flex-col items-center gap-1.5" title={member.name}>
+                        <img
+                          src={member.avatarUrl}
+                          alt={member.name}
+                          className="h-11 w-11 rounded-full object-cover ring-1 ring-white/12"
+                        />
+                        <span className="w-full truncate text-center text-[9px] font-medium leading-tight text-white/42">
+                          {member.name.split(' ')[0]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {firstEpisode && (
+              <div className="series-modal-divider shrink-0 border-t border-white/[0.08] bg-black/30 px-5 py-3.5 backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => playEpisode((resumeEpisode || firstEpisode).item)}
+                  className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-white text-[13px] font-semibold text-black transition-colors hover:bg-neutral-100 active:scale-[0.99]"
+                  aria-label={language === 'tr' ? 'Oynat' : 'Play'}
+                >
+                  <Play size={14} fill="#000" className="ml-0.5" />
+                  {resumeEpisode
+                    ? (language === 'tr' ? 'İzlemeye Devam Et' : 'Resume')
+                    : (language === 'tr' ? 'İzlemeye Başla' : 'Play')}
+                </button>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Right — episodes */}
+        <section className="series-modal-right flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="series-modal-divider shrink-0 space-y-3 border-b px-5 pb-3.5 pt-5 pr-14 md:px-6 md:pr-16">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-white/65">
+                  {language === 'tr'
+                    ? `${activeSeason}. Sezon`
+                    : `Season ${activeSeason}`}
+                  <span className="font-normal text-white/28">
+                    {' · '}
+                    {language === 'tr' ? `${episodes.length} bölüm` : `${episodes.length} ep.`}
+                  </span>
+                </p>
+                {seasonWatchStats.total > 0 && (seasonWatchStats.watched > 0 || seasonWatchStats.inProgress > 0) && (
+                  <p className="mt-0.5 text-[11px] text-white/30">
+                    {language === 'tr'
+                      ? `${seasonWatchStats.watched}/${seasonWatchStats.total} izlendi${
+                          seasonWatchStats.inProgress > 0 ? ` · ${seasonWatchStats.inProgress} devam` : ''
+                        }`
+                      : `${seasonWatchStats.watched}/${seasonWatchStats.total} watched${
+                          seasonWatchStats.inProgress > 0 ? ` · ${seasonWatchStats.inProgress} in progress` : ''
+                        }`}
+                  </p>
                 )}
               </div>
-            ) : (
-              <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-                {seasonsList.map(seasonNum => (
-                  <button type="button"
-                    key={`season-${seasonNum}`}
-                    onClick={() => {
-                      onSetActiveSeason(seasonNum);
-                      onSetExpandedEpisodeId(null);
-                    }}
-                    className={`px-4.5 py-2 rounded-xl text-xs font-bold transition-all duration-300 shrink-0 border cursor-pointer ${
-                      activeSeason === seasonNum
-                        ? 'bg-white text-black border-white shadow-[0_4px_16px_rgba(255,255,255,0.1)] scale-102 font-black'
-                        : 'bg-white/[0.03] hover:bg-white/[0.07] border-white/5 text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto pr-3 pl-6 md:pr-4 md:pl-8 pt-4 pb-6 md:pb-8 min-h-0 custom-modal-scrollbar flex flex-col gap-4">
-
-            <div className="flex items-center justify-between px-1 mb-1 shrink-0">
-              <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-white/40">
-                {language === 'tr' ? 'Bölüm Listesi' : 'Episode List'}
-                <span className="ml-2 text-white/20">
-                  {language === 'tr'
-                    ? `${episodes.length} Bölüm`
-                    : `${episodes.length} Episode${episodes.length > 1 ? 's' : ''}`}
-                </span>
-              </span>
               {(() => {
                 const seasonDownloading = episodes.some(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saving);
                 const savedCount = episodes.filter(ep => getEpisodeSaveState(ep.item.url, ep.item.name).saved).length;
                 const allSeasonSaved = episodes.length > 0 && savedCount === episodes.length;
                 const missingCount = episodes.length - savedCount;
+                const label = allSeasonSaved
+                  ? (language === 'tr' ? 'Sezon kaydedildi' : 'Season saved')
+                  : seasonDownloading
+                    ? (language === 'tr'
+                      ? `Kaydediliyor ${savedCount}/${episodes.length}`
+                      : `Saving ${savedCount}/${episodes.length}`)
+                    : savedCount > 0
+                      ? (language === 'tr'
+                        ? `Kalan ${missingCount} bölümü indir`
+                        : `Download ${missingCount} remaining`)
+                      : (language === 'tr' ? 'Sezonu kaydet' : 'Save season');
+
                 return (
                   <button type="button"
                     onClick={async () => {
@@ -579,7 +640,6 @@ export const SeriesModal = ({
                         onNavigateToDownloads();
                         return;
                       }
-                      // Queue only missing / failed episodes (eksikleri indir)
                       for (const ep of episodes) {
                         const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
                         if (!saveState.saved && !saveState.saving) {
@@ -587,49 +647,43 @@ export const SeriesModal = ({
                         }
                       }
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer active:scale-95 ${
+                    className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3.5 text-[12px] font-semibold transition-colors active:scale-[0.98] cursor-pointer ${
                       allSeasonSaved
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                        ? 'border border-emerald-400/25 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20'
                         : seasonDownloading
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30'
-                        : 'bg-white text-black hover:bg-neutral-200 shadow-lg shadow-white/10'
+                          ? 'border border-white/12 bg-white/10 text-white/80'
+                          : 'border border-white bg-white text-black shadow-[0_4px_18px_rgba(255,255,255,0.12)] hover:bg-neutral-100'
                     }`}
-                    title={allSeasonSaved
-                      ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
-                      : seasonDownloading
-                      ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
-                      : savedCount > 0
-                        ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
-                        : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
-                    }
-                    aria-label={allSeasonSaved
-                      ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
-                      : seasonDownloading
-                        ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
-                        : savedCount > 0
-                          ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
-                          : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
-                    }
+                    aria-label={label}
+                    title={label}
                   >
                     {allSeasonSaved
-                      ? <CheckCircle2 size={14} strokeWidth={2.5} />
-                      : <Download size={14} strokeWidth={2.5} className={seasonDownloading ? 'animate-bounce' : ''} />}
-                    <span className="text-[11px] font-black tracking-wide">
-                      {allSeasonSaved
-                        ? (language === 'tr' ? 'Sezon Kaydedildi' : 'Season Saved')
-                        : seasonDownloading
-                        ? (language === 'tr' ? `Kaydediliyor… ${savedCount}/${episodes.length}` : `Saving… ${savedCount}/${episodes.length}`)
-                        : savedCount > 0
-                          ? (language === 'tr' ? `Eksikleri indir (${missingCount})` : `Download missing (${missingCount})`)
-                          : (language === 'tr' ? 'Sezonu Kaydet' : 'Save Season')
-                      }
-                    </span>
+                      ? <CheckCircle2 size={14} strokeWidth={2.25} />
+                      : <Download size={14} strokeWidth={2.25} className={seasonDownloading ? 'animate-pulse' : ''} />}
+                    <span className="hidden sm:inline">{label}</span>
                   </button>
                 );
               })()}
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
+              {seasonsList.map(seasonNum => (
+                <button type="button"
+                  key={`season-${seasonNum}`}
+                  onClick={() => {
+                    onSetActiveSeason(seasonNum);
+                    onSetExpandedEpisodeId(null);
+                  }}
+                  className={`series-season-chip cursor-pointer ${activeSeason === seasonNum ? 'is-active' : ''}`}
+                >
+                  {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
+                </button>
+              ))}
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto px-2 md:px-3 py-1.5 min-h-0 custom-modal-scrollbar">
+            <div className="flex flex-col">
               {episodes.map((ep) => {
                 const epTitle = ep.item.name;
                 const cleanedTitle = cleanMediaTitle(epTitle);
@@ -662,25 +716,27 @@ export const SeriesModal = ({
                     lower === `${ep.episodeNumber}.bölüm`;
                   return isGeneric ? '' : meta.name;
                 })();
-                const runtimeText = meta.runtime
-                  ? `${meta.runtime} dk`
-                  : (language === 'tr' ? 'HD Akış' : 'HD Stream');
-                const progressText = progress !== undefined && progress > 0
-                  ? `${Math.round(progress)}%`
-                  : null;
+                const displayTitle = tmdbEpisodeName || cleanSubtitle || (language === 'tr' ? `${ep.episodeNumber}. Bölüm` : `Episode ${ep.episodeNumber}`);
+                const runtimeText = meta.runtime ? `${meta.runtime} dk` : null;
                 const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
                 const episodeSaved = saveState.saved;
                 const episodeSaving = saveState.saving;
                 const saveProgress = saveState.progress;
+                const epOverview = meta.overview ? meta.overview.replace(/\s+/g, ' ').trim() : '';
+
+                const fullyWatched = isWatched && (progress === undefined || progress >= 90);
+                const hasProgress = progress !== undefined && progress > 0 && progress < 90;
 
                 return (
                   <div
                     key={ep.item.id}
-                    className={`rounded-2xl p-3 flex items-center justify-between gap-4 relative group border bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.055] hover:border-white/12 hover:shadow-[0_8px_25px_rgba(0,0,0,0.38)] transition-all duration-300 ${
-                      isTarget ? 'border-white/20 bg-white/[0.06] shadow-md shadow-white/5' : ''
-                    }`}
+                    onClick={() => playEpisode(ep.item)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); playEpisode(ep.item); } }}
+                    tabIndex={0}
+                    role="button"
+                    className={`series-ep-row group flex items-center gap-3 px-2.5 py-2 cursor-pointer ${isTarget ? 'is-active' : ''}`}
                   >
-                    <div className="relative w-24 md:w-32 aspect-video rounded-xl overflow-hidden shrink-0 border border-white/5 shadow-inner transition-transform duration-300 group-hover:scale-[1.02]">
+                    <div className="series-ep-thumb relative w-[6.75rem] md:w-[8rem] aspect-video shrink-0">
                       <EpisodeThumb
                         tmdbShowId={tmdbShowId}
                         seasonNumber={ep.seasonNumber}
@@ -688,115 +744,100 @@ export const SeriesModal = ({
                         fallbackPoster={tmdbData?.poster}
                         stillPath={meta.stillPath}
                       />
-                      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => playEpisode(ep.item))(); } }} tabIndex={0} role="button"
-                        onClick={() => playEpisode(ep.item)}
-                        className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-lg">
-                          <Play size={12} fill="#fff" className="text-white ml-0.5" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/45 transition-colors">
+                        <div className="w-7 h-7 rounded-full bg-white/90 text-black flex items-center justify-center shadow-md opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all">
+                          <Play size={11} fill="#000" className="ml-0.5" />
                         </div>
                       </div>
-
-                      {isWatched && (
-                        <div className="absolute bottom-2 right-1 px-1.5 py-0.5 bg-white text-black font-black text-[7px] uppercase tracking-wider rounded z-20">
-                          {language === 'tr' ? 'İzlendi' : 'Watched'}
+                      {hasProgress && (
+                        <div className="absolute bottom-0 left-0 w-full h-[3px] bg-white/15 z-20">
+                          <div className="h-full bg-white" style={{ width: `${progress}%` }} />
                         </div>
                       )}
-                      {progress !== undefined && progress > 0 && (
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20 z-20">
-                          <div 
-                            className="h-full bg-white transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <span className="block text-[10px] font-bold text-neutral-400">
-                        {language === 'tr'
-                          ? `${ep.seasonNumber}. Sezon • ${ep.episodeNumber}. Bölüm`
-                          : `Season ${ep.seasonNumber} • Episode ${ep.episodeNumber}`}
-                      </span>
-                      <h4 className="text-xs font-black text-white truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
-                        {tmdbEpisodeName || cleanSubtitle || (language === 'tr' ? `${ep.episodeNumber}. Bölüm` : `Episode ${ep.episodeNumber}`)}
-                      </h4>
-                      <span className="block text-[9px] text-neutral-500 truncate mt-1 max-w-[92%]">
-                        {epTitle}
-                      </span>
-                      <div className="flex items-center gap-2 mt-1.5 text-[9px] font-bold text-neutral-500">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock3 size={10} />
-                          {runtimeText}
+                      {fullyWatched && (
+                        <span className="absolute top-1.5 right-1.5 z-20 w-5 h-5 rounded-full bg-black/55 border border-white/15 flex items-center justify-center">
+                          <CheckCircle2 size={12} className="text-emerald-400" />
                         </span>
-                        {isWatched && (
-                          <span className="inline-flex items-center gap-1 text-emerald-300">
-                            <CheckCircle2 size={10} />
-                            {language === 'tr' ? 'İzlendi' : 'Watched'}
-                          </span>
-                        )}
-                        {progressText && !isWatched && (
-                          <span className="text-white/70">{progressText}</span>
-                        )}
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[11px] font-medium text-white/25 tabular-nums shrink-0 w-4">
+                          {ep.episodeNumber}
+                        </span>
+                        <h4 className="text-[13px] font-medium text-white/88 truncate">
+                          {displayTitle}
+                        </h4>
                       </div>
+                      <div className="flex items-center gap-2 mt-0.5 pl-6 text-[11px] text-white/28">
+                        {runtimeText ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock3 size={10} className="opacity-70" />
+                            {runtimeText}
+                          </span>
+                        ) : null}
+                        {fullyWatched ? (
+                          <span className="text-emerald-400/70">{language === 'tr' ? 'İzlendi' : 'Watched'}</span>
+                        ) : hasProgress ? (
+                          <span className="text-white/45">
+                            {language === 'tr' ? `Devam · %${Math.round(progress!)}` : `In progress · ${Math.round(progress!)}%`}
+                          </span>
+                        ) : null}
+                      </div>
+                      {epOverview ? (
+                        <p className="mt-0.5 pl-6 text-[11px] text-white/30 line-clamp-1 leading-snug">
+                          {epOverview}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (episodeSaved) {
-                            // Offline play when already downloaded
-                            playEpisode(ep.item);
-                            return;
-                          }
-                          if (episodeSaving && onNavigateToDownloads) {
-                            onNavigateToDownloads();
-                            return;
-                          }
-                          await addDownload(ep.item);
-                        }}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 active:scale-90 shadow-md cursor-pointer ${
-                          episodeSaved
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                            : episodeSaving
-                            ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30 animate-pulse'
-                            : 'bg-white/10 hover:bg-white/20 text-neutral-400 hover:text-white border border-white/10'
-                        }`}
-                        title={episodeSaved
-                          ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
-                          : episodeSaving
-                            ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
-                            : (language === 'tr' ? 'Kaydet' : 'Save')}
-                       aria-label={episodeSaved
-                          ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
-                          : episodeSaving
-                            ? (language === 'tr' ? 'Kaydedilenleri Yönet' : 'Manage Saved')
-                            : (language === 'tr' ? 'Kaydet' : 'Save')}>
-                        {episodeSaved ? (
-                          <Play size={13} fill="currentColor" className="ml-0.5" />
-                        ) : episodeSaving ? (
-                          <CircularSaveProgress progress={saveProgress} />
-                        ) : (
-                          <Download size={14} strokeWidth={2.5} />
-                        )}
-                      </button>
-                    </div>
+
+                    <button type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (episodeSaved) {
+                          playEpisode(ep.item);
+                          return;
+                        }
+                        if (episodeSaving && onNavigateToDownloads) {
+                          onNavigateToDownloads();
+                          return;
+                        }
+                        await addDownload(ep.item);
+                      }}
+                      className={`series-icon-btn shrink-0 cursor-pointer ${
+                        episodeSaved ? 'is-saved' : ''
+                      }`}
+                      title={episodeSaved
+                        ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
+                        : (language === 'tr' ? 'Kaydet' : 'Save')}
+                      aria-label={episodeSaved
+                        ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
+                        : (language === 'tr' ? 'Kaydet' : 'Save')}
+                    >
+                      {episodeSaved ? (
+                        <CheckCircle2 size={15} strokeWidth={2} color="#34d399" />
+                      ) : episodeSaving ? (
+                        <CircularSaveProgress progress={saveProgress} />
+                      ) : (
+                        <Download size={15} strokeWidth={1.75} />
+                      )}
+                    </button>
                   </div>
                 );
               })}
             </div>
-
           </div>
- 
-        </div>
- 
+        </section>
       </div>
+
       {showCastModal && (
         <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(false))(); } }} tabIndex={0} role="button" 
-          className="fixed inset-0 z-[4000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
+          className="fixed inset-0 z-[4000] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
           onClick={() => setShowCastModal(false)}
         >
           <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button" 
-            className="w-full max-w-lg bg-neutral-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl relative animate-scale-in flex flex-col gap-4"
+            className="series-modal-sheet relative flex w-full max-w-lg flex-col gap-4 rounded-[22px] p-6 animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <button type="button"

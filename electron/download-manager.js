@@ -652,6 +652,11 @@ async function downloadHlsSegmented(
       });
     };
 
+    // Report the on-disk checkpoint before requesting another segment. This
+    // prevents the renderer from flashing back to 0% while a paused download
+    // is being resumed.
+    if (completedCount > 0) emitProgress();
+
     if (pending.length > 0) {
       await new Promise((resolve, reject) => {
         const pump = () => {
@@ -811,7 +816,10 @@ async function downloadHlsSegmented(
     return { success: true, filePath: outputPath };
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
-    const keep = msg === "ABORTED" || abortController.signal.aborted;
+    const keep =
+      msg === "ABORTED" ||
+      abortController.signal.aborted ||
+      !["FALLBACK_ENCRYPTED", "FALLBACK_NOT_HLS", "DISK_FULL"].includes(msg);
     if (!keep) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });

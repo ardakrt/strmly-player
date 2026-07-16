@@ -241,31 +241,45 @@ export function useProfiles({
   };
 
   const handleDeleteProfile = async (profileId: string) => {
-    const rawPlaylists = localStorage.getItem(`profile_${profileId}_cinema_playlists`);
-    if (rawPlaylists) {
-      try {
-        const parsed: SavedPlaylist[] = JSON.parse(rawPlaylists);
-        for (const p of parsed) {
-          if (window.electronAPI && window.electronAPI.deletePlaylistItems) {
-            await window.electronAPI.deletePlaylistItems(p.id);
-          } else {
-            await deletePlaylistFromBrowserStorage(p.id);
-          }
-        }
-      } catch (e) {
-        console.error(e);
+    let storedPlaylists: SavedPlaylist[];
+    try {
+      const loadedPlaylists = await loadAppSetting('cinema_playlists', true, profileId);
+      storedPlaylists = Array.isArray(loadedPlaylists) ? loadedPlaylists : [];
+    } catch (e) {
+      console.error(e);
+      showToast(language === 'tr'
+        ? 'Profil verileri okunamadığı için silme işlemi durduruldu.'
+        : 'Profile deletion was stopped because its data could not be read.');
+      return;
+    }
+
+    if (window.electronAPI?.deleteProfileData) {
+      const result = await window.electronAPI.deleteProfileData(profileId);
+      if (!result.success) {
+        console.error('Failed to delete durable profile data:', result.error);
+        showToast(language === 'tr'
+          ? 'Profil verileri diskten tamamen silinemedi.'
+          : 'Profile data could not be fully removed from disk.');
+        return;
+      }
+    }
+
+    for (const playlist of storedPlaylists) {
+      if (window.electronAPI?.deletePlaylistItems) {
+        const result = await window.electronAPI.deletePlaylistItems(playlist.id);
+        if (!result.success) console.error('Failed to delete playlist data:', result.error);
+      } else {
+        await deletePlaylistFromBrowserStorage(playlist.id);
       }
     }
 
     const prefix = `profile_${profileId}_`;
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) {
-        keysToRemove.push(k);
-      }
+      const key = localStorage.key(i);
+      if (key?.startsWith(prefix)) keysToRemove.push(key);
     }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
+    keysToRemove.forEach(key => localStorage.removeItem(key));
 
     const updatedProfiles = profiles.filter(p => p.id !== profileId);
     setProfiles(updatedProfiles);

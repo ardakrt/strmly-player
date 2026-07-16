@@ -41,14 +41,16 @@ const remember = <T,>(cache: Map<string, T>, key: string, value: T): T => {
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Quality / audio tags only — NEVER include film/dizi/movie/series as bare words
+// (those wiped titles like "Film (2025)" → "" and "Movie Name 2025" → "Name").
 const tagsToRemove = [
   '1080p', '720p', '4k', 'uhd', 'fhd', 'hd', 'hevc', 'x264', 'x265', 'h264', 'h265',
   'dual', 'dublaj', 'dublajlı', 'dublajli', 'altyazılı', 'altyazili', 'altyazı', 'altyazi',
-  'türkçe dublaj', 'turkce dublaj', 'türkçe altyazılı', 'turkce altyazili', 'türkçe', 'turkce',
-  'english', 'original', 'orijinal', 'tr', 'eng', 'de', 'fr', 'ger',
+  'türkçe dublaj', 'turkce dublaj', 'türkçe altyazılı', 'turkce altyazili',
+  'english', 'original', 'orijinal',
   'bluray', 'web-dl', 'webrip', 'web', 'hdtv', 'dvdrip', 'dd5.1', '5.1', 'aac', 'dolby',
-  '3d', 'extended', 'director\'s cut', 'director cut', 'unrated', 'remastered', 'imax',
-  'nostalji', 'dizi', 'film', 'series', 'movie', 'raw'
+  '3d', 'extended', "director's cut", 'director cut', 'unrated', 'remastered', 'imax',
+  'nostalji', 'raw',
 ];
 
 const tagPattern = tagsToRemove.map(escapeRegExp).join('|');
@@ -60,53 +62,73 @@ const standaloneTagRegex = new RegExp(`\\s*\\b(?:${tagPattern})\\b`, 'gi');
  * Robust, unified title cleaner helper function for TMDB searches.
  * Cleans typical IPTV prefix tags (SEÇ İZLE |, TR |, [TR], Film:),
  * quality tags (1080p, 4k, uhd), audio/sub tags (dublaj, altyazı), and year info.
+ * Never returns an empty string — falls back to a lightly cleaned original.
  */
 export function cleanMediaTitle(title: string): string {
   const cached = cleanTitleCache.get(title);
-  if (cached !== undefined) return cached;
+  // Ignore previously cached empty results from older cleaner bugs
+  if (cached !== undefined && cached.length > 0) return cached;
 
-  let clean = title.trim();
+  const original = String(title || '').trim();
+  if (!original) return remember(cleanTitleCache, title, '');
+
+  let clean = original;
 
   // Remove common file extensions
   clean = clean.replace(/\.(mp4|mkv|avi|mov|ts|mpeg|mpg|wmv)$/i, '');
 
   // 1. Remove prefixes
-  // Remove "SEÇ İZLE |", "SEC IZLE |", "SEC IZLE -", etc.
   clean = clean.replace(/^(?:SEÇ\s*İZLE|SEC\s*IZLE)\s*[:|-]?\s*/i, '');
-  // Remove "7/24" or "24/7" prefixes (with optional category words like DIZI, FILM, etc.)
   clean = clean.replace(/^(?:(?:DIZI|DİZİ|FILM|FİLM|MUZIK|MÜZİK|COCUK|ÇOCUK|SEÇ\s*İZLE|SEC\s*IZLE)\s*)?(?:7\/24|24\/7)\s*[:||\-|•]?\s*/i, '');
-  // Remove standalone "DIZI |", "DİZİ |", "FILM |", "FİLM |" prefixes
-  clean = clean.replace(/^(?:DIZI|DİZİ|FILM|FİLM)\s*[:||\-|•]\s*/i, '');
-  // Remove "Film:" or "Dizi:" or "Movie:" or "Series:" prefixes
+  // Type prefixes only at the start (with separator), not bare words mid-title
+  clean = clean.replace(/^(?:DIZI|DİZİ|FILM|FİLM|MOVIE|SERIES|DIZI|DİZİ)\s*[:||\-|•]\s*/i, '');
   clean = clean.replace(/^(?:Film|Dizi|Movie|Series)\s*:\s*/i, '');
-  // Remove country code prefixes at the start followed by separator or space
-  // Matches "TR | ", "EN | ", "ENG - ", "TR: ", "[TR] ", "(TR) " etc.
   clean = clean.replace(/^\[(?:TR|ENG?|DE[U]?|FR[A]?|GER|ES[P]?|IT[A]?|NL[D]?|RU[S]?|AR[B]?|TR-EN|EN-TR|EXXEN|GAIN|NETFLIX|BLUTV|DISNEY\+?|TABII)\]\s*/i, '');
   clean = clean.replace(/^\((?:TR|ENG?|DE[U]?|FR[A]?|GER|ES[P]?|IT[A]?|NL[D]?|RU[S]?|AR[B]?|TR-EN|EN-TR|EXXEN|GAIN|NETFLIX|BLUTV|DISNEY\+?|TABII)\)\s*/i, '');
   clean = clean.replace(/^(?:TR|ENG?|DE[U]?|FR[A]?|GER|ES[P]?|IT[A]?|NL[D]?|RU[S]?|AR[B]?|TR-EN|EN-TR|EXXEN|GAIN|NETFLIX|BLUTV|DISNEY\+?|TABII)\s*[:||\-|•]\s*/i, '');
 
-  // 2. Remove year inside parentheses or at the end
+  // 2. Quality tags first (so "Title 2025 1080p" can drop year next)
+  clean = clean.replace(bracketTagRegex, '');
+  clean = clean.replace(parenTagRegex, '');
+  clean = clean.replace(standaloneTagRegex, '');
+
+  // 3. Year: (2025) / [2025] / trailing year only — keep if the whole title is a year
   clean = clean.replace(/\s*\(\d{4}\)/g, '');
   clean = clean.replace(/\s+\[\d{4}\]/g, '');
-  clean = clean.replace(/\s+\d{4}$/g, '');
+  const withoutTrailingYear = clean.replace(/\s+(19|20)\d{2}\s*$/g, '').trim();
+  if (withoutTrailingYear.length > 0) {
+    clean = withoutTrailingYear;
+  }
 
-  // Remove general parentheses/brackets and their contents (e.g. tags, descriptions)
-  clean = clean.replace(/\s*\([^)]*\)/g, ' ');
-  clean = clean.replace(/\s*\[[^\]]*\]/g, ' ');
-
-  // 3. Remove common VOD suffixes/tags (case-insensitive)
-  // Pattern for bracket tags, e.g. [1080p], [dublaj]
-  clean = clean.replace(bracketTagRegex, '');
-  // Pattern for parentheses tags, e.g. (1080p), (dublaj)
-  clean = clean.replace(parenTagRegex, '');
-  // Pattern for standalone words at word boundaries or ends
-  clean = clean.replace(standaloneTagRegex, '');
+  // Remove leftover empty paren/brackets only (not all content — already handled years)
+  clean = clean.replace(/\s*\(\s*\)/g, ' ');
+  clean = clean.replace(/\s*\[\s*\]/g, ' ');
+  // Safe generic paren/bracket strip for leftover quality notes
+  clean = clean.replace(/\s*\((?:[^)]*)\)/g, (m) => {
+    // Keep meaningful parenthetical titles (rare); drop short tag-like ones
+    const inner = m.slice(1, -1).trim();
+    if (inner.length >= 12) return ` ${inner} `;
+    return ' ';
+  });
+  clean = clean.replace(/\s*\[(?:[^\]]*)\]/g, ' ');
 
   // 4. Clean trailing and leading symbols
   clean = clean.replace(/^[\s.:\-|#|+/\\|•]+/, '');
   clean = clean.replace(/[\s.:\-|#|+/\\|•]+$/, '');
+  clean = clean.replace(/\s{2,}/g, ' ').trim();
 
-  return remember(cleanTitleCache, title, clean.trim());
+  // Never wipe the title — e.g. "Film (2025)" used to become ""
+  if (!clean) {
+    clean = original
+      .replace(/\s*\(\d{4}\)\s*/g, ' ')
+      .replace(/\s+(19|20)\d{2}\s*$/g, '')
+      .replace(/^[\s.:\-|#|+/\\|•]+/, '')
+      .replace(/[\s.:\-|#|+/\\|•]+$/, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim() || original;
+  }
+
+  return remember(cleanTitleCache, title, clean);
 }
 
 export function parseSeriesEpisodeInfo(name: string): ParsedEpisodeInfo {
@@ -174,8 +196,12 @@ export function parseSeriesEpisodeInfo(name: string): ParsedEpisodeInfo {
     }
   }
 
-  // Use the robust cleaner helper
+  // Use the robust cleaner helper — never allow empty cleanTitle
+  const beforeClean = cleanTitle;
   cleanTitle = cleanMediaTitle(cleanTitle);
+  if (!cleanTitle) {
+    cleanTitle = beforeClean.trim() || name.trim() || 'İsimsiz';
+  }
 
   return remember(episodeInfoCache, name, {
     cleanTitle,

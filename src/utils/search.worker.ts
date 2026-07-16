@@ -145,27 +145,38 @@ self.onmessage = (e: MessageEvent) => {
 
       let score = 0;
 
-      // Prioritize curated VOD platforms and high-quality categories.
-      const premiumKeywords = [
-        'netflix', 'amazon', 'prime', 'disney', 'apple', 'hbo',
-        'exxen', 'blu tv', 'blutv', 'uhd', '4k', '1080p',
-        'yabancı film', 'yabancı dizi', 'popüler', 'vizyon', 'trend',
-        'sine', 'türkçe dublaj', 'türkçe altyazı', 'aksiyon', 'bilim kurgu'
+      // Global streamer / studio catalogs (Netflix-style "editorial" sources).
+      const platformKeywords = [
+        'netflix', 'amazon', 'prime', 'disney', 'apple', 'hbo', 'max',
+        'hulu', 'paramount', 'peacock', 'exxen', 'blu tv', 'blutv',
+        'mubi', 'gain', 'tabii', 'tod', 'puhu'
       ];
-      for (const kw of premiumKeywords) {
-        if (group.includes(kw)) score += 50;
-        if (name.includes(kw)) score += 20;
+      for (const kw of platformKeywords) {
+        if (group.includes(kw)) score += 70;
+        if (name.includes(kw)) score += 25;
       }
 
-      // Favor VOD types over general type
-      if (item.type === 'series') score += 30;
-      if (item.type === 'movie') score += 20;
+      // Popular / trending / cinema quality signals in category names.
+      const popularKeywords = [
+        'popüler', 'popular', 'trend', 'trending', 'vizyon', 'top', 'imdb',
+        'yabancı film', 'yabancı dizi', 'boxset', 'collection',
+        'uhd', '4k', '1080p', 'fhd', 'sine', 'sinema'
+      ];
+      for (const kw of popularKeywords) {
+        if (group.includes(kw)) score += 45;
+        if (name.includes(kw)) score += 12;
+      }
 
-      if (activePrefs.includes('series') && item.type === 'series') score += 180;
-      if (activePrefs.includes('movies') && item.type === 'movie') score += 180;
+      // Balanced VOD — mixed film + dizi billboard (no series monopoly).
+      if (item.type === 'series') score += 24;
+      if (item.type === 'movie') score += 24;
+
+      // Soft preference tilt only (still mixed catalog, not exclusive).
+      if (activePrefs.includes('series') && item.type === 'series') score += 55;
+      if (activePrefs.includes('movies') && item.type === 'movie') score += 55;
       if (activePrefs.includes('kids')) {
         const kidsKeywords = ['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney', 'nickelodeon'];
-        if (kidsKeywords.some(keyword => name.includes(keyword) || group.includes(keyword))) score += 240;
+        if (kidsKeywords.some(keyword => name.includes(keyword) || group.includes(keyword))) score += 220;
       }
 
       return score;
@@ -176,8 +187,16 @@ self.onmessage = (e: MessageEvent) => {
       .sort((a, b) => b.score - a.score)
       .map(x => x.item);
 
-    // Return the top 500 sorted candidates
-    const topCandidates = sortedCandidatesSource.slice(0, 500);
+    // Balanced top pool: movies often outnumber series 10:1 — reserve half for each type
+    // so the home billboard can actually pick popular diziler.
+    const topSeries = sortedCandidatesSource.filter((i) => i.type === 'series').slice(0, 250);
+    const topMovies = sortedCandidatesSource.filter((i) => i.type !== 'series').slice(0, 250);
+    const topCandidates: PlaylistItem[] = [];
+    const maxLen = Math.max(topSeries.length, topMovies.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < topSeries.length) topCandidates.push(topSeries[i]);
+      if (i < topMovies.length) topCandidates.push(topMovies[i]);
+    }
 
     self.postMessage({
       action: 'home_candidates_results',

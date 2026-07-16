@@ -1,7 +1,7 @@
 {
   "name": "strmly",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Strmly is a desktop IPTV player.",
   "author": "Arda",
   "overrides": {
@@ -17,10 +17,12 @@
     "typecheck:unused": "tsc -p tsconfig.app.json --noUnusedLocals true --noUnusedParameters true --noEmit",
     "test:migration": "node scripts/test-migration.js",
     "test:catalog": "node scripts/test-catalog-filters.js",
+    "test:regressions": "node scripts/test-regressions.js",
     "check:a11y": "node scripts/check-a11y-controls.js",
     "test:security": "node scripts/test-security.js",
     "test:performance": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-performance.ps1",
-    "verify": "npm run lint && npm run typecheck:unused && npm run test:migration && npm run test:security && npm run build",
+    "doctor": "react-doctor . --yes --blocking none --no-dead-code",
+    "verify": "npm run lint && npm run typecheck:unused && npm run test:migration && npm run test:security && npm run test:catalog && npm run test:regressions && npm run check:a11y && npm run build",
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
@@ -52,6 +54,7 @@
     "postcss": "^8.5.15",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-doctor": "^0.7.7",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
@@ -117,4 +120,3 @@
     }
   }
 }
-

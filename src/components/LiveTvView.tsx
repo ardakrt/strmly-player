@@ -1,8 +1,6 @@
 import React from 'react';
 import { 
-  Search, Heart, Trash2, Tv, Play, Grid, List, 
-  Film, Trophy, Newspaper, Music, Gamepad, Compass, 
-  Sparkles, Star, Radio, Info 
+  Search, Heart, Trash2, Tv, Play, Grid, List, Info
 } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { VirtualizedList } from './VirtualizedList';
@@ -27,22 +25,6 @@ const cleanChannelName = (name: string): string => {
     .replace(/\s+/g, ' ')
     .trim();
 };
-
-// Helper to map category names to Lucide icons dynamically
-const getCategoryIcon = (name: string) => {
-  const upper = name.toUpperCase();
-  if (upper.includes('SPOR') || upper.includes('SPORT')) return Trophy;
-  if (upper.includes('SİNEMA') || upper.includes('FİLM') || upper.includes('MOVIE') || upper.includes('CİNEMA') || upper.includes('ACTION') || upper.includes('VOD') || upper.includes('VİZYON')) return Film;
-  if (upper.includes('HABER') || upper.includes('NEWS') || upper.includes('INFO')) return Newspaper;
-  if (upper.includes('MÜZİK') || upper.includes('MUSIC') || upper.includes('KLİP')) return Music;
-  if (upper.includes('ÇOCUK') || upper.includes('KİD') || upper.includes('GAME') || upper.includes('GAMİNG') || upper.includes('ANİME') || upper.includes('KARTON')) return Gamepad;
-  if (upper.includes('BELGESEL') || upper.includes('DOCUMENTARY') || upper.includes('WİLD') || upper.includes('NAT') || upper.includes('GEOGRAPHIC')) return Compass;
-  if (upper.includes('PREMIUM') || upper.includes('VIP') || upper.includes('ÖZEL') || upper.includes('SEÇKİN') || upper.includes('PLATINUM')) return Sparkles;
-  if (upper.includes('FAVORİ') || upper.includes('FAV')) return Star;
-  return Tv;
-};
-
-
 
 interface LiveTvViewProps {
   selectedGroup: string;
@@ -104,21 +86,21 @@ export const LiveChannelCard = React.memo(({
       onFocus={() => onActive?.(channel)}
       role="button"
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(channel); }}
-      className={`group flex items-center justify-between p-2 rounded-xl transition-all focusable-item cursor-pointer border ${
+      className={`group flex items-center justify-between p-2 pl-3.5 rounded-xl transition-all focusable-item cursor-pointer border ${
         isActive
-          ? 'bg-white/[0.06] border-white/10 border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 scale-[1.01]'
+          ? 'bg-white/[0.06] border-white/10 border-l-[3px] border-l-[var(--accent-color)] pl-[11px] shadow-md shadow-black/20 scale-[1.01]'
           : 'bg-neutral-900/30 hover:bg-white/5 border-transparent hover:border-white/10'
       }`}
       tabIndex={0}
       style={{ height: '56px' }}
     >
       <div className="flex items-center gap-3 overflow-hidden">
-        <div className="w-10 h-10 rounded-lg bg-neutral-950 border border-white/5 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-b from-neutral-900 to-neutral-950 border border-white/15 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
           {channel.logo ? (
             <img 
               src={channel.logo} 
               alt=""
-              className="max-w-[70%] max-h-[70%] object-contain" 
+              className="w-full h-full object-contain"
               onError={(e) => { (e.target as HTMLImageElement).src = ''; }} 
             />
           ) : (
@@ -203,13 +185,12 @@ export const LiveChannelGridCard = React.memo(({
       }}
       tabIndex={0}
     >
-      {/* Channel Logo Frame */}
-      <div className="w-11 h-11 rounded-xl bg-neutral-950/60 border border-white/5 flex items-center justify-center overflow-hidden shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-105 mb-1.5">
+      <div className="w-11 h-11 rounded-full bg-gradient-to-b from-neutral-900 to-neutral-950 border border-white/15 flex items-center justify-center overflow-hidden shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-105 mb-1.5">
         {channel.logo ? (
           <img 
             src={channel.logo} 
             alt=""
-            className="max-w-[70%] max-h-[70%] object-contain" 
+            className="w-full h-full object-contain"
             onError={(e) => { (e.target as HTMLImageElement).src = ''; }} 
           />
         ) : (
@@ -323,6 +304,83 @@ export const LiveTvView = React.memo(function LiveTvView({
 
   const otherCategories = liveCat.filteredOtherCategories;
 
+  const categoryBtnClass = (isActive: boolean, editPad = false) =>
+    `series-category-item ${isActive ? 'is-active' : ''} w-full flex items-center text-left px-3 py-1.5 rounded-lg border text-[11.5px] font-medium transition-colors focusable-item ${
+      editPad ? 'pr-14' : ''
+    } ${
+      isActive
+        ? 'border-white/[0.07] text-white'
+        : 'border-transparent text-white/52 hover:bg-white/[0.035] hover:text-white/82'
+    }`;
+
+  const activeTitle =
+    activeLiveCategory === 'Tümü'
+      ? language === 'tr'
+        ? 'Tüm Kanallar'
+        : 'All Channels'
+      : activeLiveCategory;
+
+  const visibleCategories = otherCategories.slice(0, visibleLiveCategoryLimit);
+
+  const renderCategoryRow = (group: string, favorite = false) => {
+    const isActive = activeLiveCategory === group;
+
+    return (
+      <div
+        key={`${favorite ? 'favorite' : 'category'}-${group}`}
+        className={`relative flex items-center group ${
+          liveCat.draggedCategory === group ? 'opacity-50' : ''
+        } ${liveCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        draggable={liveCat.editMode}
+        onDragStart={(event) => liveCat.handleDragStart(event, group)}
+        onDragOver={handleDragOverHelper}
+        onDrop={(event) => liveCat.handleDrop(event, group)}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setActiveLiveCategory(group);
+            setVisibleCount(100);
+          }}
+          className={categoryBtnClass(isActive, liveCat.editMode)}
+          title={group}
+          aria-current={isActive ? 'true' : undefined}
+        >
+          <span className="min-w-0 flex-1 truncate">{group}</span>
+        </button>
+
+        {liveCat.editMode && (
+          <div className="absolute right-1.5 flex items-center gap-0.5 z-20">
+            <button
+              type="button"
+              onClick={(event) => liveCat.toggleFavorite(group, event)}
+              className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                favorite ? 'text-red-400 hover:bg-red-400/10' : 'text-white/35 hover:bg-white/[0.06] hover:text-red-300'
+              }`}
+              title={favorite
+                ? language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'
+                : language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
+              aria-label={favorite
+                ? language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'
+                : language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
+            >
+              <Heart size={11} fill={favorite ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => liveCat.handleHide(group, event)}
+              className="w-6 h-6 rounded-lg text-white/35 hover:text-red-400 hover:bg-red-400/10 flex items-center justify-center transition-colors cursor-pointer"
+              title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+              aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Grid view chunking logic: group items into rows of 4 columns
   const chunkedDisplayItems = (() => {
     if (viewMode !== 'grid') return [];
@@ -337,199 +395,141 @@ export const LiveTvView = React.memo(function LiveTvView({
 
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] page-transition-enter pb-12" onContextMenu={() => setContextMenu(null)}>
-      {/* 1. Left Categories Sidebar */}
-      <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-2 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4 h-full overflow-y-auto shadow-lg select-none hide-scrollbar">
-        <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-[10px] tracking-widest font-extrabold text-neutral-500 uppercase">{language === 'tr' ? 'Kategoriler' : 'Categories'}</span>
-          <button type="button"
+    <div
+      className="series-catalog-shell grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden page-transition-enter md:grid-cols-[218px_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-3"
+      onContextMenu={() => setContextMenu(null)}
+    >
+      <aside className="series-catalog-panel series-category-panel flex min-h-0 max-h-[36vh] flex-col gap-0.5 overflow-y-auto rounded-2xl border border-white/[0.06] p-3 select-none hide-scrollbar md:max-h-none">
+        <div className="mb-1.5 flex items-center justify-between px-1">
+          <span className="text-[9px] tracking-[0.16em] font-bold text-white/28 uppercase">
+            {language === 'tr' ? 'Kategoriler' : 'Categories'}
+          </span>
+          <button
+            type="button"
             onClick={() => liveCat.setEditMode(!liveCat.editMode)}
-            className={`text-[9px] font-bold uppercase px-2 py-1 rounded transition-colors focusable-item ${liveCat.editMode ? 'bg-[var(--accent-color)] text-black' : 'bg-white/5 hover:bg-white/10 text-neutral-400'}`}
+            className={`h-6 rounded-md border border-transparent px-1.5 text-[8.5px] font-bold uppercase transition-colors focusable-item cursor-pointer ${
+              liveCat.editMode
+                ? 'bg-white/[0.08] text-white'
+                : 'text-white/35 hover:bg-white/[0.04] hover:text-white/70'
+            }`}
           >
             {liveCat.editMode ? (language === 'tr' ? 'Bitti' : 'Done') : t('common.edit')}
           </button>
         </div>
         <div className="relative mb-2 shrink-0">
-          <Search size={11} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/28" />
           <input
             type="text"
-            placeholder={language === 'tr' ? 'Kategori ara...' : 'Search category...'}
+            placeholder={language === 'tr' ? 'Kategori ara…' : 'Search category…'}
             value={categorySearchQuery}
             onChange={(e) => setCategorySearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/5 focus:border-[var(--accent-color)] rounded-lg text-[11px] text-white outline-none placeholder-neutral-500 transition-all focusable-item"
+            className="h-8 w-full rounded-lg border border-white/[0.06] bg-black/15 pl-8 pr-3 text-[10.5px] text-white outline-none transition-colors placeholder:text-white/25 focus:border-white/12 focus:bg-white/[0.035] focusable-item"
           />
         </div>
 
-        {/* All Channels Button */}
-        <button type="button"
-          onClick={() => { setActiveLiveCategory('Tümü'); setVisibleCount(100); }}
-          className={`flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${
-            activeLiveCategory === 'Tümü'
-              ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
-              : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
-          }`}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveLiveCategory('Tümü');
+            setVisibleCount(100);
+          }}
+          className={categoryBtnClass(activeLiveCategory === 'Tümü')}
+          aria-current={activeLiveCategory === 'Tümü' ? 'true' : undefined}
         >
-          <Radio size={14} className={activeLiveCategory === 'Tümü' ? 'text-[var(--accent-color)]' : 'text-neutral-500'} />
-          <span>{language === 'tr' ? 'Tüm Kanallar' : 'All Channels'}</span>
+          <span className="min-w-0 flex-1 truncate">{language === 'tr' ? 'Tüm Kanallar' : 'All Channels'}</span>
         </button>
 
         {/* Favorites Categories Section */}
         {liveFavCatsToShow.length > 0 && (
-          <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/5">
-            <span className="text-[9px] tracking-widest font-extrabold text-red-500/50 uppercase px-2 mb-1 flex items-center gap-1.5"><Heart size={10} /> {t('navbar.favorites')}</span>
-            {liveFavCatsToShow.map(group => {
-              const CatIcon = getCategoryIcon(group);
-              const isCatActive = activeLiveCategory === group;
-              return (
-                <div
-                  key={`fav-${group}`}
-                  className={`relative flex items-center group transition-transform ${liveCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${liveCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                  draggable={liveCat.editMode}
-                  onDragStart={(e) => liveCat.handleDragStart(e, group)}
-                  onDragOver={handleDragOverHelper}
-                  onDrop={(e) => liveCat.handleDrop(e, group)}
-                >
-                  <button type="button"
-                    onClick={() => { setActiveLiveCategory(group); setVisibleCount(100); }}
-                    className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${liveCat.editMode ? 'pr-16' : 'pr-4'} ${
-                      isCatActive
-                        ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
-                        : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
-                    }`}
-                  >
-                    <CatIcon size={14} className={isCatActive ? 'text-[var(--accent-color)] animate-pulse' : 'text-neutral-500'} />
-                    <span className="truncate">{group}</span>
-                  </button>
-                  {liveCat.editMode && (
-                    <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                      <button type="button"
-                        onClick={(e) => liveCat.toggleFavorite(group, e)}
-                        className="w-6 h-6 rounded-md bg-black/40 text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                        title={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
-                        aria-label={language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites'}
-                      >
-                        <Heart size={11} fill="currentColor" />
-                      </button>
-                      <button type="button"
-                        onClick={(e) => liveCat.handleHide(group, e)}
-                        className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                        title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                        aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="flex flex-col gap-0.5 mt-2 pt-2 border-t border-white/[0.05]">
+            <span className="text-[9px] tracking-[0.14em] font-bold text-red-400/45 uppercase px-2 mb-1 flex items-center gap-1.5">
+              <Heart size={10} /> {t('navbar.favorites')}
+            </span>
+            {liveFavCatsToShow.map((group) => renderCategoryRow(group, true))}
           </div>
         )}
 
-        {/* Other Categories Section */}
-        <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/5">
-          <span className="text-[9px] tracking-widest font-extrabold text-neutral-600 uppercase px-2 mb-1">{language === 'tr' ? 'Diğerleri' : 'Others'}</span>
-          {otherCategories.slice(0, visibleLiveCategoryLimit).map(group => {
-            const CatIcon = getCategoryIcon(group);
-            const isCatActive = activeLiveCategory === group;
-            return (
-              <div
-                key={group}
-                className={`relative flex items-center group transition-transform ${liveCat.draggedCategory === group ? 'opacity-50 scale-95' : 'opacity-100'} ${liveCat.editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                draggable={liveCat.editMode}
-                onDragStart={(e) => liveCat.handleDragStart(e, group)}
-                onDragOver={handleDragOverHelper}
-                onDrop={(e) => liveCat.handleDrop(e, group)}
-              >
-                <button type="button"
-                  onClick={() => { setActiveLiveCategory(group); setVisibleCount(100); }}
-                  className={`w-full flex items-center gap-3 text-left px-4 py-2.5 border rounded-xl text-xs font-semibold transition-all focusable-item ${liveCat.editMode ? 'pr-16' : 'pr-4'} ${
-                    isCatActive
-                      ? 'bg-white/[0.06] border-white/10 text-white border-l-[3px] border-l-[var(--accent-color)] shadow-md shadow-black/20 font-bold scale-[1.01]'
-                      : 'text-neutral-400 border-transparent hover:bg-white/5 hover:text-white hover:border-white/5'
-                  }`}
-                >
-                  <CatIcon size={14} className={isCatActive ? 'text-[var(--accent-color)] animate-pulse' : 'text-neutral-500'} />
-                  <span className="truncate">{group}</span>
-                </button>
-                {liveCat.editMode && (
-                  <div className="absolute right-2.5 flex items-center gap-1 z-20">
-                    <button type="button"
-                      onClick={(e) => liveCat.toggleFavorite(group, e)}
-                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                      title={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
-                      aria-label={language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites'}
-                    >
-                      <Heart size={11} />
-                    </button>
-                    <button type="button"
-                      onClick={(e) => liveCat.handleHide(group, e)}
-                      className="w-6 h-6 rounded-md bg-black/40 text-neutral-400 hover:text-red-500 hover:scale-105 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
-                      title={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                      aria-label={language === 'tr' ? 'Kategoriyi Kaldır' : 'Remove Category'}
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {otherCategories.length > visibleLiveCategoryLimit && (
-            <button type="button"
-              onClick={() => setVisibleLiveCategoryLimit(prev => prev + 50)}
-              className="w-full py-2.5 mt-1 rounded-xl text-[10px] font-bold text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all tracking-wider uppercase border border-white/5 focusable-item cursor-pointer"
-            >
-              {language === 'tr' ? 'Daha Fazla Göster' : 'Show More'} (+{otherCategories.length - visibleLiveCategoryLimit})
-            </button>
-          )}
-        </div>
-      </div>
+        {visibleCategories.length > 0 && (
+          <div className="flex flex-col gap-0.5 mt-2 pt-2 border-t border-white/[0.05]">
+            <span className="text-[9px] tracking-[0.14em] font-bold text-white/22 uppercase px-2 mb-1">
+              {language === 'tr' ? 'Diğerleri' : 'Others'}
+            </span>
+            {visibleCategories.map((group) => renderCategoryRow(group))}
+          </div>
+        )}
 
-      {/* 2. Middle Content Column: Channel List */}
-      <div className="flex-1 flex flex-col gap-3 h-full">
-        {/* Header Panel */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 bg-neutral-950/40 border border-white/5 rounded-[20px] gap-3 shadow-md shrink-0 select-none">
-          <span className="text-[10px] tracking-widest font-extrabold text-neutral-400 uppercase">
-            {language === 'tr'
-              ? `${filteredDisplayItems.length} Kanal`
-              : `${filteredDisplayItems.length} Channel${filteredDisplayItems.length > 1 ? 's' : ''}`}
-          </span>
-          <div className="flex items-center gap-1.5">
+        {otherCategories.length > visibleLiveCategoryLimit && (
+          <button
+            type="button"
+            onClick={() => setVisibleLiveCategoryLimit((prev) => prev + 50)}
+            className="w-full py-2 mt-2 rounded-xl text-[10px] font-semibold text-white/35 hover:text-white/70 hover:bg-white/[0.04] transition-colors tracking-wide focusable-item cursor-pointer"
+          >
+            {language === 'tr' ? 'Daha fazla' : 'Show more'} (+
+            {otherCategories.length - visibleLiveCategoryLimit})
+          </button>
+        )}
+      </aside>
+
+      <section className="series-catalog-panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-white/[0.07]">
+        <header className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3.5 lg:px-6">
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+              {language === 'tr' ? 'Canlı TV' : 'Live TV'}
+            </p>
+            <h2 className="truncate text-[18px] font-bold tracking-[-0.02em] text-white/92 lg:text-[20px]">
+              {activeTitle}
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[10px] font-semibold tabular-nums text-white/38">
+              {filteredDisplayItems.length > 0
+                ? language === 'tr'
+                  ? `${filteredDisplayItems.length} kanal`
+                  : `${filteredDisplayItems.length} channels`
+                : null}
+            </span>
             {/* View Mode Switcher */}
-            <button type="button"
+            <button
+              type="button"
               onClick={handleToggleViewMode}
-              className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer focusable-item"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.06] bg-white/[0.035] text-white/38 transition-colors hover:bg-white/[0.07] hover:text-white cursor-pointer focusable-item"
               title={viewMode === 'list' ? (language === 'tr' ? 'Izgara Görünümü' : 'Grid View') : (language === 'tr' ? 'Liste Görünümü' : 'List View')}
               aria-label={viewMode === 'list' ? (language === 'tr' ? 'Izgara Görünümü' : 'Grid View') : (language === 'tr' ? 'Liste Görünümü' : 'List View')}
             >
               {viewMode === 'list' ? <Grid size={13} /> : <List size={13} />}
             </button>
-            {/* Preview Panel Toggle */}
-            <button type="button"
+            <button
+              type="button"
               onClick={handleTogglePreviewCollapse}
-              className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer focusable-item"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.06] bg-white/[0.035] text-white/38 transition-colors hover:bg-white/[0.07] hover:text-white cursor-pointer focusable-item"
               title={isPreviewCollapsed ? (language === 'tr' ? 'Detayları Göster' : 'Detayları Gizle') : (language === 'tr' ? 'Detayları Gizle' : 'Show Details')}
               aria-label={isPreviewCollapsed ? (language === 'tr' ? 'Detayları Göster' : 'Detayları Gizle') : (language === 'tr' ? 'Detayları Gizle' : 'Show Details')}
             >
               <Info size={13} className={isPreviewCollapsed ? 'opacity-40' : 'text-[var(--accent-color)]'} />
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Scroll Container */}
-        <div className="flex-1 overflow-y-auto bg-neutral-950/20 border border-white/5 rounded-[24px] p-2 md:p-4 shadow-inner" onScroll={handleMainScroll}>
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div
+            className="hide-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5"
+            onScroll={handleMainScroll}
+          >
           {filteredDisplayItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center p-20 opacity-50 select-none">
-              <Tv size={32} className="text-neutral-500 mb-3" />
-              <h3 className="text-base font-semibold text-neutral-300">{language === 'tr' ? 'Kanal Bulunamadı' : 'No Channels Found'}</h3>
+            <div className="flex min-h-full flex-col items-center justify-center py-20 text-center select-none">
+              <div className="mb-4 grid h-14 w-14 place-items-center rounded-[20px] border border-white/[0.07] bg-white/[0.035] text-white/30 shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
+                <Tv size={24} />
+              </div>
+              <h3 className="text-sm font-semibold text-white/55">
+                {language === 'tr' ? 'Kanal bulunamadı' : 'No channels found'}
+              </h3>
             </div>
           ) : viewMode === 'grid' ? (
             <VirtualizedList
               items={chunkedDisplayItems}
               itemHeight={112}
               renderItem={(rowItems) => (
-                <div className="grid grid-cols-4 gap-3 w-full py-1">
+                <div className="grid w-full grid-cols-2 gap-3 py-1 xl:grid-cols-3 2xl:grid-cols-4">
                   {rowItems.map((channel) => (
                     <LiveChannelGridCard
                       key={channel.id}
@@ -565,13 +565,11 @@ export const LiveTvView = React.memo(function LiveTvView({
               )}
             />
           )}
-        </div>
-      </div>
+          </div>
 
-      {/* 3. Right Column: Preview/Details Panel */}
-      {!isPreviewCollapsed && (
+          {!isPreviewCollapsed && (
         previewChannel ? (
-          <div className="hidden lg:flex w-80 shrink-0 flex-col gap-4 bg-neutral-950/40 border border-white/5 rounded-[24px] p-4.5 h-full overflow-y-auto shadow-lg text-left select-none hide-scrollbar">
+          <aside className="hidden w-[286px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-white/[0.06] bg-black/10 p-5 text-left select-none hide-scrollbar xl:flex 2xl:w-80">
             {/* Logo Card Frame */}
             <div className="relative w-full aspect-video rounded-xl bg-neutral-950 border border-white/10 flex items-center justify-center overflow-hidden shrink-0 shadow-inner group">
               {previewChannel.logo ? (
@@ -580,7 +578,7 @@ export const LiveTvView = React.memo(function LiveTvView({
                   alt=""
                   decoding="async"
                   loading="lazy"
-                  className="max-h-[55%] max-w-[55%] object-contain z-10 transition-transform duration-500 group-hover:scale-105" 
+                  className="max-h-[75%] max-w-[75%] object-contain z-10 transition-transform duration-500 group-hover:scale-105"
                   onError={(e) => { e.currentTarget.hidden = true; }}
                 />
               ) : (
@@ -639,14 +637,16 @@ export const LiveTvView = React.memo(function LiveTvView({
                   : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
               </button>
             </div>
-          </div>
+          </aside>
         ) : (
-          <div className="hidden lg:flex w-80 shrink-0 flex-col items-center justify-center text-center p-6 bg-neutral-950/40 border border-white/5 rounded-[24px] h-full shadow-lg opacity-40 select-none">
-            <Tv size={32} className="text-neutral-500 mb-3" />
-            <span className="text-xs font-semibold">{language === 'tr' ? 'Kanal Seçin' : 'Select a Channel'}</span>
-          </div>
+          <aside className="hidden w-[286px] shrink-0 flex-col items-center justify-center border-l border-white/[0.06] bg-black/10 p-6 text-center text-white/35 select-none xl:flex 2xl:w-80">
+            <Tv size={28} className="mb-3" />
+            <span className="text-xs font-semibold">{language === 'tr' ? 'Kanal seçin' : 'Select a channel'}</span>
+          </aside>
         )
-      )}
+          )}
+        </div>
+      </section>
       {contextMenu && (
         <MediaCardContextMenu
           x={contextMenu.x}

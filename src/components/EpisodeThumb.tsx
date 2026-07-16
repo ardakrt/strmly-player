@@ -7,7 +7,7 @@ import type { EpisodeThumbProps } from '../types';
 // Global memory cache - asla sıfırlanmaz
 const episodeStillCache: Record<string, string> = {};
 
-export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, stillPath }: EpisodeThumbProps) => {
+export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, stillPath, fallbackPoster }: EpisodeThumbProps) => {
   const language = typeof localStorage !== 'undefined' ? localStorage.getItem('cinema_language') || 'tr' : 'tr';
   const cacheKey = useMemo(() => {
     return tmdbShowId ? `${tmdbShowId}-${seasonNumber}-${episodeNumber}` : '';
@@ -25,7 +25,11 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
 
   useEffect(() => {
     setLoaded(false);
-    if (!tmdbShowId || !cacheKey) { setTried(true); return; }
+    if (!tmdbShowId || !cacheKey) {
+      setStillSrc(null);
+      setTried(true);
+      return;
+    }
 
     // Memory cache'de varsa direkt kullan
     if (episodeStillCache[cacheKey] && stillPath === undefined) {
@@ -122,18 +126,29 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
     };
   }, [tmdbShowId, seasonNumber, episodeNumber, cacheKey, stillPath]);
 
+  const showStill = Boolean(stillSrc && loaded);
+  const showPosterFallback = Boolean(fallbackPoster && (!stillSrc || !loaded));
+
   return (
-    <div className="relative w-full h-full bg-neutral-900">
+    <div className="relative w-full h-full overflow-hidden bg-neutral-900">
       {stillSrc && (
         <img
           src={stillSrc}
           alt=""
-          className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${showStill ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setLoaded(true)}
           onError={() => { if (stillSrc) { setStillSrc(null); setLoaded(false); } }}
         />
       )}
-      {(!stillSrc || !loaded) && (
+      {showPosterFallback && (
+        <img
+          src={fallbackPoster}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-70"
+          draggable={false}
+        />
+      )}
+      {(!stillSrc || !loaded) && !fallbackPoster && (
         <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${getFallbackGradient(`${tmdbShowId}-${seasonNumber}-${episodeNumber}`)}`}>
           <div className="absolute inset-0 bg-black/20" />
           <div className="relative flex flex-col items-center gap-1 text-white/75">
@@ -146,8 +161,8 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
           </div>
         </div>
       )}
-      {tried && !stillSrc && (
-        <div className="absolute inset-0 bg-black/10" />
+      {tried && !stillSrc && fallbackPoster && (
+        <div className="pointer-events-none absolute inset-0 bg-black/25" />
       )}
     </div>
   );

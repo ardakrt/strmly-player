@@ -262,10 +262,17 @@ export const buildTmdbSearchPath = (endpoint: TmdbEndpoint, apiKey: string, clea
   return `/3/search/${endpoint}?${params.toString()}`;
 };
 
-export const buildTmdbDetailsPath = (endpoint: TmdbEndpoint, apiKey: string, id: number) => {
+export const buildTmdbDetailsPath = (
+  endpoint: TmdbEndpoint,
+  apiKey: string,
+  id: number,
+  language?: string,
+) => {
   const params = new URLSearchParams({
     api_key: apiKey,
-    language: getTmdbLanguage()
+    language: language || getTmdbLanguage(),
+    append_to_response: 'images',
+    include_image_language: 'tr,en,null'
   });
   return `/3/${endpoint}/${id}?${params.toString()}`;
 };
@@ -335,8 +342,67 @@ export const fetchTmdbSearch = async (endpoint: TmdbEndpoint, apiKey: string, cl
   return fetchTmdbPath<TmdbSearchResponse>(buildTmdbSearchPath(endpoint, apiKey, cleanTitle), signal);
 };
 
-export const fetchTmdbDetails = async (endpoint: TmdbEndpoint, apiKey: string, id: number, signal?: AbortSignal): Promise<TmdbSearchResult & { error?: string }> => {
-  return fetchTmdbPath<TmdbSearchResult & { error?: string }>(buildTmdbDetailsPath(endpoint, apiKey, id), signal);
+export const fetchTmdbDetails = async (
+  endpoint: TmdbEndpoint,
+  apiKey: string,
+  id: number,
+  signal?: AbortSignal,
+  language?: string,
+): Promise<TmdbSearchResult & { error?: string }> => {
+  return fetchTmdbPath<TmdbSearchResult & { error?: string }>(
+    buildTmdbDetailsPath(endpoint, apiKey, id, language),
+    signal,
+  );
+};
+
+/**
+ * True when hero desc is missing or is an old app-generated placeholder
+ * (must re-fetch so UI only ever shows real TMDB synopsis).
+ */
+export const isMissingTmdbOverview = (desc?: string | null) => {
+  if (!desc || !desc.trim()) return true;
+  const d = desc.toLowerCase();
+  return (
+    d.includes('strmly') ||
+    d.includes('benzersiz bir yapım') ||
+    d.includes('unique production from the') ||
+    d.includes('keyifli seyirler')
+  );
+};
+
+/**
+ * Real TMDB synopsis only. Tries preferred-language snippets first, then en-US
+ * details (many foreign titles have empty tr-TR overview).
+ */
+export const resolveTmdbOverview = async (
+  endpoint: TmdbEndpoint,
+  apiKey: string,
+  id: number,
+  preferredSnippets: Array<string | null | undefined>,
+  signal?: AbortSignal,
+): Promise<string | undefined> => {
+  for (const snippet of preferredSnippets) {
+    if (snippet && snippet.trim() && !isMissingTmdbOverview(snippet)) {
+      return snippet.trim();
+    }
+  }
+
+  const langsToTry = Array.from(
+    new Set([getTmdbLanguage(), 'en-US', 'tr-TR'].filter(Boolean)),
+  );
+
+  for (const lang of langsToTry) {
+    try {
+      const details = await fetchTmdbDetails(endpoint, apiKey, id, signal, lang);
+      if (details && !details.error && details.overview?.trim()) {
+        return details.overview.trim();
+      }
+    } catch {
+      // try next language
+    }
+  }
+
+  return undefined;
 };
 
 export const getTmdbOverride = (endpoint: TmdbEndpoint, cleanTitle: string) => {

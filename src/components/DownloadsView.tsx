@@ -1,18 +1,18 @@
 import { useState, useMemo, useCallback, memo } from "react";
 import {
-  ArrowLeft,
   Search,
   Trash2,
   Play,
-  Inbox,
+  HardDrive,
   RefreshCw,
   X,
   FolderOpen,
   Info,
   Pause,
-  ChevronDown,
-  ChevronRight,
-  Zap,
+  Film,
+  Clapperboard,
+  Download,
+  ArrowUpDown,
 } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { useDownloads } from "../hooks/useDownloads";
@@ -20,18 +20,15 @@ import type { AppProviderValue } from "../hooks/useAppProvider";
 import type { DownloadItem, DownloadStatus } from "../hooks/useDownloads";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
-import {
-  parseSeriesEpisodeInfo,
-  type SeriesEpisode,
-} from "../utils/seriesGroupers";
+import { parseSeriesEpisodeInfo } from "../utils/seriesGroupers";
 
 interface DownloadsViewProps {
   app: AppProviderValue;
 }
 
 export interface GroupedDownloadItem {
-  id: string; // e.g. series-alef-s1 or movie-download-id
-  name: string; // e.g. "Alef - 1. Sezon" or movie name
+  id: string;
+  name: string;
   group: string;
   type: "movie" | "series";
   logo?: string;
@@ -71,133 +68,194 @@ function formatTotalSize(totalMB: number): string {
 }
 
 const groupDownloadsHelper = (rawItems: DownloadItem[]): GroupedDownloadItem[] => {
-    const result: GroupedDownloadItem[] = [];
-    const seriesGroups: Record<string, DownloadItem[]> = {};
+  const result: GroupedDownloadItem[] = [];
+  const seriesGroups: Record<string, DownloadItem[]> = {};
 
-    rawItems.forEach((item) => {
-      if (item.type === "movie") {
-        result.push({
-          id: item.id,
-          name: item.name,
-          group: item.group,
-          type: "movie",
-          logo: item.logo,
-          status: item.status,
-          progress: item.progress,
-          speed: item.speed,
-          timeLeft: item.timeLeft,
-          size: item.size || "0 MB",
-          addedAt: item.addedAt,
-          completedAt: item.completedAt,
-          episodes: [item],
-        });
-      } else {
-        const info = parseSeriesEpisodeInfo(item.name);
-        const key = `series-${info.cleanTitle.toLowerCase()}-s${info.season}`;
-        if (!seriesGroups[key]) {
-          seriesGroups[key] = [];
-        }
-        seriesGroups[key].push(item);
-      }
-    });
-
-    Object.keys(seriesGroups).forEach((key) => {
-      const groupItems = seriesGroups[key];
-      const firstItem = groupItems[0];
-      const info = parseSeriesEpisodeInfo(firstItem.name);
-
-      groupItems.sort((a, b) => {
-        const aEp = parseSeriesEpisodeInfo(a.name).episode;
-        const bEp = parseSeriesEpisodeInfo(b.name).episode;
-        return aEp - bEp;
-      });
-
-      const totalMB = groupItems.reduce(
-        (acc, item) => acc + parseSizeToMB(item.size),
-        0,
-      );
-      const formattedSize = formatTotalSize(totalMB);
-
-      let status: DownloadStatus = "completed";
-      const hasDownloading = groupItems.some((i) => i.status === "downloading");
-      const hasPending = groupItems.some((i) => i.status === "pending");
-      const hasPaused = groupItems.some((i) => i.status === "paused");
-      const hasFailed = groupItems.some((i) => i.status === "failed");
-
-      if (hasDownloading) status = "downloading";
-      else if (hasPending) status = "pending";
-      else if (hasPaused) status = "paused";
-      else if (hasFailed) status = "failed";
-
-      let avgProgress: number;
-      if (hasDownloading) {
-        const downloadingItems = groupItems.filter(
-          (i) => i.status === "downloading",
-        );
-        avgProgress = Math.round(
-          downloadingItems.reduce((acc, i) => acc + i.progress, 0) /
-            downloadingItems.length,
-        );
-      } else if (hasPending) {
-        avgProgress = 0;
-      } else if (hasPaused) {
-        const pausedItems = groupItems.filter((i) => i.status === "paused");
-        avgProgress =
-          pausedItems.length > 0
-            ? Math.round(
-                pausedItems.reduce((acc, i) => acc + i.progress, 0) /
-                  pausedItems.length,
-              )
-            : 0;
-      } else if (hasFailed) {
-        const failedItems = groupItems.filter((i) => i.status === "failed");
-        avgProgress =
-          failedItems.length > 0
-            ? Math.round(
-                failedItems.reduce((acc, i) => acc + i.progress, 0) /
-                  failedItems.length,
-              )
-            : 0;
-      } else {
-        avgProgress = 100;
-      }
-
-      const activeDl = groupItems.find((i) => i.status === "downloading");
-      const speed = activeDl?.speed;
-      const timeLeft = activeDl?.timeLeft;
-
-      const groupName =
-        info.season > 0
-          ? `${info.cleanTitle} - ${info.season}. Sezon`
-          : info.cleanTitle;
-
+  rawItems.forEach((item) => {
+    if (item.type === "movie") {
       result.push({
-        id: key,
-        name: groupName,
-        group: firstItem.group || "Diziler",
-        type: "series",
-        logo: firstItem.logo,
-        status,
-        progress: avgProgress,
-        speed,
-        timeLeft,
-        size: formattedSize,
-        addedAt: Math.min(...groupItems.map((i) => i.addedAt)),
-        completedAt: groupItems.every((i) => i.status === "completed")
-          ? Math.max(...groupItems.map((i) => i.completedAt || i.addedAt))
-          : undefined,
-        episodes: groupItems,
-        seasonNumber: info.season,
-        seriesTitle: info.cleanTitle,
+        id: item.id,
+        name: item.name,
+        group: item.group,
+        type: "movie",
+        logo: item.logo,
+        status: item.status,
+        progress: item.progress,
+        speed: item.speed,
+        timeLeft: item.timeLeft,
+        size: item.size || "0 MB",
+        addedAt: item.addedAt,
+        completedAt: item.completedAt,
+        episodes: [item],
       });
+    } else {
+      const info = parseSeriesEpisodeInfo(item.name);
+      const key = `series-${info.cleanTitle.toLowerCase()}-s${info.season}`;
+      if (!seriesGroups[key]) {
+        seriesGroups[key] = [];
+      }
+      seriesGroups[key].push(item);
+    }
+  });
+
+  Object.keys(seriesGroups).forEach((key) => {
+    const groupItems = seriesGroups[key];
+    const firstItem = groupItems[0];
+    const info = parseSeriesEpisodeInfo(firstItem.name);
+
+    groupItems.sort((a, b) => {
+      const aEp = parseSeriesEpisodeInfo(a.name).episode;
+      const bEp = parseSeriesEpisodeInfo(b.name).episode;
+      return aEp - bEp;
     });
 
-    return result;
-  };
+    const totalMB = groupItems.reduce(
+      (acc, item) => acc + parseSizeToMB(item.size),
+      0,
+    );
+    const formattedSize = formatTotalSize(totalMB);
+
+    let status: DownloadStatus = "completed";
+    const hasDownloading = groupItems.some((i) => i.status === "downloading");
+    const hasPending = groupItems.some((i) => i.status === "pending");
+    const hasPaused = groupItems.some((i) => i.status === "paused");
+    const hasFailed = groupItems.some((i) => i.status === "failed");
+
+    if (hasDownloading) status = "downloading";
+    else if (hasPending) status = "pending";
+    else if (hasPaused) status = "paused";
+    else if (hasFailed) status = "failed";
+
+    let avgProgress: number;
+    if (hasDownloading) {
+      const downloadingItems = groupItems.filter(
+        (i) => i.status === "downloading",
+      );
+      avgProgress = Math.round(
+        downloadingItems.reduce((acc, i) => acc + i.progress, 0) /
+          downloadingItems.length,
+      );
+    } else if (hasPending) {
+      avgProgress = 0;
+    } else if (hasPaused) {
+      const pausedItems = groupItems.filter((i) => i.status === "paused");
+      avgProgress =
+        pausedItems.length > 0
+          ? Math.round(
+              pausedItems.reduce((acc, i) => acc + i.progress, 0) /
+                pausedItems.length,
+            )
+          : 0;
+    } else if (hasFailed) {
+      const failedItems = groupItems.filter((i) => i.status === "failed");
+      avgProgress =
+        failedItems.length > 0
+          ? Math.round(
+              failedItems.reduce((acc, i) => acc + i.progress, 0) /
+                failedItems.length,
+            )
+          : 0;
+    } else {
+      avgProgress = 100;
+    }
+
+    const activeDl = groupItems.find((i) => i.status === "downloading");
+    const speed = activeDl?.speed;
+    const timeLeft = activeDl?.timeLeft;
+
+    const groupName =
+      info.season > 0
+        ? `${info.cleanTitle} - ${info.season}. Sezon`
+        : info.cleanTitle;
+
+    // Prefer any episode that actually has artwork (playlist logos are often empty)
+    const logoFromEpisodes =
+      groupItems.find((i) => i.logo && String(i.logo).trim())?.logo ||
+      firstItem.logo;
+
+    result.push({
+      id: key,
+      name: groupName,
+      group: firstItem.group || "Diziler",
+      type: "series",
+      logo: logoFromEpisodes,
+      status,
+      progress: avgProgress,
+      speed,
+      timeLeft,
+      size: formattedSize,
+      addedAt: Math.min(...groupItems.map((i) => i.addedAt)),
+      completedAt: groupItems.every((i) => i.status === "completed")
+        ? Math.max(...groupItems.map((i) => i.completedAt || i.addedAt))
+        : undefined,
+      episodes: groupItems,
+      seasonNumber: info.season,
+      seriesTitle: info.cleanTitle,
+    });
+  });
+
+  return result;
+};
+
+/** Prefer catalog series artwork when the download entry has no logo. */
+function resolveGroupArtwork(
+  group: GroupedDownloadItem,
+  catalogSeries?: { name: string; logo?: string }[] | null,
+): string | undefined {
+  if (group.logo && String(group.logo).trim()) return group.logo;
+  if (group.type !== "series" || !catalogSeries?.length) return group.logo;
+
+  const titleKey = (
+    group.seriesTitle ||
+    parseSeriesEpisodeInfo(group.name).cleanTitle ||
+    group.name
+  ).toLowerCase();
+
+  const match = catalogSeries.find((s) => {
+    const sTitle = (parseSeriesEpisodeInfo(s.name).cleanTitle || s.name).toLowerCase();
+    return sTitle === titleKey && s.logo && String(s.logo).trim();
+  });
+  return match?.logo || group.logo;
+}
+
+function isActiveStatus(status: DownloadStatus): boolean {
+  return (
+    status === "downloading" ||
+    status === "pending" ||
+    status === "paused" ||
+    status === "failed"
+  );
+}
+
+function statusLabel(status: DownloadStatus, language: string): string | null {
+  if (status === "downloading")
+    return language === "tr" ? "Kaydediliyor" : "Saving";
+  if (status === "pending")
+    return language === "tr" ? "Sırada" : "Queued";
+  if (status === "paused")
+    return language === "tr" ? "Duraklatıldı" : "Paused";
+  if (status === "failed") return language === "tr" ? "Hata" : "Failed";
+  return null;
+}
+
+function statusTone(status: DownloadStatus): string {
+  if (status === "downloading") return "text-emerald-400";
+  if (status === "pending") return "text-white/45";
+  if (status === "paused") return "text-amber-400";
+  if (status === "failed") return "text-red-400";
+  return "text-white/40";
+}
+
+function statusDotClass(status: DownloadStatus): string {
+  if (status === "downloading") return "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]";
+  if (status === "pending") return "bg-white/35";
+  if (status === "paused") return "bg-amber-400";
+  if (status === "failed") return "bg-red-400";
+  return "bg-transparent";
+}
 
 export function DownloadsView({ app }: DownloadsViewProps) {
-  const { language } = useSettings();
-  const { setSelectedGroup } = app.navigation;
+  const { language, t } = useSettings();
 
   const {
     downloads,
@@ -205,22 +263,21 @@ export function DownloadsView({ app }: DownloadsViewProps) {
     retryDownload,
     deleteDownload,
     playDownload,
-    prioritizeDownload,
     pauseAll,
     resumeAll,
   } = useDownloads();
 
-  // Plays a saved download inside the app's own player when a local
-  // app-file:// URL is available, instead of always shelling out to the
-  // OS's default video player.
   const playDownloadInternal = useCallback(
     async (downloadId: string) => {
       const item = downloads.find((d) => d.id === downloadId);
       if (!item) return;
 
       let playUrl = item.playUrl;
-      // Older completed entries sometimes only have filePath — refresh playUrl.
-      if (!playUrl && item.status === "completed" && window.electronAPI?.getSavedMediaInfo) {
+      if (
+        !playUrl &&
+        item.status === "completed" &&
+        window.electronAPI?.getSavedMediaInfo
+      ) {
         try {
           const info = await window.electronAPI.getSavedMediaInfo({
             downloadId: item.id,
@@ -232,7 +289,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
             playUrl = info.playUrl;
           }
         } catch {
-          // fall through to external open
+          // fall through
         }
       }
 
@@ -253,7 +310,6 @@ export function DownloadsView({ app }: DownloadsViewProps) {
         return;
       }
 
-      // Last resort: stream original IPTV URL if local file is missing.
       if (item.streamUrl) {
         app.playback.handlePlayStream({
           id: item.id,
@@ -272,43 +328,29 @@ export function DownloadsView({ app }: DownloadsViewProps) {
   const [categoryFilter, setCategoryFilter] = useState<
     "all" | "active" | "movie" | "series"
   >("all");
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [sortBy, setSortBy] = useState<"recent" | "name" | "size">("recent");
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     group: GroupedDownloadItem;
   } | null>(null);
 
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  };
-
-  // Group downloads function helper
-
-
-  // Size calculations
   const totalSizeMB = useMemo(() => {
     return downloads
       .filter((download) => download.status === "completed")
       .reduce((acc, download) => acc + parseSizeToMB(download.size), 0);
   }, [downloads]);
 
-  const formattedTotalSize = useMemo(() => {
-    return formatTotalSize(totalSizeMB);
-  }, [totalSizeMB]);
+  const formattedTotalSize = useMemo(
+    () => formatTotalSize(totalSizeMB),
+    [totalSizeMB],
+  );
 
-  // Combined group filters
   const filteredDownloads = useMemo(() => {
     const normalizedQuery = query
       .trim()
       .toLocaleLowerCase(language === "tr" ? "tr-TR" : undefined);
 
-    // 1. Filter raw items based on category selection
     const filteredRaw = downloads
       .filter((d) => {
         if (categoryFilter === "active") {
@@ -324,7 +366,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
         if (categoryFilter === "series") {
           return d.type === "series" && d.status === "completed";
         }
-        return true; // all
+        return true;
       })
       .filter((d) => {
         if (!normalizedQuery) return true;
@@ -334,114 +376,118 @@ export function DownloadsView({ app }: DownloadsViewProps) {
         return haystack.includes(normalizedQuery);
       });
 
-    // 2. Perform Series + Season Grouping
     const grouped = groupDownloadsHelper(filteredRaw);
 
-    // 3. Sort grouped items by their latest activity/added timestamp descending
     return grouped.sort((a, b) => {
-      // Active groups go to the top
-      const aActive = a.status === "downloading" || a.status === "pending";
-      const bActive = b.status === "downloading" || b.status === "pending";
+      const aActive = isActiveStatus(a.status);
+      const bActive = isActiveStatus(b.status);
       if (aActive && !bActive) return -1;
       if (!aActive && bActive) return 1;
+
+      if (sortBy === "name") {
+        return a.name.localeCompare(b.name, language === "tr" ? "tr-TR" : undefined);
+      }
+      if (sortBy === "size") {
+        return parseSizeToMB(b.size) - parseSizeToMB(a.size);
+      }
 
       const aTime = a.completedAt || a.addedAt;
       const bTime = b.completedAt || b.addedAt;
       return bTime - aTime;
     });
-  }, [downloads, language, query, categoryFilter]);
+  }, [downloads, language, query, categoryFilter, sortBy]);
 
-  // Group handlers
+  const activeGroups = useMemo(
+    () => filteredDownloads.filter((g) => isActiveStatus(g.status)),
+    [filteredDownloads],
+  );
+
+  const libraryGroups = useMemo(
+    () => filteredDownloads.filter((g) => g.status === "completed"),
+    [filteredDownloads],
+  );
+
+  const activeDownloadCards = useMemo(
+    () => activeGroups.map((group) => ({
+      ...group,
+      logo: resolveGroupArtwork(group, app.catalog.allGroupedSeries),
+    })),
+    [activeGroups, app.catalog.allGroupedSeries],
+  );
+
+  const libraryDownloadCards = useMemo(
+    () => libraryGroups.map((group) => ({
+      ...group,
+      logo: resolveGroupArtwork(group, app.catalog.allGroupedSeries),
+    })),
+    [libraryGroups, app.catalog.allGroupedSeries],
+  );
+
   const handleOpenGroupDetails = (group: GroupedDownloadItem) => {
-    if (group.type === "series" && group.seriesTitle) {
-      const cleanTitle = group.seriesTitle;
-      const match = app.catalog.allGroupedSeries?.find(
-        (s) =>
-          parseSeriesEpisodeInfo(s.name).cleanTitle.toLowerCase() ===
-          cleanTitle.toLowerCase(),
-      );
+    // Series → full SeriesModal (all seasons/episodes from playlist, not only saved)
+    if (group.type === "series") {
+      const cleanTitle =
+        group.seriesTitle ||
+        parseSeriesEpisodeInfo(group.name).cleanTitle ||
+        group.name;
+      const titleKey = cleanTitle.toLowerCase();
+
+      const preferEp =
+        group.episodes.find((ep) => {
+          const p = parseSeriesEpisodeInfo(ep.name);
+          return (
+            group.seasonNumber != null &&
+            group.seasonNumber > 0 &&
+            p.season === group.seasonNumber
+          );
+        }) || group.episodes[0];
+
+      const flatItem = {
+        id: preferEp.id,
+        name: preferEp.name,
+        group: preferEp.group || group.group || "",
+        type: "series" as const,
+        url: preferEp.streamUrl,
+        logo: preferEp.logo || group.logo || "",
+      };
+
+      const match = app.catalog.allGroupedSeries?.find((s) => {
+        const sTitle = parseSeriesEpisodeInfo(s.name).cleanTitle || s.name;
+        return sTitle.toLowerCase() === titleKey;
+      });
+
       if (match) {
-        const clickedEp = group.episodes[0];
-        const flatItem = {
-          id: clickedEp.id,
-          name: clickedEp.name,
-          group: clickedEp.group || "",
-          type: "series" as const,
-          url: clickedEp.streamUrl,
-          logo: clickedEp.logo || "",
-        };
-        app.catalog.handleOpenSeriesModalDirect(match, flatItem);
-      } else {
-        const seasonsMap: Record<number, SeriesEpisode[]> = {};
-        let episodesCount = 0;
-
-        group.episodes.forEach((sib) => {
-          const p = parseSeriesEpisodeInfo(sib.name);
-          if (!seasonsMap[p.season]) {
-            seasonsMap[p.season] = [];
-          }
-          const exists = seasonsMap[p.season].some(
-            (ep) => ep.episodeNumber === p.episode,
-          );
-          if (!exists) {
-            seasonsMap[p.season].push({
-              episodeNumber: p.episode,
-              seasonNumber: p.season,
-              item: {
-                id: sib.id,
-                name: sib.name,
-                group: sib.group || "İndirilenler",
-                type: "series",
-                url: sib.streamUrl,
-                logo: sib.logo || "",
-              },
-            });
-            episodesCount++;
-          }
-        });
-
-        for (const seasonNo in seasonsMap) {
-          seasonsMap[seasonNo].sort(
-            (a, b) => a.episodeNumber - b.episodeNumber,
-          );
-        }
-
-        app.catalog.handleOpenSeriesModalDirect({
-          id: group.id,
-          name: cleanTitle,
-          logo: group.logo || "",
-          group: group.group || "İndirilenler",
-          type: "series",
-          seasons: seasonsMap,
-          episodesCount,
-        });
-      }
-    } else {
-      // Movie: if it has already finished saving, play the local file
-      // directly inside the app instead of opening the online details modal.
-      const primaryEpisode = group.episodes[0];
-      if (group.status === "completed" && primaryEpisode?.playUrl) {
-        playDownloadInternal(primaryEpisode.id);
+        void app.catalog.handleOpenSeriesModalDirect(match, flatItem);
         return;
       }
 
-      const match = app.catalog.items.find(
-        (m) =>
-          m.type === "movie" &&
-          m.name.toLowerCase() === group.name.toLowerCase(),
-      );
-      if (match) {
-        app.catalog.handleOpenDetails(match);
-      } else {
-        app.catalog.handleOpenDetails({
-          id: group.id,
-          name: group.name,
-          group: group.group,
-          type: "movie",
-          url: group.episodes[0].streamUrl,
-          logo: group.logo || "",
-        });
-      }
+      // Rebuild full series from live playlist siblings
+      void app.catalog.handleOpenDetails(flatItem);
+      return;
+    }
+
+    const primaryEpisode = group.episodes[0];
+    if (group.status === "completed" && primaryEpisode?.playUrl) {
+      playDownloadInternal(primaryEpisode.id);
+      return;
+    }
+
+    const match = app.catalog.items.find(
+      (m) =>
+        m.type === "movie" &&
+        m.name.toLowerCase() === group.name.toLowerCase(),
+    );
+    if (match) {
+      void app.catalog.handleOpenDetails(match);
+    } else {
+      void app.catalog.handleOpenDetails({
+        id: group.id,
+        name: group.name,
+        group: group.group,
+        type: "movie",
+        url: group.episodes[0].streamUrl,
+        logo: group.logo || "",
+      });
     }
   };
 
@@ -467,155 +513,288 @@ export function DownloadsView({ app }: DownloadsViewProps) {
     });
   };
 
+  const libraryStats = useMemo(() => {
+    const all = groupDownloadsHelper(downloads);
+    const series = all.filter((g) => g.type === "series").length;
+    const movies = all.filter((g) => g.type === "movie").length;
+    const activeCount = downloads.filter((d) =>
+      isActiveStatus(d.status),
+    ).length;
+    return { series, movies, total: all.length, activeCount };
+  }, [downloads]);
+
+  const hasActiveDownloads = downloads.some(
+    (d) => d.status === "downloading" || d.status === "pending",
+  );
+  const hasPausedOrFailed = downloads.some(
+    (d) => d.status === "paused" || d.status === "failed",
+  );
+
+  const filterPills = useMemo(
+    () =>
+      [
+        {
+          id: "all" as const,
+          label: language === "tr" ? "Tümü" : "All",
+          count: libraryStats.total,
+        },
+        {
+          id: "active" as const,
+          label: language === "tr" ? "Aktif" : "Active",
+          count: libraryStats.activeCount,
+        },
+        {
+          id: "movie" as const,
+          label: language === "tr" ? "Filmler" : "Movies",
+          count: libraryStats.movies,
+        },
+        {
+          id: "series" as const,
+          label: language === "tr" ? "Diziler" : "Series",
+          count: libraryStats.series,
+        },
+      ] as const,
+    [language, libraryStats],
+  );
+
+  const emptyTitle =
+    downloads.length === 0
+      ? t("downloads.empty")
+      : language === "tr"
+        ? "Sonuç bulunamadı"
+        : "No matches";
+
+  const emptyDesc =
+    downloads.length === 0
+      ? t("downloads.emptyDesc")
+      : language === "tr"
+        ? "Farklı bir arama veya filtre dene."
+        : "Try a different search or filter.";
+
+  const activeFilter = filterPills.find((pill) => pill.id === categoryFilter);
+  const completedMovieSizeMB = downloads
+    .filter((download) => download.status === "completed" && download.type === "movie")
+    .reduce((total, download) => total + parseSizeToMB(download.size), 0);
+  const movieStoragePercent = totalSizeMB > 0
+    ? Math.min(100, (completedMovieSizeMB / totalSizeMB) * 100)
+    : 0;
+
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-8 animate-fade-in pb-16 min-h-[calc(100vh-140px)]">
-      {/* Minimal Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-6">
-        <div className="flex items-center gap-4">
-          <button type="button"
-            onClick={() => setSelectedGroup("Ayarlar")}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
-            title="Geri Dön"
-           aria-label="Geri Dön">
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2 select-none">
-              <span>{language === "tr" ? "İndirilenler" : "Downloads"}</span>
-            </h1>
-            <p className="text-[11px] text-neutral-400 mt-1 select-none font-medium">
-              {language === "tr"
-                ? `Çevrimdışı izlenebilir içerikleriniz · ${formattedTotalSize} kullanılan alan`
-                : `Your offline watchable content · ${formattedTotalSize} space used`}
-            </p>
+    <div className="series-catalog-shell grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden animate-fade-in md:grid-cols-[218px_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-3">
+      <aside className="series-catalog-panel series-category-panel flex min-h-0 max-h-[38vh] flex-col overflow-y-auto rounded-2xl border border-white/[0.06] p-3 select-none hide-scrollbar md:max-h-none">
+        <div className="border-b border-white/[0.05] px-1 pb-3">
+          <div className="mb-2 inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white/28">
+            <HardDrive size={11} />
+            {language === "tr" ? "Kütüphane" : "Library"}
           </div>
+          <h1 className="text-[20px] font-bold tracking-[-0.03em] text-white/92">
+            {t("downloads.title")}
+          </h1>
+          <p className="mt-1.5 text-[10.5px] leading-relaxed text-white/32">
+            {language === "tr" ? "Çevrimdışı izleme alanın." : "Your offline viewing library."}
+          </p>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:max-w-[240px]">
-          <Search
-            size={13}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={language === "tr" ? "Ara..." : "Search..."}
-            className="h-8.5 w-full rounded-full border border-white/5 bg-black/15 pl-8.5 pr-8 text-xs font-semibold text-white outline-none transition-all placeholder:text-neutral-600 focus:border-white/12 focus:bg-black/25"
-          />
-          {query && (
-            <button type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors cursor-pointer"
-             aria-label="Close">
-              <X size={13} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Minimal Category Pills & Action */}
-      <div className="flex items-center justify-between select-none">
-        <div className="flex items-center gap-2">
-          {[
-            { id: "all", label: language === "tr" ? "Tümü" : "All" },
-            { id: "active", label: language === "tr" ? "Aktif" : "Active" },
-            { id: "movie", label: language === "tr" ? "Filmler" : "Movies" },
-            { id: "series", label: language === "tr" ? "Diziler" : "Series" },
-          ].map((pill) => {
+        <nav className="mt-3 flex flex-col gap-0.5" aria-label={language === "tr" ? "Kaydedilen filtreleri" : "Saved filters"}>
+          {filterPills.map((pill) => {
             const active = categoryFilter === pill.id;
+            const PillIcon = pill.id === "movie"
+              ? Film
+              : pill.id === "series"
+                ? Clapperboard
+                : pill.id === "active"
+                  ? Download
+                  : HardDrive;
             return (
-              <button type="button"
+              <button
+                type="button"
                 key={pill.id}
-                onClick={() => setCategoryFilter(pill.id as any)}
-                className={`px-3 py-1 text-[10px] font-bold tracking-wide transition-all border rounded-full cursor-pointer ${
+                onClick={() => setCategoryFilter(pill.id)}
+                className={`series-category-item ${active ? "is-active" : ""} flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-[11.5px] font-medium transition-colors focusable-item cursor-pointer ${
                   active
-                    ? "bg-white text-black border-white shadow-sm font-black"
-                    : "bg-white/[0.02] text-neutral-400 border-white/5 hover:text-white hover:bg-white/[0.05]"
+                    ? "border-white/[0.07] text-white"
+                    : "border-transparent text-white/52 hover:bg-white/[0.035] hover:text-white/82"
                 }`}
+                aria-current={active ? "true" : undefined}
               >
-                {pill.label}
+                <PillIcon size={13} className={active ? "text-white/70" : "text-white/28"} />
+                <span className="min-w-0 flex-1 truncate">{pill.label}</span>
+                <span className="min-w-[1.3rem] rounded-md bg-white/[0.05] px-1.5 py-0.5 text-center text-[9px] font-bold tabular-nums text-white/38">
+                  {pill.count}
+                </span>
               </button>
             );
           })}
+        </nav>
+
+        <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/15 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-white/25">
+                {language === "tr" ? "Kullanılan alan" : "Storage used"}
+              </p>
+              <p className="mt-1 text-[16px] font-semibold tracking-tight text-white/82">{formattedTotalSize}</p>
+            </div>
+            <HardDrive size={15} className="text-white/25" />
+          </div>
+          <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+            {totalSizeMB > 0 && (
+              <>
+                <span className="h-full bg-white/75" style={{ width: `${movieStoragePercent}%` }} />
+                <span className="h-full flex-1 bg-white/22" />
+              </>
+            )}
+          </div>
+          <div className="mt-2.5 flex items-center justify-between text-[9.5px] font-medium text-white/32">
+            <span>{libraryStats.movies} {language === "tr" ? "film" : "movies"}</span>
+            <span>{libraryStats.series} {language === "tr" ? "dizi" : "series"}</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {downloads.some(
-            (d) => d.status === "downloading" || d.status === "pending",
-          ) ? (
-            <button type="button"
-              onClick={pauseAll}
-              className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border border-white/5 rounded-full cursor-pointer bg-white/[0.02] hover:bg-amber-500/10 hover:border-amber-500/20 text-neutral-400 hover:text-amber-400"
-             aria-label="Pause">
-              <Pause size={11} />
-              <span>{language === "tr" ? "Tümünü Duraklat" : "Pause All"}</span>
+        <div className="mt-auto space-y-2 pt-4">
+          {hasActiveDownloads ? (
+            <button type="button" onClick={pauseAll} className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.035] text-[10.5px] font-semibold text-white/55 transition-colors hover:bg-white/[0.07] hover:text-white cursor-pointer focusable-item">
+              <Pause size={12} fill="currentColor" />
+              {language === "tr" ? "Tümünü duraklat" : "Pause all"}
             </button>
-          ) : downloads.some(
-              (d) => d.status === "paused" || d.status === "failed",
-            ) ? (
-            <button type="button"
-              onClick={resumeAll}
-              className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border border-white/5 rounded-full cursor-pointer bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/20 text-neutral-400 hover:text-emerald-400"
-             aria-label="Play">
+          ) : hasPausedOrFailed ? (
+            <button type="button" onClick={resumeAll} className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-white text-[10.5px] font-semibold text-black transition-opacity hover:opacity-90 cursor-pointer focusable-item">
               <Play size={11} fill="currentColor" />
-              <span>{language === "tr" ? "Tümünü Başlat" : "Resume All"}</span>
+              {language === "tr" ? "Tümünü başlat" : "Resume all"}
             </button>
           ) : null}
-
-          <button type="button"
-            onClick={() => void window.electronAPI?.openDownloadsFolder?.()}
-            className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide transition-all border rounded-full cursor-pointer bg-white/[0.02] text-neutral-400 border-white/5 hover:text-white hover:bg-white/[0.05]"
-          >
-            <FolderOpen size={11} className="text-neutral-400" />
-            <span>
-              {language === "tr"
-                ? "Dosya Konumunu Aç"
-                : "Open Downloads Location"}
-            </span>
+          <button type="button" onClick={() => void window.electronAPI?.openDownloadsFolder?.()} className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.035] text-[10.5px] font-semibold text-white/48 transition-colors hover:bg-white/[0.07] hover:text-white cursor-pointer focusable-item">
+            <FolderOpen size={13} />
+            {language === "tr" ? "Klasörü aç" : "Open folder"}
           </button>
         </div>
-      </div>
+      </aside>
 
-      {/* Netflix-style Clean List */}
-      {filteredDownloads.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center select-none">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-600">
-            <Inbox size={20} strokeWidth={1.5} />
+      <section className="series-catalog-panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-white/[0.07]">
+        <header className="flex min-h-[76px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-3.5 lg:px-6">
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+              {language === "tr" ? "Kaydedilenler" : "Saved"}
+            </p>
+            <div className="flex items-center gap-2.5">
+              <h2 className="truncate text-[18px] font-bold tracking-[-0.02em] text-white/92 lg:text-[20px]">
+                {activeFilter?.label}
+              </h2>
+              {libraryStats.activeCount > 0 && categoryFilter !== "movie" && categoryFilter !== "series" && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/15 bg-emerald-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-emerald-300/85">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {libraryStats.activeCount} {language === "tr" ? "aktif" : "active"}
+                </span>
+              )}
+            </div>
           </div>
-          <p className="text-xs font-bold text-neutral-500">
-            {downloads.length === 0
-              ? language === "tr"
-                ? "Kütüphaneniz boş. Çevrimdışı izlemek için içerik indirin."
-                : "Your library is empty. Download content to watch offline."
-              : language === "tr"
-                ? "Aramanızla eşleşen öge bulunamadı."
-                : "No matching items found."}
-          </p>
+
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative w-[190px] lg:w-[230px]">
+              <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/28" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={language === "tr" ? "Kaydedilenlerde ara…" : "Search saved…"} className="h-9 w-full rounded-xl border border-white/[0.07] bg-black/15 pl-9 pr-8 text-[11px] font-medium text-white outline-none placeholder:text-white/25 focus:border-white/14 focus:bg-white/[0.035]" />
+              {query && (
+                <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-white/30 hover:bg-white/[0.07] hover:text-white cursor-pointer" aria-label={language === "tr" ? "Aramayı temizle" : "Clear search"}>
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <ArrowUpDown size={12} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as "recent" | "name" | "size")} className="h-9 appearance-none rounded-xl border border-white/[0.07] bg-[#101012] pl-8 pr-7 text-[10.5px] font-semibold text-white/52 outline-none transition-colors hover:bg-white/[0.05] focus:border-white/14 cursor-pointer" aria-label={language === "tr" ? "Sıralama" : "Sort"}>
+                <option value="recent">{language === "tr" ? "Son eklenen" : "Most recent"}</option>
+                <option value="name">{language === "tr" ? "Ada göre" : "Name"}</option>
+                <option value="size">{language === "tr" ? "Boyuta göre" : "Size"}</option>
+              </select>
+            </div>
+            <span className="hidden shrink-0 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[10px] font-semibold tabular-nums text-white/38 sm:inline-flex">
+              {filteredDownloads.length}
+            </span>
+          </div>
+        </header>
+
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5">
+          {filteredDownloads.length === 0 ? (
+            <div className="flex min-h-full flex-col items-center justify-center py-20 text-center select-none">
+              <div className="mb-4 grid h-14 w-14 place-items-center rounded-[20px] border border-white/[0.07] bg-white/[0.035] text-white/30 shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
+                <Download size={24} />
+              </div>
+              <p className="text-sm font-semibold text-white/58">{emptyTitle}</p>
+              <p className="mt-2 max-w-sm text-[11.5px] leading-relaxed text-white/30">{emptyDesc}</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-8">
+          {/* ── Active queue ── */}
+          {activeGroups.length > 0 && (
+            <section className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-[13px] font-bold uppercase tracking-[0.12em] text-white/45">
+                    {language === "tr" ? "Devam eden" : "In progress"}
+                  </h2>
+                  <span className="h-px w-10 bg-gradient-to-r from-white/20 to-transparent" />
+                </div>
+                <span className="text-[11px] font-semibold tabular-nums text-white/30">
+                  {activeGroups.length}
+                </span>
+              </div>
+
+              <div className="grid gap-3 2xl:grid-cols-2">
+                {activeDownloadCards.map((group) => (
+                  <ActiveDownloadPanel
+                    key={group.id}
+                    download={group}
+                    language={language}
+                    onPlay={handleOpenGroupDetails}
+                    onCancel={handlePauseGroup}
+                    onRetry={handleResumeGroup}
+                    onDelete={handleDeleteGroup}
+                    onContextMenu={(x, y, g) =>
+                      setContextMenu({ x, y, group: g })
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── Library grid ── */}
+          {libraryGroups.length > 0 && (
+            <section className="flex flex-col gap-4">
+              {activeGroups.length > 0 && (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-[13px] font-bold uppercase tracking-[0.12em] text-white/45">
+                      {language === "tr" ? "Hazır" : "Ready"}
+                    </h2>
+                    <span className="h-px w-10 bg-gradient-to-r from-white/20 to-transparent" />
+                  </div>
+                  <span className="text-[11px] font-semibold tabular-nums text-white/30">
+                    {libraryGroups.length}
+                  </span>
+                </div>
+              )}
+
+              <div className="grid justify-start gap-x-4 gap-y-7 [grid-template-columns:repeat(auto-fill,minmax(148px,178px))]">
+                {libraryDownloadCards.map((group) => (
+                  <LibraryPosterCard
+                    key={group.id}
+                    download={group}
+                    language={language}
+                    onActivate={() => handleOpenGroupDetails(group)}
+                    onDelete={() => handleDeleteGroup(group)}
+                    onContextMenu={(x, y) =>
+                      setContextMenu({ x, y, group })
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="divide-y divide-white/5 border-b border-white/5">
-          {filteredDownloads.map((group) => (
-            <DownloadItemRow
-              key={group.id}
-              download={group}
-              language={language}
-              isExpanded={!!expandedGroups[group.id]}
-              onToggle={() => toggleGroup(group.id)}
-              onPlay={handleOpenGroupDetails}
-              onCancel={handlePauseGroup}
-              onRetry={handleResumeGroup}
-              onDelete={handleDeleteGroup}
-              onContextMenu={(x, y, g) => setContextMenu({ x, y, group: g })}
-              onPlayEpisode={playDownloadInternal}
-              onCancelEpisode={cancelDownload}
-              onRetryEpisode={retryDownload}
-              onDeleteEpisode={deleteDownload}
-              onPrioritizeEpisode={prioritizeDownload}
-            />
-          ))}
-        </div>
-      )}
+      </section>
 
       {contextMenu && (
         <DownloadsContextMenu
@@ -634,561 +813,399 @@ export function DownloadsView({ app }: DownloadsViewProps) {
   );
 }
 
-// 1. Netflix-style Horizontal Row for Grouped Items
-interface DownloadItemRowProps {
+/* ═══════════════════════════════════════════════════════════════
+   Active download panel — compact dock (macOS / Apple TV style)
+   Contained width, poster + stacked meta + progress, no empty ocean
+   ═══════════════════════════════════════════════════════════════ */
+
+interface ActiveDownloadPanelProps {
   download: GroupedDownloadItem;
   language: string;
-  isExpanded: boolean;
-  onToggle: () => void;
   onPlay: (group: GroupedDownloadItem) => void;
   onCancel: (group: GroupedDownloadItem) => void;
   onRetry: (group: GroupedDownloadItem) => void;
   onDelete: (group: GroupedDownloadItem) => void;
   onContextMenu: (x: number, y: number, group: GroupedDownloadItem) => void;
-  onPlayEpisode: (id: string) => void;
-  onCancelEpisode: (id: string) => void;
-  onRetryEpisode: (id: string) => void;
-  onDeleteEpisode: (id: string) => void;
-  onPrioritizeEpisode: (id: string) => void;
 }
 
-const DownloadItemRow = memo(function DownloadItemRow({
+const ActiveDownloadPanel = memo(function ActiveDownloadPanel({
   download,
   language,
-  isExpanded,
-  onToggle,
   onPlay,
   onCancel,
   onRetry,
   onDelete,
   onContextMenu,
-  onPlayEpisode,
-  onCancelEpisode,
-  onRetryEpisode,
-  onDeleteEpisode,
-  onPrioritizeEpisode,
-}: DownloadItemRowProps) {
+}: ActiveDownloadPanelProps) {
   const isDownloading = download.status === "downloading";
   const isPending = download.status === "pending";
   const isFailed = download.status === "failed";
   const isPaused = download.status === "paused";
+  const statusText = statusLabel(download.status, language);
+  const progress = Math.min(100, Math.max(0, download.progress || 0));
 
-  // Parse active and pending episode numbers for detailed stats rendering
-  const activeEpisodes = useMemo(() => {
-    return download.episodes
-      .filter((e) => e.status === "downloading")
-      .map((e) => parseSeriesEpisodeInfo(e.name).episode)
-      .sort((a, b) => a - b);
-  }, [download.episodes]);
-
-  const pendingEpisodes = useMemo(() => {
-    return download.episodes
-      .filter((e) => e.status === "pending")
-      .map((e) => parseSeriesEpisodeInfo(e.name).episode)
-      .sort((a, b) => a - b);
-  }, [download.episodes]);
+  const railClass = isFailed
+    ? "bg-red-400"
+    : isPaused
+      ? "bg-amber-400"
+      : "bg-white";
 
   return (
-    <div className="flex flex-col border-b border-white/5 py-4">
-      {/* Main Row Block */}
-      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
-          if (download.type === "series") {
-            onToggle();
-          } else {
-            onPlay(download);
+    <div
+      className="group/active overflow-hidden rounded-[20px] border border-white/[0.09] bg-[#0e0e10]/90 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu(e.clientX, e.clientY, download);
+      }}
+    >
+      <div className="flex">
+        {/* Poster column */}
+        <button
+          type="button"
+          onClick={() => onPlay(download)}
+          className="relative w-[88px] shrink-0 self-stretch overflow-hidden bg-neutral-950 cursor-pointer sm:w-[100px]"
+          aria-label={
+            language === "tr"
+              ? `${download.name} detay`
+              : `${download.name} details`
           }
-        })(); } }} tabIndex={0} role="button"
-        className="group flex flex-row items-center gap-4 transition-all duration-300 cursor-pointer"
-        onClick={() => {
-          if (download.type === "series") {
-            onToggle();
-          } else {
-            onPlay(download);
-          }
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          onContextMenu(e.clientX, e.clientY, download);
-        }}
-      >
-        {/* Thumbnail area */}
-        <div className="relative w-24 md:w-32 aspect-video overflow-hidden rounded-md border border-white/5 bg-white/[0.01] shrink-0 shadow-inner">
+        >
           <ImageWithFallback
             src={download.logo}
-            name={download.name}
+            name={
+              download.type === "series"
+                ? download.seriesTitle ||
+                  parseSeriesEpisodeInfo(download.name).cleanTitle ||
+                  download.name
+                : download.name
+            }
             group={download.group || "MOVIE"}
             itemType={download.type}
-            aspect="landscape"
-            size="md"
+            aspect="portrait"
+            size="sm"
           />
-        </div>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/40" />
+        </button>
 
-        {/* Media info */}
-        <div className="flex-1 min-w-0 pr-2">
-          <h4
-            className="truncate text-xs md:text-sm font-extrabold text-white tracking-wide leading-tight group-hover:text-[var(--accent-color)] transition-colors select-none flex items-center gap-2"
-            title={download.name}
-          >
-            <span>{download.name}</span>
-            {download.type === "series" && (
-              <span className="text-neutral-500 group-hover:text-white transition-colors">
-                {isExpanded ? (
-                  <ChevronDown size={14} />
-                ) : (
-                  <ChevronRight size={14} />
+        {/* Content */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3 p-3.5 sm:p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3
+                className="truncate text-[15px] font-semibold tracking-tight text-white"
+                title={download.name}
+              >
+                {download.name}
+              </h3>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+                {statusText && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 font-semibold ${statusTone(download.status)}`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${statusDotClass(download.status)} ${
+                        isDownloading ? "animate-pulse" : ""
+                      }`}
+                    />
+                    {statusText}
+                  </span>
                 )}
-              </span>
-            )}
-          </h4>
+                {download.type === "series" && (
+                  <span className="font-medium text-white/35">
+                    · {download.episodes.length}{" "}
+                    {language === "tr" ? "bölüm" : "eps"}
+                  </span>
+                )}
+              </div>
+            </div>
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[10px] font-semibold text-neutral-500 select-none">
-            <span className="capitalize">
-              {download.type === "movie"
-                ? language === "tr"
-                  ? "Sinema"
-                  : "Movie"
-                : language === "tr"
-                  ? "Dizi"
-                  : "Series"}
-            </span>
-            {download.group && (
-              <>
-                <span className="text-white/10 select-none">•</span>
-                <span className="truncate max-w-[150px]" title={download.group}>
-                  {download.group}
-                </span>
-              </>
-            )}
-
-            {/* Clean metadata details for completed */}
-            {download.status === "completed" && (
-              <>
-                <span className="text-white/10 select-none">•</span>
-                <span className="text-neutral-400 font-bold">
-                  {download.type === "series"
-                    ? `${download.episodes.length} ${language === "tr" ? "Bölüm" : "Episodes"}`
+            <div
+              className="flex shrink-0 items-center gap-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isDownloading && (
+                <button
+                  type="button"
+                  onClick={() => onCancel(download)}
+                  className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-white/80 transition-colors hover:bg-white hover:text-black cursor-pointer"
+                  title={language === "tr" ? "Duraklat" : "Pause"}
+                  aria-label={language === "tr" ? "Duraklat" : "Pause"}
+                >
+                  <Pause size={14} fill="currentColor" />
+                </button>
+              )}
+              {(isPaused || isFailed) && (
+                <button
+                  type="button"
+                  onClick={() => onRetry(download)}
+                  className="grid h-9 w-9 place-items-center rounded-full bg-white text-black transition-opacity hover:opacity-90 cursor-pointer"
+                  title={
+                    language === "tr"
+                      ? isPaused
+                        ? "Devam et"
+                        : "Yeniden dene"
+                      : isPaused
+                        ? "Resume"
+                        : "Retry"
+                  }
+                  aria-label={
+                    language === "tr"
+                      ? isPaused
+                        ? "Devam et"
+                        : "Yeniden dene"
+                      : isPaused
+                        ? "Resume"
+                        : "Retry"
+                  }
+                >
+                  {isPaused ? (
+                    <Play size={13} fill="currentColor" className="ml-0.5" />
+                  ) : (
+                    <RefreshCw size={14} />
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onDelete(download)}
+                className="grid h-9 w-9 place-items-center rounded-full border border-white/[0.08] text-white/40 transition-colors hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
+                title={
+                  isDownloading || isPending
+                    ? language === "tr"
+                      ? "İptal"
+                      : "Cancel"
                     : language === "tr"
-                      ? "Tamamlandı"
-                      : "Completed"}
-                </span>
-                <span className="text-white/10 select-none">•</span>
-                <span>{download.size}</span>
-              </>
-            )}
+                      ? "Sil"
+                      : "Delete"
+                }
+                aria-label={
+                  isDownloading || isPending
+                    ? language === "tr"
+                      ? "İptal"
+                      : "Cancel"
+                    : language === "tr"
+                      ? "Sil"
+                      : "Delete"
+                }
+              >
+                {isDownloading || isPending ? (
+                  <X size={15} />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* High-contrast and spaced layout for active/paused downloads */}
-          {isDownloading && (
-            <div className="flex flex-wrap items-center gap-2 mt-2 select-none">
-              <span className="px-2 py-0.5 rounded bg-[var(--accent-color)]/10 text-[var(--accent-color)] text-[9px] font-extrabold uppercase tracking-wider border border-[var(--accent-color)]/20 shadow-sm">
-                {language === "tr" ? "İndiriliyor" : "Downloading"}
-              </span>
-              <span className="text-[10px] font-black text-neutral-300">
-                {language === "tr" ? "Bölüm" : "Ep."}{" "}
-                {activeEpisodes.join(", ")}
-              </span>
-              <span className="text-[10px] font-bold text-neutral-400">
-                • {download.progress}%
-              </span>
-              {(download.speed || download.timeLeft) && (
-                <span className="text-[10px] font-semibold text-neutral-500">
-                  • {download.speed}{" "}
-                  {download.timeLeft ? `(${download.timeLeft})` : ""}
-                </span>
-              )}
-            </div>
-          )}
-
-          {isPending && (
-            <div className="flex flex-wrap items-center gap-2 mt-2 select-none">
-              <span className="px-2 py-0.5 rounded bg-white/5 text-neutral-400 text-[9px] font-extrabold uppercase tracking-wider border border-white/5">
-                {language === "tr" ? "Sırada" : "Queued"}
-              </span>
-              <span className="text-[10px] font-black text-neutral-300">
-                {language === "tr" ? "Bölüm" : "Ep."}{" "}
-                {pendingEpisodes.join(", ")}
-              </span>
-            </div>
-          )}
-
-          {isPaused && (
-            <div className="flex flex-wrap items-center gap-2 mt-2 select-none">
-              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[9px] font-extrabold uppercase tracking-wider border border-amber-500/20 shadow-sm">
-                {language === "tr" ? "Duraklatıldı" : "Paused"}
-              </span>
-              {download.type === "series" && (
-                <span className="text-[10px] font-bold text-neutral-400">
-                  • {download.episodes.length}{" "}
-                  {language === "tr" ? "Bölüm" : "Episodes"}
-                </span>
-              )}
-            </div>
-          )}
-
-          {isFailed && (
-            <div className="flex flex-wrap items-center gap-2 mt-2 select-none">
-              <span className="px-2 py-0.5 rounded bg-red-500/10 text-red-400 text-[9px] font-extrabold uppercase tracking-wider border border-red-500/20 shadow-sm">
-                {language === "tr" ? "Hata" : "Failed"}
-              </span>
-              {download.type === "series" && (
-                <span className="text-[10px] font-bold text-neutral-400">
-                  • {download.episodes.length}{" "}
-                  {language === "tr" ? "Bölüm" : "Episodes"}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Thin progress bar under title for active download */}
-          {isDownloading && (
-            <div className="mt-2.5 max-w-xs h-0.5 rounded-full bg-white/5 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-[var(--accent-color)] transition-all duration-300"
-                style={{ width: `${download.progress}%` }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Action buttons (Netflix-style simple actions) */}
-        <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
-          className="flex items-center gap-2 shrink-0"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Active download circle, pause and cancel */}
-          {isDownloading && (
-            <>
-              <div className="relative flex items-center justify-center h-8 w-8 shrink-0">
-                <svg
-                  className="h-full w-full transform -rotate-90"
-                  viewBox="0 0 36 36"
-                >
-                  <circle
-                    className="text-white/10"
-                    strokeWidth="3"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r="13"
-                    cx="18"
-                    cy="18"
-                  />
-                  <circle
-                    className="text-[var(--accent-color)] transition-all duration-300"
-                    strokeWidth="3"
-                    strokeDasharray={`${2 * Math.PI * 13} ${2 * Math.PI * 13}`}
-                    style={{
-                      strokeDashoffset:
-                        2 * Math.PI * 13 -
-                        (download.progress / 100) * 2 * Math.PI * 13,
-                    }}
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r="13"
-                    cx="18"
-                    cy="18"
-                  />
-                </svg>
-                <span className="absolute text-[8px] font-black font-mono text-white/90">
-                  {download.progress}
-                </span>
-              </div>
-
-              {/* Pause button */}
-              <button type="button"
-                onClick={() => onCancel(download)}
-                title={language === "tr" ? "Duraklat" : "Pause"}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all active:scale-95"
-               aria-label={language === "tr" ? "Duraklat" : "Pause"}>
-                <Pause size={10} fill="currentColor" />
-              </button>
-
-              {/* Cancel (Delete) button */}
-              <button type="button"
-                onClick={() => onDelete(download)}
-                title={language === "tr" ? "İptal Et" : "Cancel"}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-               aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
-                <X size={12} />
-              </button>
-            </>
-          )}
-
-          {/* Queued / Pending cancel */}
-          {isPending && (
-            <>
-              <button type="button"
-                onClick={() => onDelete(download)}
-                title={language === "tr" ? "İptal Et" : "Cancel"}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-               aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
-                <X size={12} />
-              </button>
-            </>
-          )}
-
-          {/* Retry on fail / resume on paused */}
-          {(isFailed || isPaused) && (
-            <>
-              <button type="button"
-                onClick={() => onRetry(download)}
-                title={
-                  language === "tr"
-                    ? isPaused
-                      ? "Devam Et"
-                      : "Yeniden Dene"
-                    : isPaused
-                      ? "Resume"
-                      : "Retry"
-                }
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-500/10 bg-blue-500/5 text-blue-400 hover:bg-blue-500/15 cursor-pointer transition-all active:scale-95"
-               aria-label={
-                  language === "tr"
-                    ? isPaused
-                      ? "Devam Et"
-                      : "Yeniden Dene"
-                    : isPaused
-                      ? "Resume"
-                      : "Retry"
-                }>
-                {isPaused ? (
-                  <Play size={10} fill="currentColor" className="ml-0.5" />
-                ) : (
-                  <RefreshCw size={11} />
+          {/* Progress + stats block */}
+          <div className="space-y-2">
+            <div className="flex items-end justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium tabular-nums text-white/40">
+                {download.size && download.size !== "0 MB" && (
+                  <span>{download.size}</span>
                 )}
-              </button>
-              <button type="button"
-                onClick={() => onDelete(download)}
-                title={language === "tr" ? "Sil" : "Delete"}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-               aria-label={language === "tr" ? "Sil" : "Delete"}>
-                <Trash2 size={12} />
-              </button>
-            </>
-          )}
-
-          {/* Play (Completed) / See Episodes */}
-          {download.status === "completed" && (
-            <>
-              <button type="button"
-                onClick={() => onPlay(download)}
-                title={
-                  download.type === "series"
-                    ? language === "tr"
-                      ? "Bölümleri Gör"
-                      : "See Episodes"
-                    : language === "tr"
-                      ? "Oynat"
-                      : "Play"
-                }
-                className="flex h-8.5 px-3 items-center justify-center rounded-full bg-white text-black hover:bg-neutral-200 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-md text-[10px] font-bold gap-1"
-               aria-label={
-                  download.type === "series"
-                    ? language === "tr"
-                      ? "Bölümleri Gör"
-                      : "See Episodes"
-                    : language === "tr"
-                      ? "Oynat"
-                      : "Play"
-                }>
-                {download.type === "series" ? (
+                {(isDownloading || isPaused) && download.speed && (
                   <>
-                    <Info size={11} />
+                    <span className="text-white/15">·</span>
+                    <span>{download.speed}</span>
+                  </>
+                )}
+                {(isDownloading || isPaused) && download.timeLeft && (
+                  <>
+                    <span className="text-white/15">·</span>
                     <span>
-                      {language === "tr" ? "Bölümleri Gör" : "See Episodes"}
+                      {language === "tr"
+                        ? `${download.timeLeft} kaldı`
+                        : `${download.timeLeft} left`}
                     </span>
                   </>
-                ) : (
-                  <>
-                    <Play size={11} fill="currentColor" className="ml-0.5" />
-                    <span>{language === "tr" ? "Oynat" : "Play"}</span>
-                  </>
                 )}
-              </button>
-              <button type="button"
-                onClick={() => onDelete(download)}
-                title={language === "tr" ? "Sil" : "Delete"}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:border-red-500/15 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-               aria-label={language === "tr" ? "Sil" : "Delete"}>
-                <Trash2 size={12} />
-              </button>
-            </>
-          )}
+                {isPending && (
+                  <span>
+                    {language === "tr" ? "Sırada bekliyor" : "Waiting in queue"}
+                  </span>
+                )}
+              </div>
+              {!isPending && (
+                <span
+                  className={`shrink-0 text-[18px] font-semibold leading-none tabular-nums tracking-tight ${
+                    isFailed
+                      ? "text-red-400"
+                      : isPaused
+                        ? "text-amber-400"
+                        : "text-white"
+                  }`}
+                >
+                  {Math.round(progress)}
+                  <span className="ml-0.5 text-[11px] font-medium text-white/35">
+                    %
+                  </span>
+                </span>
+              )}
+            </div>
+
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+              {isPending ? (
+                <div className="h-full w-1/4 animate-pulse rounded-full bg-white/20" />
+              ) : (
+                <div
+                  className={`h-full rounded-full transition-[width] duration-300 ease-out ${railClass} ${
+                    isDownloading
+                      ? "shadow-[0_0_12px_rgba(255,255,255,0.22)]"
+                      : ""
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+              )}
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* Collapsible Episodes List (Indented) */}
-      {download.type === "series" && isExpanded && (
-        <div className="mt-4 ml-8 pl-4 border-l-2 border-white/5 flex flex-col gap-3.5 animate-slide-down">
-          {download.episodes.map((ep) => {
-            const epInfo = parseSeriesEpisodeInfo(ep.name);
-            return (
-              <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
-                key={ep.id}
-                className="flex items-center justify-between py-1 group/ep"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Left: Episode Details */}
-                <div className="flex items-center gap-3 min-w-0 flex-1 select-none">
-                  <span className="text-[10px] font-black text-neutral-500 w-16 uppercase tracking-wider shrink-0">
-                    {language === "tr"
-                      ? `${epInfo.episode}. Bölüm`
-                      : `Ep. ${epInfo.episode}`}
-                  </span>
-                  <span className="text-xs font-bold text-neutral-300 group-hover/ep:text-white transition-colors truncate">
-                    {ep.name}
-                  </span>
-                </div>
-
-                {/* Right: Status labels and specific actions */}
-                <div className="flex items-center gap-4 shrink-0 ml-4">
-                  {/* Status labels */}
-                  {ep.status === "completed" ? (
-                    <span className="text-[10px] font-bold text-neutral-500 select-none">
-                      {ep.size}
-                    </span>
-                  ) : ep.status === "downloading" ? (
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-[var(--accent-color)] bg-[var(--accent-color)]/10 px-1.5 py-0.5 rounded border border-[var(--accent-color)]/20 animate-pulse select-none">
-                      {ep.progress}%{" "}
-                      {language === "tr" ? "İndiriliyor" : "Downloading"}
-                    </span>
-                  ) : ep.status === "pending" ? (
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-neutral-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 select-none">
-                      {language === "tr" ? "Sırada" : "Queued"}
-                    </span>
-                  ) : ep.status === "paused" ? (
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 select-none">
-                      {language === "tr" ? "Duraklatıldı" : "Paused"}
-                    </span>
-                  ) : (
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20 select-none">
-                      {language === "tr" ? "Hata" : "Failed"}
-                    </span>
-                  )}
-
-                  {/* Actions for single episode */}
-                  <div className="flex items-center gap-1.5">
-                    {ep.status === "completed" && (
-                      <>
-                        <button type="button"
-                          onClick={() => void onPlayEpisode(ep.id)}
-                          title={language === "tr" ? "Oynat" : "Play"}
-                          className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-black hover:bg-neutral-200 cursor-pointer transition-all active:scale-95 shadow-sm"
-                         aria-label={language === "tr" ? "Oynat" : "Play"}>
-                          <Play
-                            size={10}
-                            fill="currentColor"
-                            className="ml-0.5"
-                          />
-                        </button>
-                        <button type="button"
-                          onClick={() => onDeleteEpisode(ep.id)}
-                          title={language === "tr" ? "Sil" : "Delete"}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                         aria-label={language === "tr" ? "Sil" : "Delete"}>
-                          <Trash2 size={11} />
-                        </button>
-                      </>
-                    )}
-
-                    {ep.status === "pending" && (
-                      <>
-                        <button type="button"
-                          onClick={() => onPrioritizeEpisode(ep.id)}
-                          title={
-                            language === "tr"
-                              ? "Şimdi İndir (Öncelik Ver)"
-                              : "Download Now (Prioritize)"
-                          }
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--accent-color)]/20 bg-[var(--accent-color)]/5 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/15 cursor-pointer transition-all active:scale-95 shadow-sm"
-                         aria-label={
-                            language === "tr"
-                              ? "Şimdi İndir (Öncelik Ver)"
-                              : "Download Now (Prioritize)"
-                          }>
-                          <Zap size={10} fill="currentColor" />
-                        </button>
-                        <button type="button"
-                          onClick={() => onCancelEpisode(ep.id)}
-                          title={language === "tr" ? "İptal Et" : "Cancel"}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                         aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
-                          <X size={11} />
-                        </button>
-                      </>
-                    )}
-
-                    {ep.status === "downloading" && (
-                      <>
-                        <button type="button"
-                          onClick={() => onCancelEpisode(ep.id)}
-                          title={language === "tr" ? "Duraklat" : "Pause"}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all active:scale-95"
-                         aria-label={language === "tr" ? "Duraklat" : "Pause"}>
-                          <Pause size={10} fill="currentColor" />
-                        </button>
-                        <button type="button"
-                          onClick={() => onDeleteEpisode(ep.id)}
-                          title={language === "tr" ? "İptal Et" : "Cancel"}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                         aria-label={language === "tr" ? "İptal Et" : "Cancel"}>
-                          <X size={11} />
-                        </button>
-                      </>
-                    )}
-
-                    {(ep.status === "paused" || ep.status === "failed") && (
-                      <>
-                        <button type="button"
-                          onClick={() => onRetryEpisode(ep.id)}
-                          title={
-                            language === "tr"
-                              ? ep.status === "paused"
-                                ? "Devam Et"
-                                : "Yeniden Dene"
-                              : ep.status === "paused"
-                                ? "Resume"
-                                : "Retry"
-                          }
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-blue-500/10 bg-blue-500/5 text-blue-400 hover:bg-blue-500/15 cursor-pointer transition-all active:scale-95"
-                         aria-label={
-                            language === "tr"
-                              ? ep.status === "paused"
-                                ? "Devam Et"
-                                : "Yeniden Dene"
-                              : ep.status === "paused"
-                                ? "Resume"
-                                : "Retry"
-                          }>
-                          {ep.status === "paused" ? (
-                            <Play
-                              size={9}
-                              fill="currentColor"
-                              className="ml-0.5"
-                            />
-                          ) : (
-                            <RefreshCw size={10} />
-                          )}
-                        </button>
-                        <button type="button"
-                          onClick={() => onDeleteEpisode(ep.id)}
-                          title={language === "tr" ? "Sil" : "Delete"}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/5 bg-white/[0.01] text-neutral-500 hover:text-red-400 hover:bg-red-500/5 cursor-pointer transition-all active:scale-95"
-                         aria-label={language === "tr" ? "Sil" : "Delete"}>
-                          <Trash2 size={11} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 });
+
+/* ═══════════════════════════════════════════════════════════════
+   Library poster card — Apple TV / Netflix shelf tile
+   ═══════════════════════════════════════════════════════════════ */
+
+interface LibraryPosterCardProps {
+  download: GroupedDownloadItem;
+  language: string;
+  onActivate: () => void;
+  onDelete: () => void;
+  onContextMenu: (x: number, y: number) => void;
+}
+
+const LibraryPosterCard = memo(function LibraryPosterCard({
+  download,
+  language,
+  onActivate,
+  onDelete,
+  onContextMenu,
+}: LibraryPosterCardProps) {
+  const isSeries = download.type === "series";
+  const epCount = download.episodes.length;
+
+  const subtitle = useMemo(() => {
+    const parts: string[] = [];
+    if (isSeries) {
+      parts.push(
+        language === "tr"
+          ? `${epCount} bölüm`
+          : `${epCount} ep${epCount === 1 ? "" : "s"}`,
+      );
+      if (download.seasonNumber && download.seasonNumber > 0) {
+        parts.unshift(`S${download.seasonNumber}`);
+      }
+    } else {
+      parts.push(language === "tr" ? "Film" : "Movie");
+    }
+    if (download.size) parts.push(download.size);
+    return parts.join(" · ");
+  }, [isSeries, epCount, download.seasonNumber, download.size, language]);
+
+  const displayTitle =
+    isSeries && download.seriesTitle ? download.seriesTitle : download.name;
+
+  return (
+    <div
+      className="group/card flex flex-col gap-2.5"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu(e.clientX, e.clientY);
+      }}
+    >
+      <button
+        type="button"
+        onClick={onActivate}
+        className="relative aspect-[2/3] w-full overflow-hidden rounded-[18px] bg-neutral-900 text-left cursor-pointer outline-none transition-all duration-300 focus-visible:ring-2 focus-visible:ring-white/30 ring-1 ring-white/[0.07] shadow-[0_12px_32px_rgba(0,0,0,0.32)] hover:ring-white/20 hover:scale-[1.03] hover:shadow-[0_18px_44px_rgba(0,0,0,0.45)]"
+        aria-label={
+          isSeries
+            ? language === "tr"
+              ? `${displayTitle} detay`
+              : `${displayTitle} details`
+            : language === "tr"
+              ? `${displayTitle} oynat`
+              : `Play ${displayTitle}`
+        }
+        aria-haspopup={isSeries ? "dialog" : undefined}
+      >
+        <ImageWithFallback
+          src={download.logo}
+          name={
+            isSeries
+              ? download.seriesTitle ||
+                parseSeriesEpisodeInfo(download.name).cleanTitle ||
+                download.name
+              : download.name
+          }
+          group={download.group || "MOVIE"}
+          itemType={download.type}
+          aspect="portrait"
+          size="md"
+        />
+
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80" />
+
+        <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100">
+          <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-black shadow-[0_8px_28px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover/card:scale-105">
+            <Play size={18} fill="currentColor" className="ml-0.5" />
+          </div>
+        </div>
+
+        <div className="absolute left-2.5 top-2.5 flex items-center gap-1">
+          <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/85 backdrop-blur-md border border-white/10">
+            {isSeries
+              ? language === "tr"
+                ? "Dizi"
+                : "Series"
+              : language === "tr"
+                ? "Film"
+                : "Movie"}
+          </span>
+        </div>
+
+        <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-end justify-between gap-2 pointer-events-none">
+          <span className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[9px] font-semibold text-white/75 backdrop-blur-md border border-white/10">
+            <span className="h-1 w-1 rounded-full bg-emerald-400" />
+            {language === "tr" ? "Hazır" : "Ready"}
+          </span>
+        </div>
+      </button>
+
+      <div className="px-0.5 space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <h3
+            className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-white/92 leading-snug"
+            title={displayTitle}
+          >
+            {displayTitle}
+          </h3>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-white/0 opacity-0 transition-all group-hover/card:text-white/35 group-hover/card:opacity-100 hover:!text-red-400 hover:bg-red-500/10 cursor-pointer"
+            title={language === "tr" ? "Sil" : "Delete"}
+            aria-label={language === "tr" ? "Sil" : "Delete"}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+        <p className="truncate text-[11px] font-medium text-white/35">
+          {subtitle}
+        </p>
+      </div>
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Context menu
+   ═══════════════════════════════════════════════════════════════ */
 
 interface DownloadsContextMenuProps {
   x: number;
@@ -1216,7 +1233,6 @@ function DownloadsContextMenu({
   const isSeries = group.type === "series";
   const menuItems: ContextMenuItem[] = [];
 
-  // Play/Details
   menuItems.push({
     id: "details",
     label: isSeries
@@ -1230,7 +1246,6 @@ function DownloadsContextMenu({
     onSelect: () => onPlay(group),
   });
 
-  // Sezonu Sil (series only)
   if (isSeries && group.seasonNumber !== undefined) {
     menuItems.push({
       id: "delete-season",
@@ -1246,7 +1261,6 @@ function DownloadsContextMenu({
       },
     });
 
-    // Diziyi tamamen kaldır
     menuItems.push({
       id: "delete-series",
       label:
@@ -1268,7 +1282,6 @@ function DownloadsContextMenu({
       },
     });
   } else {
-    // Movie delete
     menuItems.push({
       id: "delete-movie",
       label: language === "tr" ? "Filmi sil" : "Delete movie",
@@ -1281,7 +1294,6 @@ function DownloadsContextMenu({
     });
   }
 
-  // Resume on paused / retry on fail
   const hasIncomplete = group.episodes.some(
     (ep) => ep.status === "paused" || ep.status === "failed",
   );

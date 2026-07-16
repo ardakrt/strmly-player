@@ -15,6 +15,7 @@ const fs = require("fs");
 const os = require("os");
 const http = require("http");
 const { randomUUID } = require("crypto");
+const { spawnDetached } = require("./process-launcher");
 const { migrateProfileData } = require("./migration");
 const {
   isSafeConfiguredDownloadFolder,
@@ -35,15 +36,21 @@ const {
 
 if (process.env.STRMLY_PERF_BENCH === "1") {
   app.setPath("userData", path.join(os.tmpdir(), "strmly-performance-benchmark"));
+  // Keep Chromium's paint/timer cadence stable for the explicit benchmark.
+  // Windows may otherwise classify an inactive test window as occluded and
+  // throttle requestAnimationFrame to roughly one frame every two seconds.
+  app.commandLine.appendSwitch("disable-background-timer-throttling");
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
+  app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 }
 
 // Check config for hardware acceleration setting
 let disableHW = process.env.STRMLY_DISABLE_HW_ACCELERATION === "1";
 try {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
-  const profilesDir = isDev
-    ? path.join(app.getAppPath(), "profiles")
-    : path.join(app.getPath("userData"), "profiles");
+  const profilesDir = process.env.STRMLY_PERF_BENCH === "1" || !isDev
+    ? path.join(app.getPath("userData"), "profiles")
+    : path.join(app.getAppPath(), "profiles");
   const configPath = path.join(profilesDir, "iptv-player-config.json");
   if (fs.existsSync(configPath)) {
     const raw = fs.readFileSync(configPath, "utf8");
@@ -308,17 +315,19 @@ function createWindow() {
   if (isPerformanceBenchmark) {
     mainWindow.webContents.once("did-finish-load", async () => {
       try {
-        mainWindow.showInactive();
+        mainWindow.show();
+        mainWindow.focus();
         const { runPerformanceBenchmark } = require("./performance-benchmark");
         const results = await runPerformanceBenchmark(mainWindow, {
           iterations: Number(process.env.STRMLY_PERF_ITERATIONS) || 30,
           warmups: Number(process.env.STRMLY_PERF_WARMUPS) || 2,
         });
         console.log(`STRMLY_PERF_RESULT=${JSON.stringify(results)}`);
-        app.exit(0);
+        app.quit();
       } catch (error) {
         console.log(`STRMLY_PERF_ERROR=${error?.stack || error}`);
-        app.exit(1);
+        process.exitCode = 1;
+        app.quit();
       }
     });
   }
@@ -697,7 +706,10 @@ function isAllowedMediaUrl(rawUrl) {
 
 function isSafeConfigKey(key) {
   return (
-    typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key) && key.length <= 160
+    typeof key === "string" &&
+    !["__proto__", "prototype", "constructor"].includes(key) &&
+    /^[a-zA-Z0-9_-]+$/.test(key) &&
+    key.length <= 160
   );
 }
 
@@ -728,54 +740,30 @@ ipcMain.handle("play-external", async (event, { url, playerType }) => {
       "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
     ];
 
-    let launched = false;
+    let lastError = null;
     for (const vlcPath of paths) {
-      try {
-        const child = spawn(vlcPath, [url], {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-        });
-        child.on("error", (error) => {
-          if (error) {
-            console.error(`Failed to launch VLC via path: ${vlcPath}`, error);
-          }
-        });
-        child.unref();
-        launched = true;
-        break; // Stop after first attempt
-      } catch (err) {
-        console.error(err);
+      const result = await spawnDetached(vlcPath, [url]);
+      if (result.success) {
+        return { success: true, message: "VLC Başlatıldı." };
       }
+      lastError = result.error;
     }
+    if (lastError) console.error("Failed to launch VLC:", lastError.message);
     return {
-      success: launched,
-      message: launched
-        ? "VLC Başlatıldı."
-        : "VLC bulunamadı. Lütfen VLC Player'ın kurulu olduğundan emin olun.",
+      success: false,
+      message: "VLC bulunamadı. Lütfen VLC Player'ın kurulu olduğundan emin olun.",
     };
   } else if (playerType === "mpv") {
-    // Try running mpv from PATH
-    try {
-      const child = spawn("mpv", [url], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.on("error", (error) => {
-        if (error) {
-          console.error("Failed to launch MPV", error);
-        }
-      });
-      child.unref();
+    const result = await spawnDetached("mpv", [url]);
+    if (result.success) {
       return { success: true, message: "MPV Başlatıldı." };
-    } catch (err) {
-      return {
-        success: false,
-        message:
-          "MPV bulunamadı. Lütfen MPV'nin PATH ortam değişkenine ekli olduğundan emin olun.",
-      };
     }
+    console.error("Failed to launch MPV:", result.error?.message);
+    return {
+      success: false,
+      message:
+        "MPV bulunamadı. Lütfen MPV'nin PATH ortam değişkenine ekli olduğundan emin olun.",
+    };
   } else if (playerType === "browser") {
     // Open in default browser
     await shell.openExternal(url);
@@ -789,10 +777,10 @@ ipcMain.handle("play-external", async (event, { url, playerType }) => {
 const getProfilesDir = () => {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   let profilesDir;
-  if (isDev) {
-    profilesDir = path.join(app.getAppPath(), "profiles");
-  } else {
+  if (process.env.STRMLY_PERF_BENCH === "1" || !isDev) {
     profilesDir = path.join(app.getPath("userData"), "profiles");
+  } else {
+    profilesDir = path.join(app.getAppPath(), "profiles");
   }
   if (!fs.existsSync(profilesDir)) {
     fs.mkdirSync(profilesDir, { recursive: true });
@@ -956,6 +944,29 @@ ipcMain.handle("load-config", async (event, { key }) => {
   } catch (err) {
     console.error("Config load error:", err);
     return null;
+  }
+});
+
+ipcMain.handle("delete-profile-data", async (_event, { profileId }) => {
+  try {
+    const safeProfileId = String(profileId || "");
+    if (!/^[a-zA-Z0-9_-]+$/.test(safeProfileId)) {
+      return { success: false, error: "Invalid profile id" };
+    }
+    const config = await ensureConfigLoaded();
+    const prefix = `profile_${safeProfileId}_`;
+    let deletedKeys = 0;
+    for (const key of Object.keys(config)) {
+      if (key.startsWith(prefix)) {
+        delete config[key];
+        deletedKeys += 1;
+      }
+    }
+    if (deletedKeys > 0) await queueConfigWrite();
+    return { success: true, deletedKeys };
+  } catch (err) {
+    console.error("Profile data delete error:", err);
+    return { success: false, error: err.message };
   }
 });
 
@@ -1323,29 +1334,41 @@ ipcMain.handle(
           "0",
         );
       } else {
-        // Copy video, re-encode audio only (low CPU).
+        // Copy video, re-encode audio only (low CPU) — except pure local remux below.
         args.push("-c:v", "copy");
       }
 
-      // AAC encoder priming delay (~20-50ms) lags audio when video is copied.
-      // Compensate in copy mode. Avoid aggressive min_comp values that stretch
-      // audio over time and sound like progressive delay on long episodes.
-      const audioFilter =
-        mode === "full"
-          ? "asetpts=PTS-STARTPTS,aresample=async=1000:first_pts=0"
-          : "aresample=async=1000:first_pts=0,asetpts=PTS-STARTPTS-0.048/TB";
+      // Local library files are already remuxed for the browser (H.264 + AAC).
+      // Re-encoding AAC→AAC with aresample/asetpts adds lip-sync lag that Windows
+      // Media Player does not have. Pure stream copy preserves source timing.
+      const pureLocalRemux = isLocal && mode === "copy";
+
+      if (pureLocalRemux) {
+        args.push("-c:a", "copy");
+      } else {
+        // AAC encoder priming delay (~20-50ms) lags audio when video is copied.
+        // Compensate in copy mode. Avoid aggressive min_comp values that stretch
+        // audio over time and sound like progressive delay on long episodes.
+        const audioFilter =
+          mode === "full"
+            ? "asetpts=PTS-STARTPTS,aresample=async=1000:first_pts=0"
+            : "aresample=async=1000:first_pts=0,asetpts=PTS-STARTPTS-0.048/TB";
+
+        args.push(
+          "-c:a",
+          "aac",
+          "-b:a",
+          isSeekRestart ? "128k" : "160k",
+          "-ar",
+          "48000",
+          "-ac",
+          "2",
+          "-af",
+          audioFilter,
+        );
+      }
 
       args.push(
-        "-c:a",
-        "aac",
-        "-b:a",
-        isSeekRestart ? "128k" : "160k",
-        "-ar",
-        "48000",
-        "-ac",
-        "2",
-        "-af",
-        audioFilter,
         "-avoid_negative_ts",
         "make_zero",
         "-max_interleave_delta",

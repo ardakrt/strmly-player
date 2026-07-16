@@ -5,9 +5,20 @@ import { ImageWithFallback } from './ImageWithFallback';
 import { cleanMediaTitle, parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 import { getResolvedTmdbResult, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, fetchTmdbDetails } from '../utils/tmdb';
 import { useSettings } from '../context/SettingsContext';
-import { getFlatItem, getQualityLabel, globalVodMetadataMap, HoverPreviewPortal, TMDB_GENRES, translateDuration, useHoverPreview } from './HomeHoverPreview';
-import type { TmdbMetadata, VodPosterCardProps } from './HomeHoverPreview';
-export { getFlatItem } from './HomeHoverPreview';
+import { getFlatItem, getQualityLabel, globalVodMetadataMap, TMDB_GENRES, translateDuration } from '../utils/vodHelpers';
+import type { TmdbMetadata } from '../utils/vodHelpers';
+import { PrimeHoverCard, useHoverPreview } from './PrimeHoverCard';
+export { getFlatItem } from '../utils/vodHelpers';
+
+export interface VodPosterCardProps {
+  channel: any; // Can be PlaylistItem or GroupedSeries
+  globalFavorites: string[];
+  toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
+  handleOpenDetails: (item: PlaylistItem) => void;
+  handlePlayStream?: (item: PlaylistItem) => void;
+  requireTmdbPoster?: boolean;
+  onContextMenu?: (event: React.MouseEvent, item: any) => void;
+}
 
 interface LiveTvQuickChannelCardProps {
   channel: PlaylistItem;
@@ -26,21 +37,20 @@ export function LiveTvQuickChannelCard({
 }: LiveTvQuickChannelCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const {
-    previewPosition,
-    isClosing,
-    openHoverPreview,
-    scheduleCloseHoverPreview,
-    keepHoverPreviewOpen,
-    setPreviewPosition
-  } = useHoverPreview(cardRef);
+    showPreview,
+    mountPreview,
+    handleMouseEnter,
+    handleMouseLeave,
+    handlePreviewEnter,
+  } = useHoverPreview();
 
   return (
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handlePlayStream(channel))(); } }} tabIndex={0} role="button"
       ref={cardRef}
       className="flex-shrink-0 w-[170px] md:w-[210px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035] hover:z-20"
       onClick={() => handlePlayStream(channel)}
-      onMouseEnter={openHoverPreview}
-      onMouseLeave={scheduleCloseHoverPreview}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={(event) => openContextMenu(event, channel)}
     >
       <div className="relative w-full aspect-video rounded-[18px] overflow-hidden bg-neutral-900 border border-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.35)] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
@@ -74,17 +84,16 @@ export function LiveTvQuickChannelCard({
         </div>
       </div>
 
-      {previewPosition && (
-        <HoverPreviewPortal
+      {mountPreview && (
+        <PrimeHoverCard
           channel={channel}
-          fallbackLogo={channel.logo}
-          previewPosition={previewPosition}
-          isClosing={isClosing}
-          onMouseEnter={keepHoverPreviewOpen}
-          onMouseLeave={scheduleCloseHoverPreview}
-          onClose={() => setPreviewPosition(null)}
-          globalFavorites={globalFavorites}
+          metadata={null}
+          cardRef={cardRef}
+          visible={showPreview}
+          onClose={handleMouseLeave}
+          onPreviewEnter={handlePreviewEnter}
           toggleFavorite={toggleFavorite}
+          globalFavorites={globalFavorites}
           handleOpenDetails={() => {}}
           handlePlayStream={handlePlayStream}
         />
@@ -112,30 +121,51 @@ export function ContinueWatchingCard({
 }: ContinueWatchingCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const {
-    previewPosition,
-    isClosing,
-    openHoverPreview,
-    scheduleCloseHoverPreview,
-    keepHoverPreviewOpen,
-    setPreviewPosition
-  } = useHoverPreview(cardRef);
+    showPreview,
+    mountPreview,
+    handleMouseEnter,
+    handleMouseLeave,
+    handlePreviewEnter,
+  } = useHoverPreview();
+
+  const cleanTitle = useMemo(() => {
+    if (channel.type === 'series') {
+      return parseSeriesEpisodeInfo(channel.name).cleanTitle || channel.name;
+    }
+    return cleanMediaTitle(channel.name);
+  }, [channel.name, channel.type]);
+
+  // Prefer TMDB poster from home crawler cache when playlist logo is empty/generic
+  const artworkSrc = useMemo(() => {
+    const hasPlaylistLogo = Boolean(
+      channel.logo && String(channel.logo).trim() && !channel.isGenericLogo,
+    );
+    if (hasPlaylistLogo) return channel.logo;
+
+    const type = channel.type === 'series' ? 'series' : channel.type === 'movie' ? 'movie' : null;
+    if (!type) return channel.logo;
+
+    const cacheKey = `vod-meta-v3-${type}-${cleanTitle.toLowerCase()}`;
+    const meta = globalVodMetadataMap.get(cacheKey);
+    return meta?.posterUrl || meta?.backdropUrl || channel.logo;
+  }, [channel.logo, channel.isGenericLogo, channel.type, cleanTitle]);
 
   return (
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handlePlayStream(channel))(); } }} tabIndex={0} role="button"
       ref={cardRef}
       className="flex-shrink-0 w-[200px] md:w-[240px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03]"
       onClick={() => handlePlayStream(channel)}
-      onMouseEnter={openHoverPreview}
-      onMouseLeave={scheduleCloseHoverPreview}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={(event) => openContextMenu(event, channel, true)}
     >
       <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transition-all duration-300 group-hover:border-white/15 group-hover:shadow-[0_12px_28px_rgba(0,0,0,0.55)] flex items-center justify-center">
         <ImageWithFallback
-          src={channel.logo}
-          name={channel.name}
+          src={artworkSrc}
+          name={cleanTitle}
           group={channel.group || 'LIVE'}
           itemType={channel.type}
-          isGenericLogo={channel.isGenericLogo}
+          isGenericLogo={channel.isGenericLogo && !artworkSrc}
           aspect="landscape"
         />
 
@@ -172,17 +202,16 @@ export function ContinueWatchingCard({
         </div>
       </div>
 
-      {previewPosition && (
-        <HoverPreviewPortal
+      {mountPreview && (
+        <PrimeHoverCard
           channel={channel}
-          fallbackLogo={channel.logo}
-          previewPosition={previewPosition}
-          isClosing={isClosing}
-          onMouseEnter={keepHoverPreviewOpen}
-          onMouseLeave={scheduleCloseHoverPreview}
-          onClose={() => setPreviewPosition(null)}
-          globalFavorites={globalFavorites}
+          metadata={null}
+          cardRef={cardRef}
+          visible={showPreview}
+          onClose={handleMouseLeave}
+          onPreviewEnter={handlePreviewEnter}
           toggleFavorite={toggleFavorite}
+          globalFavorites={globalFavorites}
           handleOpenDetails={() => {}}
           handlePlayStream={handlePlayStream}
         />
@@ -196,6 +225,13 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
   const quality = getQualityLabel(channel.name);
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  const {
+    showPreview,
+    mountPreview,
+    handleMouseEnter,
+    handleMouseLeave,
+    handlePreviewEnter,
+  } = useHoverPreview();
 
   useEffect(() => {
     const el = cardRef.current;
@@ -213,14 +249,7 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
     return () => observer.disconnect();
   }, []);
 
-  const {
-    previewPosition,
-    isClosing,
-    openHoverPreview,
-    scheduleCloseHoverPreview,
-    keepHoverPreviewOpen,
-    setPreviewPosition
-  } = useHoverPreview(cardRef);
+
 
   const cleanTitle = useMemo(() => {
     if (channel.type === 'series') {
@@ -236,7 +265,7 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
 
     let cancelled = false;
     const endpoint = channel.type === 'series' ? 'tv' : 'movie';
-    const cacheKey = `vod-meta-v2-${channel.type}-${cleanTitle.toLowerCase()}`;
+    const cacheKey = `vod-meta-v3-${channel.type}-${cleanTitle.toLowerCase()}`;
 
     const loadMetadata = async () => {
       if (globalVodMetadataMap.has(cacheKey)) {
@@ -313,10 +342,9 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
         if (result.poster_path) {
           posterUrl = await resolveTmdbImageSrc(result.poster_path, 'w500');
         }
+        // Keep null when missing — never substitute portrait poster (breaks 16:9 hover crop)
         if (result.backdrop_path) {
           backdropUrl = await resolveTmdbImageSrc(result.backdrop_path, 'w780');
-        } else {
-          backdropUrl = posterUrl;
         }
 
         const rating = result.vote_average && result.vote_average > 0
@@ -326,10 +354,12 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
         const year = (result.release_date || result.first_air_date || '').substring(0, 4);
 
         const overview = result.overview || '';
+        const tmdbTitle = (result.name || result.title || '').trim() || null;
 
         const finalMeta: TmdbMetadata = {
           posterUrl,
           backdropUrl,
+          title: tmdbTitle,
           rating,
           year,
           overview,
@@ -396,13 +426,13 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
       ref={cardRef}
       className="home-poster-card flex-shrink-0 w-[176px] md:w-[208px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03] hover:z-20"
       onClick={handleCardClick}
-      onMouseEnter={openHoverPreview}
-      onMouseLeave={scheduleCloseHoverPreview}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
-      <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-neutral-950/60 border border-white/[0.07] shadow-[0_14px_38px_rgba(0,0,0,0.4)] flex items-center justify-center transition-all duration-300 group-hover:border-white/20 group-hover:shadow-[0_22px_55px_rgba(0,0,0,0.58)]">
+      <div className="home-poster-frame relative isolate aspect-[2/3] w-full overflow-hidden rounded-[18px] flex items-center justify-center">
         {posterSrc ? (
-          <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover animate-fade-in transition-transform duration-500 group-hover:scale-105" />
+          <img src={posterSrc} alt="" className="home-poster-media animate-fade-in transition-transform duration-500" />
         ) : (
           <ImageWithFallback
             src={channel.logo}
@@ -503,17 +533,16 @@ export function VodPosterCard({ channel, globalFavorites, toggleFavorite, handle
         )}
       </div>
 
-      {previewPosition && (
-        <HoverPreviewPortal
+      {mountPreview && (
+        <PrimeHoverCard
           channel={getFlatItem(channel)}
-          fallbackLogo={channel.logo}
-          previewPosition={previewPosition}
-          isClosing={isClosing}
-          onMouseEnter={keepHoverPreviewOpen}
-          onMouseLeave={scheduleCloseHoverPreview}
-          onClose={() => setPreviewPosition(null)}
-          globalFavorites={globalFavorites}
+          metadata={metadata}
+          cardRef={cardRef}
+          visible={showPreview}
+          onClose={handleMouseLeave}
+          onPreviewEnter={handlePreviewEnter}
           toggleFavorite={toggleFavorite}
+          globalFavorites={globalFavorites}
           handleOpenDetails={handleOpenDetails}
           handlePlayStream={handlePlayStream}
         />

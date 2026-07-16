@@ -8,7 +8,11 @@ import {
   cleanMovieName,
   buildTmdbSearchPath,
   getResolvedTmdbResult,
-  resolveTmdbImageSrc
+  resolveTmdbImageSrc,
+  fetchTmdbDetails,
+  getTmdbLanguage,
+  resolveTmdbOverview,
+  isMissingTmdbOverview,
 } from '../utils/tmdb';
 import {
   getItemNameLower,
@@ -16,7 +20,13 @@ import {
   isUnavailableCatalogItem,
   getStableMatchPercentage
 } from '../utils/searchHelpers';
-import { dailyStableScore, takeTopByScore } from '../utils/catalogFilters';
+import {
+  dailyStableScore,
+  takeTopByScore,
+  selectMixedPopularShowcase,
+  type PopularShowcaseCandidate,
+} from '../utils/catalogFilters';
+import { isSloganLikeBlurb, pickHeroSynopsis } from '../utils/helpers';
 
 interface UseHomeDataProps {
   items: PlaylistItem[];
@@ -35,9 +45,13 @@ export interface FeaturedTmdbData {
   match: string;
   rating: string;
   year: string;
+  /** Short billboard blurb (tagline or clipped overview) — never the full synopsis. */
   desc: string;
   backdrop?: string;
   poster?: string;
+  logo?: string;
+  duration?: string;
+  genres?: string[];
 }
 
 export function useHomeData({
@@ -50,16 +64,35 @@ export function useHomeData({
 }: UseHomeDataProps) {
   const [showcaseItems, setShowcaseItems] = useState<PlaylistItem[]>([]);
   const [featuredTmdbData, setFeaturedTmdbData] = useState<FeaturedTmdbData | null>(null);
+  /** Target slide (user click / auto-rotate). */
   const [activeFeaturedIndex, setActiveFeaturedIndex] = useState<number>(0);
+  /**
+   * Slide currently painted on screen. Only advances when TMDB (+backdrop) for the
+   * target index is ready — prevents "flash previous card, then next" on click.
+   */
+  const [displayFeaturedIndex, setDisplayFeaturedIndex] = useState<number>(0);
   const [isHomeReady, setIsHomeReady] = useState(false);
 
   const isFirstLoadRef = useRef(true);
+  /** In-session cache so hero carousel switches reuse metadata without a blank intermediate frame. */
+  const featuredCacheRef = useRef<Map<string, FeaturedTmdbData>>(new Map());
+  const featuredRequestGenRef = useRef(0);
+
+  const getFeaturedCacheKey = (item: PlaylistItem) => {
+    const isSeries = item.type === 'series';
+    const cleanTitle = isSeries
+      ? parseSeriesEpisodeInfo(item.name).cleanTitle
+      : cleanMovieName(item.name);
+    return `${item.url || item.name}|${item.type}|${cleanTitle}`;
+  };
 
   // Select highly-rated VOD items (movies/series) for Hero Showcase Carousel from cache/network
   useEffect(() => {
     if (items.length === 0) {
       setShowcaseItems([]);
       setActiveFeaturedIndex(0);
+      setDisplayFeaturedIndex(0);
+      setFeaturedTmdbData(null);
       setIsHomeReady(true);
       isFirstLoadRef.current = true;
       return;
@@ -80,135 +113,94 @@ export function useHomeData({
         return Math.floor(diff / oneDay);
       };
 
-      const selectDailyShowcase = <T,>(candidates: T[], count: number): T[] => {
-        if (candidates.length <= count) return candidates;
-        const daySeed = getDayOfYear();
-        const selected: T[] = [];
-        const available = [...candidates];
+      const SHOWCASE_COUNT = 7;
 
-        let seed = daySeed;
-        const lcgRandom = () => {
-          seed = (seed * 1664525 + 1013904223) % 4294967296;
-          return seed / 4294967296;
+      const finishReady = (selected: PlaylistItem[]) => {
+        if (!active) return;
+        setShowcaseItems(selected);
+        setActiveFeaturedIndex(0);
+        setDisplayFeaturedIndex(0);
+        setFeaturedTmdbData(null);
+        setIsHomeReady(true);
+        isFirstLoadRef.current = false;
+      };
+
+      try {
+        const toPopularCandidate = (
+          item: PlaylistItem,
+          result: any | null,
+        ): PopularShowcaseCandidate | null => {
+          if (!result) return null;
+          const hasArt = !!(result.backdrop_path || result.poster_path);
+          if (!hasArt) return null;
+          return {
+            item,
+            rating: typeof result.vote_average === 'number' ? result.vote_average : 0.1,
+            popularity: typeof result.popularity === 'number' ? result.popularity : undefined,
+            voteCount: typeof result.vote_count === 'number' ? result.vote_count : undefined,
+            hasBackdrop: !!result.backdrop_path,
+          };
         };
 
-        for (let i = 0; i < count; i++) {
-          const index = Math.floor(lcgRandom() * available.length);
-          selected.push(available[index]);
-          available.splice(index, 1);
-        }
-        return selected;
-      };
+        const getCleanTitle = (item: PlaylistItem) => {
+          const isSeries = item.type === 'series';
+          return isSeries
+            ? parseSeriesEpisodeInfo(item.name).cleanTitle.toLowerCase().trim()
+            : cleanMovieName(item.name).toLowerCase().trim();
+        };
 
-      const getCleanTitle = (item: PlaylistItem) => {
-        const isSeries = item.type === 'series';
-        return isSeries
-          ? parseSeriesEpisodeInfo(item.name).cleanTitle.toLowerCase().trim()
-          : cleanMovieName(item.name).toLowerCase().trim();
-      };
-
-      // Fetch sorted candidates source from worker
-      const sortedCandidatesSource = await new Promise<PlaylistItem[]>((resolve) => {
-        try {
-          worker = new Worker(new URL('../utils/search.worker.ts', import.meta.url), { type: 'module' });
-          worker.onmessage = (e) => {
-            if (e.data.action === 'home_candidates_results') {
-              resolve(e.data.candidates);
-            }
+        // Worker with timeout — never block app boot if the worker stalls.
+        const sortedCandidatesSource = await new Promise<PlaylistItem[]>((resolve) => {
+          let settled = false;
+          const done = (list: PlaylistItem[]) => {
+            if (settled) return;
+            settled = true;
+            resolve(list);
           };
-          worker.onerror = () => {
-            resolve([]);
-          };
-          worker.postMessage({
-            action: 'get_home_candidates',
-            items,
-            itemBuckets,
-            activeContentPreferences
-          });
-        } catch (err) {
-          console.error("Failed to initialize home candidates worker:", err);
-          resolve([]);
-        }
-      });
+          const timeout = window.setTimeout(() => done([]), 8000);
+          try {
+            worker = new Worker(new URL('../utils/search.worker.ts', import.meta.url), { type: 'module' });
+            worker.onmessage = (e) => {
+              if (e.data.action === 'home_candidates_results') {
+                window.clearTimeout(timeout);
+                done(e.data.candidates || []);
+              }
+            };
+            worker.onerror = () => {
+              window.clearTimeout(timeout);
+              done([]);
+            };
+            worker.postMessage({
+              action: 'get_home_candidates',
+              items,
+              itemBuckets,
+              activeContentPreferences
+            });
+          } catch (err) {
+            console.error("Failed to initialize home candidates worker:", err);
+            window.clearTimeout(timeout);
+            done([]);
+          }
+        });
 
-      if (!active) {
+        if (!active) {
+          if (worker) worker.terminate();
+          return;
+        }
+
         if (worker) {
           worker.terminate();
+          worker = null;
         }
-        return;
-      }
 
-      if (worker) {
-        worker.terminate();
-        worker = null;
-      }
+        // Fast path only: IndexedDB cache + bare playlist fill. Network enrich blocked home boot.
+        const source =
+          sortedCandidatesSource.length > 0
+            ? sortedCandidatesSource
+            : [...itemBuckets.series, ...itemBuckets.movie];
+        const candidates = source.slice(0, 300);
 
-      // Take first 300 candidates to check cache
-      const candidates = sortedCandidatesSource.slice(0, 300);
-      const candidatesWithCachedData: { item: PlaylistItem; result: any; rating: number }[] = [];
-      const uncachedCandidates: PlaylistItem[] = [];
-
-      // Query IndexedDB in parallel for these 300 items
-      const cacheCheckPromises = candidates.map(async (item) => {
-        const isSeries = item.type === 'series';
-        const cleanTitle = isSeries
-          ? parseSeriesEpisodeInfo(item.name).cleanTitle
-          : cleanMovieName(item.name);
-        const endpoint = isSeries ? 'tv' : 'movie';
-
-        try {
-          const fullPath = buildTmdbSearchPath(endpoint, 'DUMMY_API_KEY', cleanTitle);
-          const cleanCachePath = fullPath.replace(/[?&]api_key=[^&]+/, '');
-          const cacheKey = `api-${cleanCachePath}`;
-
-          const cachedData = await tmdbCache.get(cacheKey);
-          if (cachedData && cachedData.results) {
-            const bestResult = selectBestTmdbResult(cachedData.results, cleanTitle);
-            if (bestResult && (bestResult.backdrop_path || bestResult.poster_path)) {
-              return { item, result: bestResult, rating: bestResult.vote_average || 0.1 };
-            }
-          }
-        } catch (e) {
-          console.error("Showcase cache check error:", e);
-        }
-        return { item, result: null, rating: 0 };
-      });
-
-      const cachedCheckResults = await Promise.all(cacheCheckPromises);
-      if (!active) return;
-
-      for (const res of cachedCheckResults) {
-        if (res.result) {
-          candidatesWithCachedData.push(res);
-        } else {
-          uncachedCandidates.push(res.item);
-        }
-      }
-
-      // Deduplicate cached items by clean title
-      const seenCachedTitles = new Set<string>();
-      const uniqueCached: typeof candidatesWithCachedData = [];
-
-      for (const c of candidatesWithCachedData) {
-        const title = getCleanTitle(c.item);
-        if (!seenCachedTitles.has(title)) {
-          seenCachedTitles.add(title);
-          uniqueCached.push(c);
-        }
-      }
-
-      // Only check TMDB API for missing items if we don't have enough candidates in cache
-      let finalSelected: PlaylistItem[];
-
-      if (uniqueCached.length >= 5) {
-        uniqueCached.sort((a, b) => b.rating - a.rating);
-        finalSelected = selectDailyShowcase(uniqueCached.map(x => x.item), 5);
-      } else {
-        // Fetch up to (15 - cached count) items from TMDB network
-        const needed = 15 - uniqueCached.length;
-        const fetchTargets = uncachedCandidates.slice(0, needed);
-
-        const fetchPromises = fetchTargets.map(async (item) => {
+        const cacheCheckPromises = candidates.map(async (item) => {
           const isSeries = item.type === 'series';
           const cleanTitle = isSeries
             ? parseSeriesEpisodeInfo(item.name).cleanTitle
@@ -216,59 +208,68 @@ export function useHomeData({
           const endpoint = isSeries ? 'tv' : 'movie';
 
           try {
-            const result = await getResolvedTmdbResult(endpoint, tmdbApiKey, cleanTitle);
-            if (result && (result.backdrop_path || result.poster_path)) {
-              return { item, result, rating: result.vote_average || 0.1 };
+            const fullPath = buildTmdbSearchPath(endpoint, 'DUMMY_API_KEY', cleanTitle);
+            const cleanCachePath = fullPath.replace(/[?&]api_key=[^&]+/, '');
+            const cacheKey = `api-${cleanCachePath}`;
+            const cachedData = await tmdbCache.get(cacheKey);
+            if (cachedData && cachedData.results) {
+              const bestResult = selectBestTmdbResult(cachedData.results, cleanTitle);
+              return toPopularCandidate(item, bestResult);
             }
           } catch (e) {
-            console.error("Showcase network fetch error:", e);
+            console.error("Showcase cache check error:", e);
           }
-          return { item, result: null, rating: 0 };
+          return null;
         });
 
-        const fetchResults = await Promise.all(fetchPromises);
+        const cachedCheckResults = await Promise.all(cacheCheckPromises);
         if (!active) return;
 
-        const combined = [...uniqueCached];
-        for (const res of fetchResults) {
-          if (res.result) {
-            combined.push(res);
+        const seenTitles = new Set<string>();
+        const popularPool: PopularShowcaseCandidate[] = [];
+
+        for (let i = 0; i < candidates.length; i++) {
+          const res = cachedCheckResults[i];
+          if (!res) continue;
+          const title = getCleanTitle(res.item);
+          if (seenTitles.has(title)) continue;
+          seenTitles.add(title);
+          popularPool.push(res);
+        }
+
+        // Ensure both types can appear even when TMDB cache is thin.
+        if (popularPool.length < SHOWCASE_COUNT
+          || !popularPool.some((c) => c.item.type === 'series')
+          || !popularPool.some((c) => c.item.type !== 'series')) {
+          const bareSeries = source.filter((i) => i.type === 'series');
+          const bareMovies = source.filter((i) => i.type !== 'series');
+          let bi = 0;
+          let bj = 0;
+          while (popularPool.length < 40 && (bi < bareSeries.length || bj < bareMovies.length)) {
+            const next = bi <= bj
+              ? (bi < bareSeries.length ? bareSeries[bi++] : bareMovies[bj++])
+              : (bj < bareMovies.length ? bareMovies[bj++] : bareSeries[bi++]);
+            if (!next) break;
+            const title = getCleanTitle(next);
+            if (seenTitles.has(title)) continue;
+            seenTitles.add(title);
+            popularPool.push({ item: next, rating: 0.1, hasBackdrop: false });
           }
         }
 
-        combined.sort((a, b) => b.rating - a.rating);
+        const finalSelected = selectMixedPopularShowcase(
+          popularPool,
+          SHOWCASE_COUNT,
+          getDayOfYear(),
+          activeContentPreferences,
+        );
 
-        const validCandidates = combined.filter(c => c.rating > 0);
-
-        const finalSeenTitles = new Set<string>();
-        const selectList: PlaylistItem[] = [];
-
-        for (const c of validCandidates) {
-          const title = getCleanTitle(c.item);
-          if (!finalSeenTitles.has(title)) {
-            finalSeenTitles.add(title);
-            selectList.push(c.item);
-          }
-        }
-
-        // Fallback to sortedCandidatesSource if we still have less than 15 items
-        for (const item of sortedCandidatesSource) {
-          if (selectList.length >= 15) break;
-          const title = getCleanTitle(item);
-          if (!finalSeenTitles.has(title)) {
-            finalSeenTitles.add(title);
-            selectList.push(item);
-          }
-        }
-
-        finalSelected = selectDailyShowcase(selectList, 5);
-      }
-
-      if (active) {
-        setShowcaseItems(finalSelected);
-        setActiveFeaturedIndex(0);
-        setIsHomeReady(true);
-        isFirstLoadRef.current = false;
+        finishReady(finalSelected.length > 0 ? finalSelected : source.slice(0, SHOWCASE_COUNT));
+      } catch (err) {
+        console.error('Home showcase selection failed:', err);
+        // Last-ditch: never leave the app gated on isHomeReady.
+        const fallback = [...itemBuckets.series.slice(0, 4), ...itemBuckets.movie.slice(0, 4)].slice(0, 7);
+        finishReady(fallback);
       }
     };
 
@@ -282,79 +283,240 @@ export function useHomeData({
     };
   }, [items, itemBuckets, tmdbApiKey, activeContentPreferences]);
 
-  // Fetch TMDB data for active featured carousel item
+  // Resolve TMDB for the *target* slide; only paint when ready (keeps previous hero until then).
   useEffect(() => {
+    // Static fallback hero bank — no async metadata; display tracks target immediately.
     if (showcaseItems.length === 0) {
       setFeaturedTmdbData(null);
+      setDisplayFeaturedIndex(activeFeaturedIndex);
       return;
     }
-    const activeItem = showcaseItems[activeFeaturedIndex];
+
+    const targetIndex =
+      ((activeFeaturedIndex % showcaseItems.length) + showcaseItems.length) % showcaseItems.length;
+    const activeItem = showcaseItems[targetIndex];
     if (!activeItem) return;
+
+    // Already painting this slide with committed data — still warm neighbors.
+    // (Re-fetch not needed; cache + display stay put.)
 
     const isSeries = activeItem.type === 'series';
     const cleanTitle = isSeries
       ? parseSeriesEpisodeInfo(activeItem.name).cleanTitle
       : cleanMovieName(activeItem.name);
+    const cacheKey = getFeaturedCacheKey(activeItem);
+    const requestGen = ++featuredRequestGenRef.current;
+    let cancelled = false;
+    const fetchController = new AbortController();
 
-    const controller = new AbortController();
-    const { signal } = controller;
+    const isCurrent = () => !cancelled && featuredRequestGenRef.current === requestGen;
 
-    if (tmdbApiKey) {
+    const commit = (data: FeaturedTmdbData) => {
+      if (!isCurrent()) return;
+      featuredCacheRef.current.set(cacheKey, data);
+      // Atomic paint: metadata + which item is on screen change together.
+      setFeaturedTmdbData(data);
+      setDisplayFeaturedIndex(targetIndex);
+    };
+
+    const commitWhenImageReady = (data: FeaturedTmdbData) => {
+      if (!isCurrent()) return;
+      featuredCacheRef.current.set(cacheKey, data);
+      if (!data.backdrop) {
+        commit(data);
+        return;
+      }
+      let settled = false;
+      const finish = () => {
+        if (settled || !isCurrent()) return;
+        settled = true;
+        commit(data);
+      };
+      const img = new Image();
+      img.onload = finish;
+      img.onerror = finish;
+      img.src = data.backdrop;
+      if (img.complete) finish();
+    };
+
+    const isTrUi = activeContentPreferences.includes('tr') || getTmdbLanguage() === 'tr-TR';
+
+    /** No TMDB match / API key — never invent marketing copy for the synopsis. */
+    const fallbackFeatured = (title = cleanTitle): FeaturedTmdbData => ({
+      match: getStableMatchPercentage(title, activeContentPreferences, isSeries ? 'series' : 'movie'),
+      rating: '',
+      year: '',
+      desc: '',
+      backdrop: undefined,
+      poster: undefined
+    });
+
+    const buildFeaturedFromTmdb = async (
+      endpoint: 'tv' | 'movie',
+      title: string,
+      series: boolean,
+      result: any,
+      signal: AbortSignal,
+    ): Promise<FeaturedTmdbData> => {
+      const backdropPath = await resolveTmdbImageSrc(result.backdrop_path || result.poster_path, 'original', signal);
+      const posterPath = result.poster_path && result.poster_path !== result.backdrop_path
+        ? await resolveTmdbImageSrc(result.poster_path, 'w500', signal)
+        : undefined;
+
+      let logoUrl: string | undefined;
+      let duration: string | undefined;
+      let genres: string[] = [];
+      let detailsOverview: string | undefined;
+      let detailsTagline: string | undefined;
+
+      try {
+        const details: any = await fetchTmdbDetails(endpoint, tmdbApiKey, result.id, signal);
+        if (details && !details.error) {
+          detailsOverview = details.overview;
+          detailsTagline = typeof details.tagline === 'string' ? details.tagline : undefined;
+          if (details.images?.logos?.length) {
+            const logos = details.images.logos;
+            const bestLogo = logos.find((l: any) => l.iso_639_1 === 'tr')
+              || logos.find((l: any) => l.iso_639_1 === 'en')
+              || logos[0];
+            if (bestLogo) {
+              logoUrl = await resolveTmdbImageSrc(bestLogo.file_path, 'w500', signal);
+            }
+          }
+          if (details.genres) {
+            genres = details.genres.slice(0, 2).map((g: any) => g.name);
+          }
+          if (series && details.number_of_seasons) {
+            duration = `${details.number_of_seasons} ${isTrUi ? 'Sezon' : 'Seasons'}`;
+          } else if (!series && details.runtime) {
+            const hrs = Math.floor(details.runtime / 60);
+            const mins = details.runtime % 60;
+            duration = hrs > 0
+              ? (mins > 0 ? `${hrs}sa ${mins}dk` : `${hrs}sa`)
+              : `${mins}dk`;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch TMDB featured details:', err);
+      }
+
+      // Full synopsis from TMDB (tr → en). Used only as source for a short billboard cut.
+      const overview = await resolveTmdbOverview(
+        endpoint,
+        tmdbApiKey,
+        result.id,
+        [detailsOverview, result.overview],
+        signal,
+      );
+
+      // Prefer tagline when missing in UI language — try EN details tagline.
+      let tagline = detailsTagline?.trim() || '';
+      if (!tagline && getTmdbLanguage() !== 'en-US') {
+        try {
+          const enDetails: any = await fetchTmdbDetails(endpoint, tmdbApiKey, result.id, signal, 'en-US');
+          if (enDetails && !enDetails.error && typeof enDetails.tagline === 'string') {
+            tagline = enDetails.tagline.trim();
+          }
+        } catch {
+          /* optional */
+        }
+      }
+
+      // Max-style teaser: full-sentence overview blurb (not a 3-word tagline slogan).
+      const shortDesc = pickHeroSynopsis({ tagline, overview, maxLen: 190 });
+
+      return {
+        match: getStableMatchPercentage(title, activeContentPreferences, series ? 'series' : 'movie'),
+        rating: result.vote_average ? result.vote_average.toFixed(1) : '',
+        year: series
+          ? (result.first_air_date ? result.first_air_date.split('-')[0] : '')
+          : (result.release_date ? result.release_date.split('-')[0] : ''),
+        desc: shortDesc,
+        backdrop: backdropPath || posterPath || undefined,
+        poster: posterPath || undefined,
+        logo: logoUrl || undefined,
+        duration: duration || undefined,
+        genres: genres.length > 0 ? genres : undefined
+      };
+    };
+
+    const cached = featuredCacheRef.current.get(cacheKey);
+    // Re-resolve: missing, placeholder, full novel, or old slogan-only blurbs ("You can't unsee it.").
+    const cacheLooksStale =
+      !cached ||
+      isMissingTmdbOverview(cached.desc) ||
+      isSloganLikeBlurb(cached.desc || '') ||
+      (cached.desc?.length ?? 0) > 220;
+    if (cached && !cacheLooksStale) {
+      commitWhenImageReady(cached);
+    } else if (!tmdbApiKey) {
+      commitWhenImageReady(fallbackFeatured());
+    } else {
+      const { signal } = fetchController;
       const endpoint = isSeries ? 'tv' : 'movie';
+
       getResolvedTmdbResult(endpoint, tmdbApiKey, cleanTitle, signal)
         .then(async (result) => {
-          if (signal.aborted) return;
-          if (result) {
-            const backdropPath = await resolveTmdbImageSrc(result.backdrop_path || result.poster_path, 'original', signal);
-            const posterPath = result.poster_path && result.poster_path !== result.backdrop_path
-              ? await resolveTmdbImageSrc(result.poster_path, 'w500', signal)
-              : undefined;
-            if (signal.aborted) return;
-            setFeaturedTmdbData({
-              match: getStableMatchPercentage(cleanTitle, activeContentPreferences, isSeries ? 'series' : 'movie'),
-              rating: result.vote_average ? result.vote_average.toFixed(1) : '7.8',
-              year: isSeries
-                ? (result.first_air_date ? result.first_air_date.split('-')[0] : '2025')
-                : (result.release_date ? result.release_date.split('-')[0] : '2025'),
-              desc: result.overview || 'Strmly kütüphanesinden benzersiz bir yapım.',
-              backdrop: backdropPath || posterPath || undefined,
-              poster: posterPath || undefined
-            });
-          } else {
-            setFeaturedTmdbData({
-              match: '92% Eşleşme',
-              rating: '7.5',
-              year: '2025',
-              desc: 'Strmly kütüphanesinden benzersiz bir yapım. Keyifli seyirler dileriz.',
-              backdrop: undefined,
-              poster: undefined
-            });
+          if (!isCurrent() || signal.aborted) return;
+          if (!result) {
+            commitWhenImageReady(fallbackFeatured());
+            return;
           }
+          const data = await buildFeaturedFromTmdb(endpoint, cleanTitle, isSeries, result, signal);
+          if (!isCurrent() || signal.aborted) return;
+          commitWhenImageReady(data);
         })
         .catch((error) => {
-          if (signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
-          setFeaturedTmdbData({
-            match: '92% Eşleşme',
-            rating: '7.5',
-            year: '2025',
-            desc: 'Strmly kütüphanesinden benzersiz bir yapım. Keyifli seyirler dileriz.',
-            backdrop: undefined,
-            poster: undefined
-          });
+          if (!isCurrent() || signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
+          commitWhenImageReady(fallbackFeatured());
         });
-    } else {
-      setFeaturedTmdbData({
-        match: '92% Eşleşme',
-        rating: '7.5',
-        year: '2025',
-        desc: 'Strmly kütüphanesinden benzersiz bir yapım. Keyifli seyirler dileriz.',
-        backdrop: undefined,
-        poster: undefined
-      });
     }
 
+    // Prefetch neighbors into cache so the next click paints immediately.
+    const warmNeighbor = (offset: number) => {
+      if (!tmdbApiKey || showcaseItems.length < 2) return;
+      const n =
+        ((targetIndex + offset) % showcaseItems.length + showcaseItems.length) % showcaseItems.length;
+      const item = showcaseItems[n];
+      if (!item) return;
+      const key = getFeaturedCacheKey(item);
+      const existing = featuredCacheRef.current.get(key);
+      if (
+        existing &&
+        !isMissingTmdbOverview(existing.desc) &&
+        !isSloganLikeBlurb(existing.desc || '') &&
+        (existing.desc?.length ?? 0) <= 220
+      ) {
+        if (existing.backdrop) {
+          const warmImg = new Image();
+          warmImg.src = existing.backdrop;
+        }
+        return;
+      }
+      const series = item.type === 'series';
+      const title = series
+        ? parseSeriesEpisodeInfo(item.name).cleanTitle
+        : cleanMovieName(item.name);
+      const endpoint = series ? 'tv' : 'movie';
+      getResolvedTmdbResult(endpoint, tmdbApiKey, title, fetchController.signal)
+        .then(async (result) => {
+          if (!result || fetchController.signal.aborted) return;
+          const data = await buildFeaturedFromTmdb(endpoint, title, series, result, fetchController.signal);
+          if (fetchController.signal.aborted) return;
+          featuredCacheRef.current.set(key, data);
+          if (data.backdrop) {
+            const warmImg = new Image();
+            warmImg.src = data.backdrop;
+          }
+        })
+        .catch(() => { /* ignore warm failures */ });
+    };
+    warmNeighbor(1);
+    warmNeighbor(-1);
+
     return () => {
-      controller.abort();
+      cancelled = true;
+      fetchController.abort();
     };
   }, [activeFeaturedIndex, showcaseItems, tmdbApiKey, activeContentPreferences]);
 
@@ -526,33 +688,70 @@ export function useHomeData({
   // - For series: show next episode (with progress = 0), or remove if no next episode
   const uniqueRecentlyWatched = useMemo(() => {
     const seenSeries = new Set<string>();
-    const mapped = recentlyWatched.map(item => {
-      if (!item || !item.type || !item.name) return null;
+    const mapped = recentlyWatched.map((item) => {
+      if (!item) return null;
+      const rawName = String(item.name || '').trim();
+      if (!rawName) return null;
+
+      // Some older history entries may miss type — infer series from episode pattern
+      let type = item.type;
+      if (type !== 'movie' && type !== 'series' && type !== 'live') {
+        const looksLikeEpisode =
+          /s\s*\d+\s*e\s*\d+/i.test(rawName) ||
+          /\d+\s*\.?\s*sezon/i.test(rawName) ||
+          /\d+\s*\.?\s*bölüm/i.test(rawName);
+        type = looksLikeEpisode ? 'series' : 'movie';
+      }
 
       const progress = item.progress ?? 0;
       const isFinished = progress > 90;
+      const baseItem: PlaylistItem = { ...item, name: rawName, type };
 
-      if (item.type === 'movie') {
+      if (type === 'movie') {
         if (isFinished) return null;
-        return item;
+        return baseItem;
       }
 
-      if (item.type === 'series') {
-        const parsed = parseSeriesEpisodeInfo(item.name);
-        const key = `${parsed.cleanTitle}:::${item.group || ''}`;
-        if (seenSeries.has(key)) {
-          return null;
-        }
+      if (type === 'series') {
+        const parsed = parseSeriesEpisodeInfo(rawName);
+        const seriesKeyName = (parsed.cleanTitle || rawName).trim() || rawName;
+        const key = `${seriesKeyName.toLowerCase()}:::${item.group || ''}`;
+        if (seenSeries.has(key)) return null;
         seenSeries.add(key);
 
-        if (isFinished) {
-          const grouped = allGroupedSeries.find(series =>
-            series.name === parsed.cleanTitle &&
-            (series.group || 'Genel') === (item.group || 'Genel')
+        const titleKey = seriesKeyName.toLowerCase();
+        const grouped =
+          allGroupedSeries.find(
+            (series) =>
+              series.name === seriesKeyName &&
+              (series.group || 'Genel') === (item.group || 'Genel'),
+          ) ||
+          allGroupedSeries.find(
+            (series) =>
+              (parseSeriesEpisodeInfo(series.name).cleanTitle || series.name)
+                .toLowerCase() === titleKey,
           );
 
+        const resolveLogo = (base: PlaylistItem): PlaylistItem => {
+          const hasLogo = Boolean(
+            base.logo && String(base.logo).trim() && !base.isGenericLogo,
+          );
+          if (hasLogo) return base;
+          const seriesLogo =
+            grouped?.logo && String(grouped.logo).trim()
+              ? grouped.logo
+              : undefined;
+          if (!seriesLogo) return base;
+          return { ...base, logo: seriesLogo, isGenericLogo: false };
+        };
+
+        if (isFinished) {
           if (grouped) {
-            const allEpisodes: { episodeNumber: number; seasonNumber: number; item: PlaylistItem }[] = [];
+            const allEpisodes: {
+              episodeNumber: number;
+              seasonNumber: number;
+              item: PlaylistItem;
+            }[] = [];
             for (const sNoStr in grouped.seasons) {
               const sNo = parseInt(sNoStr, 10);
               allEpisodes.push(...grouped.seasons[sNo]);
@@ -564,24 +763,26 @@ export function useHomeData({
               return a.episodeNumber - b.episodeNumber;
             });
 
-            const currentIndex = allEpisodes.findIndex(ep =>
-              ep.seasonNumber === parsed.season && ep.episodeNumber === parsed.episode
+            const currentIndex = allEpisodes.findIndex(
+              (ep) =>
+                ep.seasonNumber === parsed.season &&
+                ep.episodeNumber === parsed.episode,
             );
 
             if (currentIndex !== -1 && currentIndex < allEpisodes.length - 1) {
               const nextEp = allEpisodes[currentIndex + 1].item;
-              return {
+              return resolveLogo({
                 ...nextEp,
                 currentTime: undefined,
                 duration: undefined,
-                progress: undefined
-              };
+                progress: undefined,
+              });
             }
           }
           return null;
         }
 
-        return item;
+        return resolveLogo(baseItem);
       }
 
       return null;
@@ -594,6 +795,7 @@ export function useHomeData({
     showcaseItems,
     featuredTmdbData,
     activeFeaturedIndex,
+    displayFeaturedIndex,
     setActiveFeaturedIndex,
     populerFilmler,
     populerDiziler,

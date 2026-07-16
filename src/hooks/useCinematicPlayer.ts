@@ -3,6 +3,7 @@ import type Hls from 'hls.js';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { useSettings } from '../context/SettingsContext';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
+import { getPlaybackSettings } from '../utils/playbackSettings';
 
 interface UseCinematicPlayerProps {
   selectedChannel: PlaylistItem | null;
@@ -25,6 +26,12 @@ export function useCinematicPlayer({
   const controlsTimeoutRef = useRef<any>(null);
   const seekOffsetRef = useRef(0);
   const isTranscodingRef = useRef(false);
+  /**
+   * Local H.264 + browser-safe audio. Prefer native app-file first; if Chromium
+   * rejects it (common without faststart / Unicode paths), FFmpeg pure remux
+   * is allowed — main process copies audio (no AAC re-encode / no lip-sync lag).
+   */
+  const localBrowserSafeRef = useRef(false);
   const probedVideoCodecRef = useRef<string>('unknown');
   const activeAudioStreamIdRef = useRef<number | undefined>(undefined);
   const seekRequestIdRef = useRef(0);
@@ -191,7 +198,6 @@ export function useCinematicPlayer({
 
   const executeSeek = async (targetTime: number) => {
     if (!videoRef.current || !selectedChannel) return;
-    setBufferedProgress(0);
     lastRequestedSeekRef.current = targetTime;
     const video = videoRef.current;
 
@@ -215,28 +221,67 @@ export function useCinematicPlayer({
 
     if (!window.electronAPI?.startFfmpegProxy) return;
 
-    // --- Transcode path: try in-stream native seek first (no FFmpeg restart / no black flash).
+    // --- Transcode/remux path ---
+    // Proxy streams are fragmented MP4 (often duration=Infinity). The browser can
+    // only seek reliably *inside already-buffered ranges*. Setting currentTime
+    // outside the buffer is silently ignored → playhead looks stuck.
+    // So: buffered → native; otherwise → FFmpeg restart at absolute target.
     const relative = targetTime - seekOffsetRef.current;
-    const mediaDuration = Number.isFinite(video.duration) ? video.duration : 0;
-    const canNativeWithinStream =
-      relative >= 0 &&
-      mediaDuration > 1 &&
-      relative < mediaDuration - 0.35;
+    const playhead = video.currentTime || 0;
 
-    if (canNativeWithinStream) {
+    let inBufferedRange = false;
+    try {
+      for (let i = 0; i < video.buffered.length; i++) {
+        const start = video.buffered.start(i);
+        const end = video.buffered.end(i);
+        // Keep a small margin so we don't land on the trailing edge of a fragment.
+        if (relative >= start && relative <= end - 0.25) {
+          inBufferedRange = true;
+          break;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // Tiny nudge already at/near target — no-op.
+    if (Math.abs(relative - playhead) < 0.15 && inBufferedRange) {
+      return;
+    }
+
+    if (relative >= 0 && inBufferedRange) {
+      const requestIdAtNative = seekRequestIdRef.current;
       seekGraceUntilRef.current = Date.now() + 6000;
       try {
         video.currentTime = relative;
         if (video.paused) {
           video.play().then(forceUnmute).catch(() => { });
         }
+        // fMP4 sometimes ignores currentTime without throwing — verify and escalate.
+        window.setTimeout(() => {
+          if (!videoRef.current || !isTranscodingRef.current) return;
+          if (seekRequestIdRef.current !== requestIdAtNative) return;
+          const got = videoRef.current.currentTime || 0;
+          if (Math.abs(got - relative) > 1.25) {
+            console.warn(
+              `[Seek] Native in-buffer seek missed (want=${relative.toFixed(2)} got=${got.toFixed(2)}), restarting proxy`,
+            );
+            void restartFfmpegAt(targetTime);
+          }
+        }, 280);
         return;
       } catch {
         // fall through to proxy restart
       }
     }
 
-    // Far jump outside the current FFmpeg window — restart proxy (show seeking HUD).
+    await restartFfmpegAt(targetTime);
+  };
+
+  const restartFfmpegAt = async (targetTime: number) => {
+    if (!videoRef.current || !selectedChannel || !window.electronAPI?.startFfmpegProxy) return;
+
+    setBufferedProgress(0);
     seekGraceUntilRef.current = Date.now() + 20000;
     setPlaybackStatus('seeking');
     setPlaybackMessage(
@@ -330,7 +375,8 @@ export function useCinematicPlayer({
       return;
     }
 
-    const debounceMs = isTranscodingRef.current ? 220 : 100;
+    // Short debounce so rapid ←/→ coalesce, but a single 10s skip still feels instant.
+    const debounceMs = isTranscodingRef.current ? 140 : 80;
     seekTimeoutRef.current = setTimeout(() => {
       const finalTargetTime = pendingSeekTimeRef.current;
       if (finalTargetTime === null) return;
@@ -569,6 +615,7 @@ export function useCinematicPlayer({
     video.playbackRate = playbackSpeedRef.current;
     setFfmpegFallbackActive(false);
     isTranscodingRef.current = false;
+    localBrowserSafeRef.current = false;
     forcedTranscodeModeRef.current = null;
     ffmpegRestartInFlightRef.current = false;
     lastFfmpegRestartAtRef.current = 0;
@@ -589,6 +636,8 @@ export function useCinematicPlayer({
     video.volume = playerVolumeRef.current;
 
     let active = true;
+    const playbackSettings = getPlaybackSettings();
+    const connectionTimeoutMs = playbackSettings.connectionTimeoutSeconds * 1000;
 
     const clearStartupTimeout = () => {
       if (startupTimeoutRef.current) {
@@ -609,8 +658,6 @@ export function useCinematicPlayer({
 
     const armStartupTimeout = () => {
       clearStartupTimeout();
-      // VOD FFmpeg probe + first fragment can exceed 12s on slow IPTV sources.
-      const timeoutMs = isTranscodingRef.current || selectedChannel.type !== 'live' ? 22000 : 12000;
       startupTimeoutRef.current = window.setTimeout(() => {
         if (!active || videoReady || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
         if (!isTranscodingRef.current && window.electronAPI?.startFfmpegProxy) {
@@ -618,7 +665,7 @@ export function useCinematicPlayer({
         } else {
           failPlayback('Sunucu zamaninda yanit vermedi');
         }
-      }, timeoutMs);
+      }, connectionTimeoutMs);
     };
 
     const startFfmpegFallback = async (forceStartTime?: number, reason?: string) => {
@@ -700,7 +747,7 @@ export function useCinematicPlayer({
         lastRecoveryTimeRef.current = now;
 
         recoveryAttemptRef.current += 1;
-        if (recoveryAttemptRef.current <= 3) {
+        if (recoveryAttemptRef.current <= playbackSettings.retryCount) {
           if (isTranscodingRef.current) {
             console.warn("[Player] Video error on transcoding live stream. Restarting fallback...");
             setPlaybackStatus('recovering');
@@ -744,6 +791,9 @@ export function useCinematicPlayer({
         return;
       }
       if (err?.code === 4 || err?.code === 3) {
+        // Native app-file often fails (no faststart / path quirks) even when WMP
+        // plays the file. Fall back to FFmpeg; local copy mode remuxes without
+        // re-encoding audio so lip-sync matches the file on disk.
         startFfmpegFallback(undefined, 'Yerel oynatma basarisiz oldu');
       } else {
         failPlayback(err?.message || 'Oynatma hatasi');
@@ -987,9 +1037,9 @@ export function useCinematicPlayer({
       if (stallTimeout) clearTimeout(stallTimeout);
       const waitStartedAt = Date.now();
       // Transcode path buffers more slowly; don't kill FFmpeg too eagerly.
-      const stallDelay = selectedChannel.type === 'live'
-        ? 12000
-        : (isTranscodingRef.current ? 35000 : 22000);
+      const stallDelay = isTranscodingRef.current
+        ? Math.max(connectionTimeoutMs, 35000)
+        : connectionTimeoutMs;
       stallTimeout = setTimeout(() => {
         if (!active || !video || !selectedChannel) return;
         if (video.seeking || Date.now() < seekGraceUntilRef.current) return;
@@ -1013,19 +1063,19 @@ export function useCinematicPlayer({
           : video.currentTime;
         recoveryAttemptRef.current += 1;
         if (isTranscodingRef.current) {
-          if (recoveryAttemptRef.current > 2) {
+          if (recoveryAttemptRef.current > playbackSettings.retryCount) {
             failPlayback('Akis kurtarilamadi');
             return;
           }
           startFfmpegFallback(seekOffsetRef.current + currentPos, 'Akis takildi');
         } else if (selectedChannel.type !== 'live' && window.electronAPI?.startFfmpegProxy) {
-          if (recoveryAttemptRef.current > 1) {
+          if (recoveryAttemptRef.current > playbackSettings.retryCount) {
             failPlayback('Video bu noktadan devam edemedi');
             return;
           }
           startFfmpegFallback(Math.max(0, seekOffsetRef.current + currentPos), 'Seek sonrasi akis takildi');
         } else {
-          if (selectedChannel.type === 'live' && recoveryAttemptRef.current > 3) {
+          if (selectedChannel.type === 'live' && recoveryAttemptRef.current > playbackSettings.retryCount) {
             failPlayback('Akis kurtarilamadi');
             return;
           }
@@ -1089,11 +1139,18 @@ export function useCinematicPlayer({
         if (hlsInstanceRef.current) {
           hlsInstanceRef.current.destroy();
         }
+        const configuredBufferLength = playbackSettings.bufferEnabled
+          ? playbackSettings.bufferSeconds
+          : 30;
         const hls = new HlsPlayer({
           enableWorker: true,
           lowLatencyMode: false,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
+          maxBufferLength: configuredBufferLength,
+          maxMaxBufferLength: Math.max(60, configuredBufferLength * 2),
+          manifestLoadingTimeOut: connectionTimeoutMs,
+          fragLoadingTimeOut: connectionTimeoutMs,
+          manifestLoadingMaxRetry: playbackSettings.retryCount,
+          fragLoadingMaxRetry: playbackSettings.retryCount,
           enableSoftwareAES: true,
           abrEwmaDefaultEstimate: 40000000,
           xhrSetup: (xhr) => {
@@ -1170,7 +1227,7 @@ export function useCinematicPlayer({
           lastRecoveryTimeRef.current = now;
 
           recoveryAttemptRef.current += 1;
-          if (recoveryAttemptRef.current <= 3) {
+          if (recoveryAttemptRef.current <= playbackSettings.retryCount) {
             console.warn(`[Player] Fatal HLS error (${errorMsg}) on live stream. Reloading stream...`);
             setPlaybackStatus('recovering');
             setPlaybackMessage(getRecoveringMessage(selectedChannel, language));
@@ -1193,7 +1250,7 @@ export function useCinematicPlayer({
           if (data.fatal) {
             if (data.type === 'networkError') {
               hlsNetworkRecoveriesRef.current += 1;
-              if (hlsNetworkRecoveriesRef.current <= 2) {
+              if (hlsNetworkRecoveriesRef.current <= playbackSettings.retryCount) {
                 setPlaybackStatus('recovering');
                 setPlaybackMessage(getRecoveringMessage(selectedChannel));
                 hls.startLoad();
@@ -1207,7 +1264,7 @@ export function useCinematicPlayer({
             } else if (data.type === 'mediaError') {
               hlsMediaRecoveriesRef.current += 1;
               try {
-                if (hlsMediaRecoveriesRef.current <= 1) {
+                if (hlsMediaRecoveriesRef.current <= playbackSettings.retryCount) {
                   setPlaybackStatus('recovering');
                   setPlaybackMessage(getRecoveringMessage(selectedChannel));
                   hls.recoverMediaError();
@@ -1308,6 +1365,7 @@ export function useCinematicPlayer({
             }
 
             const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp', 'pcm_bluray', 'pcm_s16le'];
+            const browserSafeAudio = ['aac', 'mp3', 'opus', 'vorbis', 'mp4a'];
             const selectedCodec = (
               (typeof streamId === 'number'
                 ? res.audioStreams?.find(s => s.streamId === streamId)?.codec
@@ -1323,6 +1381,21 @@ export function useCinematicPlayer({
             }
             // Local remux of HEVC often fails natively in Chromium — prefer FFmpeg path.
             if (isLocalFile && res.videoCodec && /hevc|h265|av1|mpeg2video/i.test(res.videoCodec)) {
+              shouldTranscode = true;
+            }
+            // Local H.264 + AAC: Chromium app-file often fails (error 4) even when
+            // Windows Media Player is fine (moov placement / range / Unicode paths).
+            // Prefer FFmpeg pure remux — main process uses -c:v/-c:a copy for local
+            // so timing matches the file (no AAC re-encode lip-sync lag).
+            if (
+              isLocalFile &&
+              !shouldTranscode &&
+              res.videoCodec &&
+              /h264|avc/i.test(res.videoCodec) &&
+              selectedCodec &&
+              browserSafeAudio.includes(selectedCodec)
+            ) {
+              localBrowserSafeRef.current = true;
               shouldTranscode = true;
             }
           } else if (!isLocalFile) {

@@ -26,6 +26,15 @@ import {
   Download
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import {
+  AUTOPLAY_NEXT_KEY,
+  BUFFER_ENABLED_KEY,
+  BUFFER_SIZE_KEY,
+  CONNECTION_TIMEOUT_KEY,
+  RETRY_COUNT_KEY,
+  getPlaybackSettings,
+} from '../utils/playbackSettings';
+import { prepareSettingsImport } from '../utils/settingsBackup';
 import type { SavedPlaylist } from '../types';
 import { useDownloads } from '../hooks/useDownloads';
 
@@ -212,13 +221,9 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
 
 
-  const [autoPlayNext, setAutoPlayNext] = useState(() => {
-    try { return localStorage.getItem('strmly_auto_play_next') === 'true'; } catch { return false; }
-  });
+  const [autoPlayNext, setAutoPlayNext] = useState(() => getPlaybackSettings().autoPlayNext);
 
-  const [bufferEnabled, setBufferEnabled] = useState(() => {
-    try { return localStorage.getItem('strmly_buffer_enabled') === 'true'; } catch { return false; }
-  });
+  const [bufferEnabled, setBufferEnabled] = useState(() => getPlaybackSettings().bufferEnabled);
   const [hwAccelerationEnabled, setHwAccelerationEnabled] = useState(() => {
     try { return localStorage.getItem('strmly_hw_acceleration_enabled') !== 'false'; } catch { return true; }
   });
@@ -228,15 +233,9 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
       window.electronAPI.getAppVersion().then(setAppVersion).catch(() => {});
     }
   }, []);
-  const [bufferSize, setBufferSize] = useState(() => {
-    try { return localStorage.getItem('strmly_buffer_size') || '30'; } catch { return '30'; }
-  });
-  const [connectionTimeout, setConnectionTimeout] = useState(() => {
-    try { return localStorage.getItem('strmly_connection_timeout') || '10'; } catch { return '10'; }
-  });
-  const [retryCount, setRetryCount] = useState(() => {
-    try { return localStorage.getItem('strmly_retry_count') || '3'; } catch { return '3'; }
-  });
+  const [bufferSize, setBufferSize] = useState(() => String(getPlaybackSettings().bufferSeconds));
+  const [connectionTimeout, setConnectionTimeout] = useState(() => String(getPlaybackSettings().connectionTimeoutSeconds));
+  const [retryCount, setRetryCount] = useState(() => String(getPlaybackSettings().retryCount));
   const [uiScale, setUiScale] = useState(() => {
     try { return localStorage.getItem('strmly_ui_scale') || 'medium'; } catch { return 'medium'; }
   });
@@ -347,16 +346,27 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
       try {
         const worker = new Worker(new URL('../utils/settings.worker.ts', import.meta.url), { type: 'module' });
         worker.onmessage = (e) => {
-          const { success, result, error } = e.data;
-          if (success) {
-            Object.entries(result).forEach(([key, value]) => {
-              localStorage.setItem(key, String(value));
-            });
-            onShowToast(language === 'tr' ? 'Ayarlar içe aktarıldı. Uygulamayı yenileyin.' : 'Settings imported. Please refresh the app.');
-          } else {
-            onShowToast(language === 'tr' ? `İçe aktarma hatası: ${error}` : `Import error: ${error}`);
+          try {
+            const { success, result, error } = e.data;
+            if (success) {
+              const { localEntries, diskEntries } = prepareSettingsImport(result);
+              const diskResult = window.electronAPI?.saveConfigBatchSync?.(diskEntries);
+              if (diskResult && !diskResult.success) {
+                throw new Error(diskResult.error || 'Disk persistence failed');
+              }
+              Object.entries(localEntries).forEach(([key, value]) => {
+                localStorage.setItem(key, value);
+              });
+              onShowToast(language === 'tr' ? 'Ayarlar içe aktarıldı. Uygulamayı yenileyin.' : 'Settings imported. Please refresh the app.');
+            } else {
+              onShowToast(language === 'tr' ? `İçe aktarma hatası: ${error}` : `Import error: ${error}`);
+            }
+          } catch (importError) {
+            console.error('Settings import failed:', importError);
+            onShowToast(language === 'tr' ? 'İçe aktarma hatası.' : 'Import error.');
+          } finally {
+            worker.terminate();
           }
-          worker.terminate();
         };
         worker.postMessage({ type: 'import', payload: reader.result as string });
       } catch {
@@ -1293,7 +1303,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     onClick={() => {
                       const next = !autoPlayNext;
                       setAutoPlayNext(next);
-                      saveLocalSettingHelper('strmly_auto_play_next', String(next));
+                      saveLocalSettingHelper(AUTOPLAY_NEXT_KEY, String(next));
                     }}
                     className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
                       autoPlayNext
@@ -1317,7 +1327,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       onClick={() => {
                         const next = !bufferEnabled;
                         setBufferEnabled(next);
-                        saveLocalSettingHelper('strmly_buffer_enabled', String(next));
+                        saveLocalSettingHelper(BUFFER_ENABLED_KEY, String(next));
                       }}
                       className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none shrink-0 cursor-pointer ${
                         bufferEnabled
@@ -1343,7 +1353,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                           value={bufferSize}
                           onChange={(e) => {
                             setBufferSize(e.target.value);
-                            saveLocalSettingHelper('strmly_buffer_size', e.target.value);
+                            saveLocalSettingHelper(BUFFER_SIZE_KEY, e.target.value);
                           }}
                         />
                         <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Saniye</span>
@@ -1413,7 +1423,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       value={connectionTimeout}
                       onChange={(e) => {
                         setConnectionTimeout(e.target.value);
-                        saveLocalSettingHelper('strmly_connection_timeout', e.target.value);
+                        saveLocalSettingHelper(CONNECTION_TIMEOUT_KEY, e.target.value);
                       }}
                     />
                     <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Saniye</span>
@@ -1429,7 +1439,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                       value={retryCount}
                       onChange={(e) => {
                         setRetryCount(e.target.value);
-                        saveLocalSettingHelper('strmly_retry_count', e.target.value);
+                        saveLocalSettingHelper(RETRY_COUNT_KEY, e.target.value);
                       }}
                     />
                     <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Deneme</span>

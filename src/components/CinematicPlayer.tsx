@@ -4,6 +4,7 @@ import { SPEED_OPTIONS } from '../constants';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 import { useSettings } from '../context/SettingsContext';
+import { AUTOPLAY_NEXT_KEY, getPlaybackSettings } from '../utils/playbackSettings';
 import type { PlayerQualityLevel } from '../hooks/useCinematicPlayer';
 
 interface CinematicPlayerProps {
@@ -103,6 +104,59 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   // Seek uses a light overlay so the scrub position stays visible; don't blank the whole player.
   const shouldShowPlaybackOverlay = isPlaybackError || (!isSeeking && (!videoReady || !!playbackMessage));
 
+  const [isSeekingVideo, setIsSeekingVideo] = useState(false);
+  const [showSnapshot, setShowSnapshot] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const captureSnapshot = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    try {
+      canvas.width = video.videoWidth || video.clientWidth || 1920;
+      canvas.height = video.videoHeight || video.clientHeight || 1080;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setShowSnapshot(true);
+      }
+    } catch (e) {
+      console.warn("Could not capture video frame snapshot:", e);
+      setShowSnapshot(false);
+    }
+  }, [videoRef]);
+
+  const [skipOverlay, setSkipOverlay] = useState<{ direction: 'forward' | 'backward'; amount: number; key: number } | null>(null);
+  const skipTimeoutRef = useRef<any>(null);
+
+  const triggerSkipAnimation = useCallback((direction: 'forward' | 'backward') => {
+    setSkipOverlay(prev => {
+      if (prev && prev.direction === direction) {
+        return {
+          direction,
+          amount: prev.amount + 10,
+          key: Date.now()
+        };
+      }
+      return {
+        direction,
+        amount: 10,
+        key: Date.now()
+      };
+    });
+
+    if (skipTimeoutRef.current) clearTimeout(skipTimeoutRef.current);
+    skipTimeoutRef.current = setTimeout(() => {
+      setSkipOverlay(null);
+    }, 850);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (skipTimeoutRef.current) clearTimeout(skipTimeoutRef.current);
+    };
+  }, []);
+
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [currentSubmenu, setCurrentSubmenu] = useState<'main' | 'speed' | 'quality' | 'subtitles' | 'scale' | 'audio'>('main');
   const [videoScaleMode, setVideoScaleMode] = useState<'fit' | 'fill' | 'zoom' | '16:9' | '4:3'>(() => {
@@ -145,7 +199,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState(0);
 
-  const [autoPlayNext, setAutoPlayNext] = useState(() => localStorage.getItem('cinema_player_autoplay_next') !== 'false');
+  const [autoPlayNext, setAutoPlayNext] = useState(() => getPlaybackSettings().autoPlayNext);
 
   const [isAutoplayCancelled, setIsAutoplayCancelled] = useState(false);
 
@@ -172,7 +226,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   }, [videoScaleMode]);
 
   useEffect(() => {
-    localStorage.setItem('cinema_player_autoplay_next', String(autoPlayNext));
+    localStorage.setItem(AUTOPLAY_NEXT_KEY, String(autoPlayNext));
   }, [autoPlayNext]);
 
   // Find sibling episodes sorted by season & episode
@@ -303,6 +357,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       const rect = timelineRef.current.getBoundingClientRect();
       const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       const targetTime = pos * duration;
+      captureSnapshot();
       onSeek(targetTime);
       setIsDraggingTimeline(false);
       setDragTime(null);
@@ -314,7 +369,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingTimeline, duration, onSeek, updateDragPosition]);
+  }, [isDraggingTimeline, duration, onSeek, updateDragPosition, captureSnapshot]);
 
   useEffect(() => {
     if (!showControls) {
@@ -338,12 +393,21 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
   }, [showSettingsMenu]);
 
   const handleSkipBackward = useCallback(() => {
+    captureSnapshot();
+    triggerSkipAnimation('backward');
     onSeek(Math.max(0, currentTime - 10), true);
-  }, [onSeek, currentTime]);
+  }, [onSeek, currentTime, triggerSkipAnimation, captureSnapshot]);
 
   const handleSkipForward = useCallback(() => {
-    onSeek(Math.min(duration, currentTime + 10), true);
-  }, [onSeek, duration, currentTime]);
+    // duration can be 0 before metadata/probe lands — Math.min(0, t+10) would
+    // always clamp to 0 and make ±10s skips look "stuck".
+    const next = currentTime + 10;
+    const capped =
+      duration > 0 && Number.isFinite(duration) ? Math.min(duration, next) : next;
+    captureSnapshot();
+    triggerSkipAnimation('forward');
+    onSeek(Math.max(0, capped), true);
+  }, [onSeek, duration, currentTime, triggerSkipAnimation, captureSnapshot]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -455,7 +519,24 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
       >
         <video
           ref={videoRef}
-          className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 transition-[width,height,object-fit] duration-300 ${
+          onSeeking={() => {
+            setIsSeekingVideo(true);
+          }}
+          onSeeked={() => {
+            setIsSeekingVideo(false);
+            setTimeout(() => {
+              setShowSnapshot(false);
+            }, 60);
+          }}
+          onPlaying={() => {
+            setIsSeekingVideo(false);
+            setShowSnapshot(false);
+          }}
+          onPlay={() => {
+            setIsSeekingVideo(false);
+            setShowSnapshot(false);
+          }}
+          className={`pointer-events-none absolute left-1/2 top-1/2 ${
             (videoScaleMode === '16:9' || videoScaleMode === '4:3')
               ? 'w-auto h-auto max-w-full max-h-full object-fill'
               : 'w-full h-full ' + (
@@ -466,7 +547,13 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
           style={{
             aspectRatio: videoScaleMode === '16:9' ? '16/9' : videoScaleMode === '4:3' ? '4/3' : 'auto',
             objectPosition: 'center center',
-            margin: 'auto'
+            margin: 'auto',
+            opacity: isSeekingVideo ? 0.35 : 1,
+            filter: isSeekingVideo ? 'blur(16px) brightness(0.65)' : 'blur(0px) brightness(1)',
+            transform: `translate(-50%, -50%) scale(${isSeekingVideo ? 0.96 : 1})`,
+            transition: isSeekingVideo
+              ? 'opacity 50ms ease-out, filter 80ms ease-out, transform 100ms cubic-bezier(0.1, 0.8, 0.3, 1)'
+              : 'opacity 350ms ease-out, filter 350ms ease-out, transform 400ms cubic-bezier(0.1, 0.8, 0.3, 1)'
           }}
           autoPlay
           playsInline
@@ -483,6 +570,71 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
             />
           ))}
         </video>
+
+        {/* Canvas Snapshot Overlay (Prevents Black Seek Flash) */}
+        <canvas
+          ref={canvasRef}
+          className={`absolute pointer-events-none transition-opacity duration-300 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${
+            showSnapshot ? 'opacity-100' : 'opacity-0'
+          } ${
+            (videoScaleMode === '16:9' || videoScaleMode === '4:3')
+              ? 'w-auto h-auto max-w-full max-h-full object-fill'
+              : 'w-full h-full ' + (
+                videoScaleMode === 'fit' ? 'object-contain' :
+                videoScaleMode === 'fill' ? 'object-fill' : 'object-cover'
+              )
+          }`}
+          style={{
+            aspectRatio: videoScaleMode === '16:9' ? '16/9' : videoScaleMode === '4:3' ? '4/3' : 'auto',
+            objectPosition: 'center center',
+            margin: 'auto',
+            zIndex: 9
+          }}
+        />
+
+        {/* Skip Animation Overlay */}
+        {skipOverlay && (
+          <div className="absolute inset-0 pointer-events-none z-10 flex select-none overflow-hidden">
+            {/* Left Side (Backward) */}
+            <div className={`w-1/2 h-full relative flex items-center justify-center transition-opacity duration-200 ${skipOverlay.direction === 'backward' ? 'opacity-100' : 'opacity-0'}`}>
+              {skipOverlay.direction === 'backward' && (
+                <>
+                  <div key={skipOverlay.key} className="absolute left-0 top-1/2 -translate-y-1/2 w-full aspect-square max-w-[360px] bg-gradient-to-r from-white/[0.07] to-transparent animate-skip-ripple-left pointer-events-none rounded-full" />
+                  <div className="flex flex-col items-center gap-1 z-10 animate-fade-in">
+                    <div className="flex gap-0.5 text-white/95">
+                      <ChevronLeft size={28} className="animate-chevron-left-1" />
+                      <ChevronLeft size={28} className="animate-chevron-left-2" />
+                      <ChevronLeft size={28} className="animate-chevron-left-3" />
+                    </div>
+                    <span className="text-sm font-black tracking-wide text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
+                      -{skipOverlay.amount} {language === 'tr' ? 'Sn' : 'Sec'}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Right Side (Forward) */}
+            <div className={`w-1/2 h-full relative flex items-center justify-center transition-opacity duration-200 ${skipOverlay.direction === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
+              {skipOverlay.direction === 'forward' && (
+                <>
+                  <div key={skipOverlay.key} className="absolute right-0 top-1/2 -translate-y-1/2 w-full aspect-square max-w-[360px] bg-gradient-to-l from-white/[0.07] to-transparent animate-skip-ripple-right pointer-events-none rounded-full" />
+                  <div className="flex flex-col items-center gap-1 z-10 animate-fade-in">
+                    <div className="flex gap-0.5 text-white/95">
+                      <ChevronRight size={28} className="animate-chevron-right-1" />
+                      <ChevronRight size={28} className="animate-chevron-right-2" />
+                      <ChevronRight size={28} className="animate-chevron-right-3" />
+                    </div>
+                    <span className="text-sm font-black tracking-wide text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
+                      +{skipOverlay.amount} {language === 'tr' ? 'Sn' : 'Sec'}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {channel.type === 'series' && nextEpisode && duration > 35 && (duration - currentTime <= 35) && (duration - currentTime > 1) && !isAutoplayCancelled && (
           <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
             onClick={(e) => e.stopPropagation()}

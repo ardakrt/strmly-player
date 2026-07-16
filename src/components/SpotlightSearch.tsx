@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Film, Tv, Search, X, ChevronRight, Layers, Mic, Trash2, Clock, Volume2 } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Play, Film, Tv, Search, X, Layers, Trash2, Clock, LoaderCircle } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import { useSettings } from '../context/SettingsContext';
 import { cleanMovieName } from '../utils/tmdb';
+
+type SpotlightScope = 'all' | 'live' | 'movie' | 'series';
 
 interface SpotlightSearchProps {
   showSpotlight: boolean;
@@ -13,15 +15,45 @@ interface SpotlightSearchProps {
   setSpotlightActiveStep: (step: 'select_scope' | 'searching') => void;
   focusedButtonIndex: number;
   setFocusedButtonIndex: (idx: number) => void;
-  spotlightScope: 'all' | 'live' | 'movie' | 'series';
-  setSpotlightScope: (scope: 'all' | 'live' | 'movie' | 'series') => void;
+  spotlightScope: SpotlightScope;
+  setSpotlightScope: (scope: SpotlightScope) => void;
   spotlightSearchInput: string;
   setSpotlightSearchInput: (val: string) => void;
   spotlightInputRef: React.RefObject<HTMLInputElement | null>;
   spotlightSearchResults: any[];
+  isSearchingWorker?: boolean;
   handlePlayStream: (item: PlaylistItem) => void;
   handleOpenDetails: (item: PlaylistItem) => void;
   handleOpenSeriesModalDirect: (series: GroupedSeries) => void;
+}
+
+function highlightMatch(text: string, query: string) {
+  const q = query.trim();
+  if (!q || !text) return text;
+
+  try {
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+    if (parts.length === 1) return text;
+
+    return parts.map((part, i) =>
+      part.toLowerCase() === q.toLowerCase() ? (
+        <mark key={i} className="spotlight-match">
+          {part}
+        </mark>
+      ) : (
+        <span key={i}>{part}</span>
+      ),
+    );
+  } catch {
+    return text;
+  }
+}
+
+function typeLabel(type: string, language: 'tr' | 'en'): string {
+  if (type === 'series') return language === 'tr' ? 'Dizi' : 'Series';
+  if (type === 'movie') return language === 'tr' ? 'Film' : 'Movie';
+  return language === 'tr' ? 'Canlı' : 'Live';
 }
 
 export function SpotlightSearch({
@@ -33,16 +65,16 @@ export function SpotlightSearch({
   setSpotlightSearchInput,
   spotlightInputRef,
   spotlightSearchResults,
+  isSearchingWorker = false,
   handlePlayStream,
   handleOpenDetails,
-  handleOpenSeriesModalDirect
+  handleOpenSeriesModalDirect,
 }: SpotlightSearchProps) {
-  const { language, onShowToast } = useSettings();
+  const { language } = useSettings();
   const [focusedResultIndex, setFocusedResultIndex] = useState(0);
-  const [isListening, setIsListening] = useState(false);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Recent Searches state
   const [recentSearches, setRecentSearches] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('strmly_recent_searches:v1');
@@ -52,462 +84,494 @@ export function SpotlightSearch({
     }
   });
 
-  const isActiveRecent = !spotlightSearchInput.trim() && recentSearches.length > 0;
-  const activeList = isActiveRecent ? recentSearches : spotlightSearchResults;
+  const query = spotlightSearchInput.trim();
+  const isQueryEmpty = !query;
+  const isActiveRecent = isQueryEmpty && recentSearches.length > 0;
+  const visibleResults = useMemo(
+    () => spotlightSearchResults.slice(0, 50),
+    [spotlightSearchResults],
+  );
+  const activeList = isActiveRecent ? recentSearches : visibleResults;
 
-  // Reset focused result when search query or category scope changes
+  const scopesList = useMemo(
+    () =>
+      [
+        { id: 'all' as const, label: language === 'tr' ? 'Tümü' : 'All', icon: Layers },
+        { id: 'series' as const, label: language === 'tr' ? 'Diziler' : 'Series', icon: Play },
+        { id: 'movie' as const, label: language === 'tr' ? 'Filmler' : 'Movies', icon: Film },
+        { id: 'live' as const, label: language === 'tr' ? 'Canlı' : 'Live', icon: Tv },
+      ] as const,
+    [language],
+  );
+
   useEffect(() => {
     setFocusedResultIndex(0);
-  }, [spotlightSearchInput, spotlightScope]);
+  }, [spotlightSearchInput, spotlightScope, isActiveRecent]);
 
-  if (!showSpotlight) return null;
+  const scrollIntoView = useCallback((index: number) => {
+    const container = resultsContainerRef.current;
+    if (!container) return;
+    const items = container.querySelectorAll('[data-spotlight-item]');
+    const targetItem = items[index] as HTMLElement | undefined;
+    targetItem?.scrollIntoView({ block: 'nearest' });
+  }, []);
 
-  const scopesList: { id: 'all' | 'series' | 'movie' | 'live'; label: string; icon: any }[] = [
-    { id: 'all', label: language === 'tr' ? 'Tümü' : 'All', icon: Layers },
-    { id: 'series', label: language === 'tr' ? 'Diziler' : 'Series', icon: Play },
-    { id: 'movie', label: language === 'tr' ? 'Filmler' : 'Movies', icon: Film },
-    { id: 'live', label: language === 'tr' ? 'Canlı TV' : 'Live TV', icon: Tv }
-  ];
-
-  const saveRecentSearch = (match: any) => {
-    setRecentSearches(prev => {
-      const filtered = prev.filter(x => x.item.id !== match.item.id);
-      const updated = [match, ...filtered].slice(0, 6);
+  const saveRecentSearch = useCallback((match: any) => {
+    setRecentSearches((prev) => {
+      const filtered = prev.filter((x) => x.item.id !== match.item.id);
+      const updated = [match, ...filtered].slice(0, 8);
       localStorage.setItem('strmly_recent_searches:v1', JSON.stringify(updated));
       return updated;
     });
-  };
+  }, []);
 
-  const removeRecentSearch = (e: React.MouseEvent, id: string) => {
+  const removeRecentSearch = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setRecentSearches(prev => {
-      const updated = prev.filter(x => x.item.id !== id);
+    setRecentSearches((prev) => {
+      const updated = prev.filter((x) => x.item.id !== id);
       localStorage.setItem('strmly_recent_searches:v1', JSON.stringify(updated));
       return updated;
     });
-  };
+  }, []);
 
-  const clearAllRecent = () => {
+  const clearAllRecent = useCallback(() => {
     setRecentSearches([]);
     localStorage.removeItem('strmly_recent_searches:v1');
-  };
+  }, []);
 
-  const handleSelectResult = (match: any) => {
-    if (!match) return;
-    const { type, item } = match;
-    setShowSpotlight(false);
-    saveRecentSearch(match);
+  const handleSelectResult = useCallback(
+    (match: any) => {
+      if (!match) return;
+      const { type, item } = match;
+      setShowSpotlight(false);
+      saveRecentSearch(match);
 
-    if (type === 'live') {
-      handlePlayStream(item as PlaylistItem);
-    } else if (type === 'movie') {
-      handleOpenDetails(item as PlaylistItem);
-    } else if (type === 'series') {
-      handleOpenSeriesModalDirect(item as GroupedSeries);
-    }
-  };
+      if (type === 'live') {
+        handlePlayStream(item as PlaylistItem);
+      } else if (type === 'movie') {
+        handleOpenDetails(item as PlaylistItem);
+      } else if (type === 'series') {
+        handleOpenSeriesModalDirect(item as GroupedSeries);
+      }
+    },
+    [setShowSpotlight, saveRecentSearch, handlePlayStream, handleOpenDetails, handleOpenSeriesModalDirect],
+  );
 
-  const handleVoiceSearch = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      onShowToast(language === 'tr' ? 'Tarayıcınız sesli aramayı desteklemiyor.' : 'Voice search is not supported in this browser.');
+  const cycleScope = useCallback(
+    (direction: 1 | -1) => {
+      const ids = scopesList.map((s) => s.id);
+      const current = ids.indexOf(spotlightScope);
+      const next = (current + direction + ids.length) % ids.length;
+      setSpotlightScope(ids[next]);
+    },
+    [scopesList, spotlightScope, setSpotlightScope],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      cycleScope(e.key === 'ArrowRight' ? 1 : -1);
       return;
     }
-    
-    const recognition = new SpeechRecognition();
-    recognition.lang = language === 'tr' ? 'tr-TR' : 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
+    if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '4') {
+      e.preventDefault();
+      const idx = Number(e.key) - 1;
+      if (scopesList[idx]) setSpotlightScope(scopesList[idx].id);
+      return;
+    }
 
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.onresult = (event: any) => {
-      const speechToText = event.results[0][0].transcript;
-      setSpotlightSearchInput(speechToText);
-    };
-
-    recognition.start();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (activeList.length === 0) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setFocusedResultIndex(prev => {
+      setFocusedResultIndex((prev) => {
         const next = Math.min(prev + 1, activeList.length - 1);
-        scrollIntoView(next);
+        requestAnimationFrame(() => scrollIntoView(next));
         return next;
       });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setFocusedResultIndex(prev => {
+      setFocusedResultIndex((prev) => {
         const next = Math.max(prev - 1, 0);
-        scrollIntoView(next);
+        requestAnimationFrame(() => scrollIntoView(next));
         return next;
       });
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const currentMatch = activeList[focusedResultIndex];
-      if (currentMatch) {
-        handleSelectResult(currentMatch);
-      }
+      if (currentMatch) handleSelectResult(currentMatch);
     }
   };
 
-  const scrollIntoView = (index: number) => {
-    const container = resultsContainerRef.current;
-    if (!container) return;
-    const items = container.querySelectorAll(isActiveRecent ? '.recent-item' : '.result-item');
-    const targetItem = items[index] as HTMLElement;
-    if (!targetItem) return;
+  useEffect(() => {
+    if (!showSpotlight) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && panelRef.current) {
+        const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+          'button, input, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showSpotlight]);
 
-    const containerTop = container.scrollTop;
-    const containerBottom = containerTop + container.clientHeight;
-    const elemTop = targetItem.offsetTop;
-    const elemBottom = elemTop + targetItem.clientHeight;
+  if (!showSpotlight) return null;
 
-    if (elemTop < containerTop) {
-      container.scrollTop = elemTop;
-    } else if (elemBottom > containerBottom) {
-      container.scrollTop = elemBottom - container.clientHeight;
+  const placeholder =
+    spotlightScope === 'all'
+      ? language === 'tr'
+        ? 'Film, dizi veya kanal ara…'
+        : 'Search movies, series or channels…'
+      : spotlightScope === 'live'
+        ? language === 'tr'
+          ? 'Kanal ara…'
+          : 'Search channels…'
+        : spotlightScope === 'movie'
+          ? language === 'tr'
+            ? 'Film ara…'
+            : 'Search movies…'
+          : language === 'tr'
+            ? 'Dizi ara…'
+            : 'Search series…';
+
+  const resultCountLabel = !isQueryEmpty
+    ? isSearchingWorker
+      ? language === 'tr'
+        ? 'Aranıyor…'
+        : 'Searching…'
+      : visibleResults.length === 0
+        ? language === 'tr'
+          ? 'Sonuç yok'
+          : 'No results'
+        : language === 'tr'
+          ? `${visibleResults.length}${spotlightSearchResults.length > 50 ? '+' : ''} sonuç`
+          : `${visibleResults.length}${spotlightSearchResults.length > 50 ? '+' : ''} results`
+    : isActiveRecent
+      ? language === 'tr'
+        ? `${recentSearches.length} kayıt`
+        : `${recentSearches.length} saved`
+      : null;
+
+  const renderResultRow = (match: any, idx: number, mode: 'result' | 'recent') => {
+    const type = match.type as string;
+    const item = match.item;
+    const isLive = type === 'live';
+    const isSeries = type === 'series';
+    const isFocused = focusedResultIndex === idx;
+
+    let logoSrc: string;
+    let titleName: string;
+    let subtext: string;
+
+    if (isSeries) {
+      const series = item as GroupedSeries;
+      logoSrc = series.logo || '';
+      titleName = cleanMovieName(series.name);
+      const seasonsCount = Object.keys(series.seasons || {}).length;
+      subtext =
+        mode === 'recent'
+          ? typeLabel('series', language)
+          : language === 'tr'
+            ? `${seasonsCount} sezon · ${series.episodesCount} bölüm`
+            : `${seasonsCount} season${seasonsCount > 1 ? 's' : ''} · ${series.episodesCount} ep.`;
+    } else {
+      const plItem = item as PlaylistItem;
+      logoSrc = plItem.logo || '';
+      titleName = plItem.type === 'movie' ? cleanMovieName(plItem.name) : plItem.name;
+      subtext =
+        mode === 'recent'
+          ? typeLabel(type, language)
+          : plItem.group || typeLabel(type, language);
     }
+
+    const actionHint =
+      type === 'live'
+        ? language === 'tr'
+          ? 'İzle'
+          : 'Watch'
+        : language === 'tr'
+          ? 'Aç'
+          : 'Open';
+
+    return (
+      <div
+        key={`${mode}-${type}-${item.id}-${idx}`}
+        data-spotlight-item
+        role="option"
+        aria-selected={isFocused}
+        tabIndex={-1}
+        onClick={() => handleSelectResult(match)}
+        onMouseEnter={() => setFocusedResultIndex(idx)}
+        className={`spotlight-row group ${isFocused ? 'is-active' : ''}`}
+      >
+        <div className={`spotlight-thumb ${isLive ? 'spotlight-thumb--live' : 'spotlight-thumb--vod'}`}>
+          <ImageWithFallback
+            src={logoSrc}
+            name={titleName}
+            group={subtext}
+            size="sm"
+            itemType={type as 'live' | 'movie' | 'series'}
+          />
+          {isLive && (
+            <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={`truncate text-[13px] tracking-tight ${
+                isFocused ? 'font-bold text-white' : 'font-semibold text-white/78'
+              }`}
+            >
+              {mode === 'result' ? highlightMatch(titleName, query) : titleName}
+            </span>
+            <span className={`spotlight-type-chip ${isLive ? 'spotlight-type-chip--live' : ''}`}>
+              {isLive && (
+                <span className="relative flex h-1 w-1">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-1 w-1 rounded-full bg-emerald-400" />
+                </span>
+              )}
+              {typeLabel(type, language)}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-white/32">{subtext}</p>
+        </div>
+
+        {mode === 'recent' ? (
+          <button
+            type="button"
+            onClick={(e) => removeRecentSearch(e, item.id)}
+            className={`shrink-0 grid h-7 w-7 place-items-center rounded-full text-white/25 hover:text-white/75 hover:bg-white/[0.07] transition-colors cursor-pointer ${
+              isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            title={language === 'tr' ? 'Kaldır' : 'Remove'}
+            aria-label={language === 'tr' ? 'Kaldır' : 'Remove'}
+          >
+            <Trash2 size={12} />
+          </button>
+        ) : (
+          <span className="spotlight-action">
+            {actionHint}
+            <span className="opacity-50 text-[9px]">↵</span>
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
-    <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowSpotlight(false))(); } }} tabIndex={0} role="button"
-      className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+    <div
+      className="spotlight-backdrop fixed inset-0 z-[100] flex items-start justify-center pt-[min(12vh,100px)] px-4 pb-8 animate-fade-in"
       onClick={() => setShowSpotlight(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowSpotlight(false);
+        }
+      }}
     >
-      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button"
-        className="relative w-full max-w-3xl bg-neutral-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden glass-slide-up max-h-[85vh]"
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={language === 'tr' ? 'İçerik ara' : 'Search content'}
+        className="spotlight-panel relative w-full max-w-[580px] flex flex-col overflow-hidden rounded-[22px] glass-slide-up max-h-[min(74vh,660px)]"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
-        {/* Search input container */}
-        <div className="relative flex items-center p-4 border-b border-white/5 shrink-0 gap-3">
-          <Search size={18} className="text-[var(--accent-color)] shrink-0 ml-1" />
-          <input
-            ref={spotlightInputRef}
-            type="text"
-            placeholder={
-              spotlightScope === 'all'
-                ? (language === 'tr' ? 'Film, dizi veya canlı TV kanalı ara...' : 'Search movies, series or live channels...')
-                : spotlightScope === 'live'
-                  ? (language === 'tr' ? 'Canlı TV kanalı ara...' : 'Search live TV channels...')
-                  : spotlightScope === 'movie'
-                    ? (language === 'tr' ? 'Sinema filmi ara...' : 'Search movies...')
-                    : (language === 'tr' ? 'Televizyon dizisi ara...' : 'Search TV series...')
-            }
-            value={spotlightSearchInput}
-            onChange={(e) => setSpotlightSearchInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full bg-transparent text-sm text-white outline-none placeholder-neutral-500 font-medium py-1"
-          />
-          
-          {/* Voice Search Button */}
-          <button type="button"
-            onClick={handleVoiceSearch}
-            className={`p-1.5 rounded-lg border transition-all shrink-0 cursor-pointer flex items-center justify-center ${
-              isListening
-                ? 'bg-red-500/20 border-red-500 text-red-500 animate-pulse'
-                : 'bg-white/[0.02] border-white/5 text-neutral-400 hover:text-white hover:bg-white/5'
-            }`}
-            title={language === 'tr' ? 'Sesle Ara' : 'Voice Search'}
-           aria-label={language === 'tr' ? 'Sesle Ara' : 'Voice Search'}>
-            <Mic size={14} />
-          </button>
+        {/* Header */}
+        <div className="relative z-[1] shrink-0 px-4 pt-4 pb-3">
+          <div className="mb-3 flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+                Strmly
+              </span>
+              <span className="h-0.5 w-0.5 rounded-full bg-white/20" />
+              <span className="truncate text-[11px] font-medium text-white/45">
+                {language === 'tr' ? 'Hızlı arama' : 'Quick search'}
+              </span>
+            </div>
+            {resultCountLabel && (
+              <span className="shrink-0 text-[10px] font-medium tabular-nums text-white/28">
+                {resultCountLabel}
+              </span>
+            )}
+          </div>
 
-          {spotlightSearchInput && (
-            <button type="button"
-              onClick={() => setSpotlightSearchInput('')}
-              className="p-1 rounded-lg hover:bg-white/5 text-neutral-400 hover:text-white transition-all shrink-0 cursor-pointer"
-             aria-label="Close">
-              <X size={14} />
-            </button>
-          )}
-          <div className="hidden sm:flex items-center gap-1 shrink-0 ml-2 select-none">
-            <span className="text-[9px] font-black text-neutral-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded shadow-sm tracking-wider font-mono">ESC</span>
+          <div className="spotlight-field">
+            {isSearchingWorker && query ? (
+              <LoaderCircle size={16} className="shrink-0 text-white/40 animate-spin" />
+            ) : (
+              <Search size={16} className="shrink-0 text-white/38" />
+            )}
+            <input
+              ref={spotlightInputRef}
+              type="text"
+              placeholder={placeholder}
+              value={spotlightSearchInput}
+              onChange={(e) => setSpotlightSearchInput(e.target.value)}
+              className="w-full bg-transparent text-[14px] text-white outline-none placeholder:text-white/28 font-medium tracking-tight"
+              autoComplete="off"
+              spellCheck={false}
+              aria-autocomplete="list"
+              aria-controls="spotlight-results"
+            />
+            {spotlightSearchInput ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSpotlightSearchInput('');
+                  spotlightInputRef.current?.focus();
+                }}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-white/35 hover:text-white hover:bg-white/[0.1] transition-colors cursor-pointer"
+                aria-label={language === 'tr' ? 'Temizle' : 'Clear'}
+              >
+                <X size={13} />
+              </button>
+            ) : (
+              <kbd className="spotlight-kbd hidden sm:inline-flex">ESC</kbd>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center gap-1 overflow-x-auto hide-scrollbar">
+            {scopesList.map((scope) => {
+              const Icon = scope.icon;
+              const isActive = spotlightScope === scope.id;
+              return (
+                <button
+                  type="button"
+                  key={scope.id}
+                  onClick={() => setSpotlightScope(scope.id)}
+                  className={`spotlight-scope ${isActive ? 'is-active' : ''}`}
+                >
+                  <Icon size={12} strokeWidth={isActive ? 2.25 : 1.75} />
+                  <span>{scope.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Scope Tabs */}
-        <div className="flex items-center gap-1.5 px-4 py-2 bg-neutral-900/40 border-b border-white/5 shrink-0 overflow-x-auto hide-scrollbar">
-          {scopesList.map((scope) => {
-            const Icon = scope.icon;
-            const isActive = spotlightScope === scope.id;
-            return (
-              <button type="button"
-                key={scope.id}
-                onClick={() => setSpotlightScope(scope.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer shrink-0 border ${
-                  isActive
-                    ? 'bg-[var(--accent-color)]/15 border-[var(--accent-color)]/30 text-[var(--accent-color)] shadow-sm'
-                    : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-neutral-400 hover:text-neutral-200'
-                }`}
-              >
-                <Icon size={12} />
-                <span>{scope.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        <div className="mx-4 h-px shrink-0 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
 
-        {/* Search Results Area */}
+        {/* Results */}
         <div
+          id="spotlight-results"
           ref={resultsContainerRef}
-          className="flex-1 overflow-y-auto hide-scrollbar p-3 max-h-[60vh] flex flex-col gap-1 pr-1.5"
+          role="listbox"
+          className="relative z-[1] flex-1 overflow-y-auto custom-modal-scrollbar px-2.5 py-2.5 min-h-[190px]"
         >
-          {isListening && (
-            <div className="flex flex-col items-center justify-center py-16 text-center select-none animate-pulse">
-              <div className="w-16 h-16 rounded-full bg-red-500/10 border-2 border-red-500/30 flex items-center justify-center mb-4 text-red-500 relative">
-                <span className="absolute inset-0 rounded-full bg-red-500/10 animate-ping"></span>
-                <Volume2 size={24} />
-              </div>
-              <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest">
-                {language === 'tr' ? 'Dinleniyor...' : 'Listening...'}
-              </h4>
-              <p className="text-[11px] text-neutral-500 mt-2">
-                {language === 'tr' ? 'Konuşmaya başlayın...' : 'Speak now...'}
-              </p>
-            </div>
-          )}
-
-          {!isListening && !spotlightSearchInput.trim() ? (
-            /* Recent Searches & Recommendations Split Layout */
-            recentSearches.length > 0 ? (
-              <div className="flex flex-col gap-4 py-2 px-1 select-none">
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <span className="text-[10px] font-extrabold tracking-wider uppercase text-neutral-400 flex items-center gap-1.5 font-mono">
+          {isQueryEmpty ? (
+            isActiveRecent ? (
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between px-2.5 pb-1.5 pt-0.5">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/28">
                     <Clock size={11} />
-                    {language === 'tr' ? 'SON ARAMALAR' : 'RECENT SEARCHES'}
+                    {language === 'tr' ? 'Son aramalar' : 'Recent'}
                   </span>
-                  <button type="button"
+                  <button
+                    type="button"
                     onClick={clearAllRecent}
-                    className="text-[9px] font-bold text-red-400/70 hover:text-red-400 transition-colors cursor-pointer"
+                    className="text-[10px] font-medium text-white/28 hover:text-white/55 transition-colors cursor-pointer"
                   >
-                    {language === 'tr' ? 'Tümünü Temizle' : 'Clear All'}
+                    {language === 'tr' ? 'Temizle' : 'Clear'}
                   </button>
                 </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {recentSearches.map((match, idx) => {
-                    const { type, item } = match;
-                    const title = type === 'series' ? cleanMovieName(item.name) : (item.type === 'movie' ? cleanMovieName(item.name) : item.name);
-                    const sub = type === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') : (item.type === 'movie' ? (language === 'tr' ? 'Film' : 'Movie') : (language === 'tr' ? 'Canlı TV' : 'Live TV'));
-                    const isFocused = focusedResultIndex === idx;
-
+                {recentSearches.map((match, idx) => renderResultRow(match, idx, 'recent'))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center select-none">
+                <div className="spotlight-empty-orb mb-4">
+                  <Search size={18} />
+                </div>
+                <p className="text-[13px] font-semibold tracking-tight text-white/72">
+                  {language === 'tr' ? 'Ne arıyorsun?' : 'What are you looking for?'}
+                </p>
+                <p className="mt-1.5 max-w-[280px] text-[12px] leading-relaxed text-white/32">
+                  {language === 'tr'
+                    ? 'Film, dizi veya kanal adını yaz. Filtrelerle daraltabilirsin.'
+                    : 'Type a title or channel. Use filters to narrow results.'}
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5">
+                  {scopesList.slice(1).map((scope) => {
+                    const Icon = scope.icon;
                     return (
-                      <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(); } }} tabIndex={0} role="button"
-                        key={`recent-${item.id}-${idx}`}
-                        onClick={() => handleSelectResult(match)}
-                        onMouseEnter={() => setFocusedResultIndex(idx)}
-                        className={`recent-item group flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all duration-150 border ${
-                          isFocused
-                            ? 'bg-white/[0.06] border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.25)] scale-[1.01]'
-                            : 'bg-white/[0.01] hover:bg-white/[0.04] border border-white/5 hover:border-white/10'
-                        }`}
+                      <button
+                        key={scope.id}
+                        type="button"
+                        onClick={() => setSpotlightScope(scope.id)}
+                        className="spotlight-scope border border-white/[0.08] bg-white/[0.03]"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`relative rounded-md overflow-hidden bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 w-7 h-9`}>
-                            <ImageWithFallback
-                              src={item.logo || ''}
-                              name={title}
-                              group={sub}
-                              size="sm"
-                              itemType={type}
-                            />
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className={`text-xs font-semibold truncate transition-colors ${
-                              isFocused ? 'text-white' : 'text-neutral-300'
-                            }`}>
-                              {title}
-                            </span>
-                            <span className="text-[9px] font-medium text-neutral-500 uppercase tracking-wide mt-0.5">
-                              {sub}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <button type="button"
-                          onClick={(e) => removeRecentSearch(e, item.id)}
-                          className={`p-1 rounded hover:bg-white/10 text-neutral-600 hover:text-red-400 transition-all cursor-pointer mr-1 ${
-                            isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                          }`}
-                          title={language === 'tr' ? 'Kaldır' : 'Remove'}
-                         aria-label={language === 'tr' ? 'Kaldır' : 'Remove'}>
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
+                        <Icon size={11} />
+                        {scope.label}
+                      </button>
                     );
                   })}
                 </div>
               </div>
-            ) : (
-              /* Completely Empty State */
-              <div className="flex flex-col items-center justify-center py-20 text-center select-none opacity-60">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4 text-[var(--accent-color)] shadow-inner">
-                  <Search size={22} />
-                </div>
-                <h4 className="text-xs font-bold text-neutral-200 uppercase tracking-widest">
-                  {language === 'tr' ? 'Aramaya Başlayın' : 'Start Searching'}
-                </h4>
-                <p className="text-[11px] text-neutral-500 max-w-xs mt-2 leading-relaxed">
-                  {language === 'tr'
-                    ? `Aradığınız içeriği hızlıca bulmak için yazmaya başlayın veya ses simgesini kullanın.`
-                    : `Start typing to search and discover items instantly, or use voice search.`}
-                </p>
-              </div>
             )
-          ) : !isListening && spotlightSearchResults.length === 0 ? (
-            /* No Results State */
-            <div className="flex flex-col items-center justify-center py-20 text-center select-none opacity-60">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4 text-neutral-400">
-                <X size={22} />
+          ) : isSearchingWorker && visibleResults.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 select-none">
+              <LoaderCircle size={20} className="mb-3 animate-spin text-white/30" />
+              <p className="text-[12px] font-medium text-white/35">
+                {language === 'tr' ? 'Aranıyor…' : 'Searching…'}
+              </p>
+            </div>
+          ) : visibleResults.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center select-none">
+              <div className="spotlight-empty-orb mb-4 text-white/35">
+                <X size={16} />
               </div>
-              <h4 className="text-xs font-bold text-neutral-200 uppercase tracking-widest">
-                {language === 'tr' ? 'Sonuç Bulunamadı' : 'No Results Found'}
-              </h4>
-              <p className="text-[11px] text-neutral-500 max-w-xs mt-2 leading-relaxed">
+              <p className="text-[13px] font-semibold tracking-tight text-white/72">
+                {language === 'tr' ? 'Sonuç bulunamadı' : 'No results'}
+              </p>
+              <p className="mt-1.5 max-w-[280px] text-[12px] leading-relaxed text-white/32">
                 {language === 'tr'
-                  ? 'Aradığınız kelimeye uygun içerik bulunamadı. Lütfen kelimeleri kontrol edin.'
-                  : 'No content found matching your query. Please double-check spelling.'}
+                  ? `“${query}” için eşleşme yok. Filtreyi veya yazımı dene.`
+                  : `Nothing matches “${query}”. Try another filter or spelling.`}
               </p>
             </div>
           ) : (
-            /* Search Results Layout with Zengin Kartlar & Canlılık Efektleri */
-            !isListening && spotlightSearchResults.slice(0, 50).map((match, idx) => {
-              const type = match.type;
-              const item = match.item;
-
-              const isLive = type === 'live';
-              const isMovie = type === 'movie';
-              const isSeries = type === 'series';
-
-              let logoSrc: string;
-              let titleName: string;
-              let subtext: string;
-
-              if (isSeries) {
-                const series = item as GroupedSeries;
-                logoSrc = series.logo || '';
-                titleName = cleanMovieName(series.name);
-                const seasonsCount = Object.keys(series.seasons).length;
-                subtext = language === 'tr'
-                  ? `${seasonsCount} Sezon • ${series.episodesCount} Bölüm`
-                  : `${seasonsCount} Season${seasonsCount > 1 ? 's' : ''} • ${series.episodesCount} Episode${series.episodesCount > 1 ? 's' : ''}`;
-              } else {
-                const plItem = item as PlaylistItem;
-                logoSrc = plItem.logo || '';
-                titleName = plItem.type === 'movie' ? cleanMovieName(plItem.name) : plItem.name;
-                subtext = plItem.group || (language === 'tr' ? 'GENEL' : 'GENERAL');
-              }
-
-              const isFocused = focusedResultIndex === idx;
-
-              return (
-                <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSelectResult(match))(); } }} tabIndex={0} role="button"
-                  key={`${type}-${item.id}`}
-                  onClick={() => handleSelectResult(match)}
-                  onMouseEnter={() => setFocusedResultIndex(idx)}
-                  className={`result-item group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 border ${
-                    isFocused
-                      ? 'bg-white/[0.06] border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.35)] scale-[1.01] translate-x-1'
-                      : 'bg-transparent border-transparent hover:bg-white/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    {/* Item Thumbnail */}
-                    <div className={`relative rounded-lg overflow-hidden bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 shadow-md ${
-                      isLive ? 'w-10 h-10 p-1' : 'w-8 h-11'
-                    }`}>
-                      <ImageWithFallback
-                        src={logoSrc}
-                        name={titleName}
-                        group={subtext}
-                        size="sm"
-                        itemType={type}
-                      />
-                    </div>
-                    {/* Item Text */}
-                    <div className="flex flex-col min-w-0">
-                      <span className={`text-xs font-bold transition-colors truncate ${
-                        isFocused ? 'text-white' : 'text-neutral-300'
-                      }`}>
-                        {titleName}
-                      </span>
-                      <span className={`text-[10px] font-semibold transition-colors mt-0.5 truncate uppercase tracking-wider ${
-                        isFocused ? 'text-neutral-400' : 'text-neutral-500'
-                      }`}>
-                        {subtext}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions / Badges */}
-                  <div className="shrink-0 flex items-center gap-2 pl-2 select-none">
-                    {isFocused ? (
-                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--accent-color)]/15 border border-[var(--accent-color)]/30 text-[8px] font-black text-[var(--accent-color)] uppercase tracking-widest">
-                        <span>{language === 'tr' ? 'Oynat/Aç' : 'Play/Open'}</span>
-                        <span className="text-[10px] font-medium leading-none mb-0.5 font-sans">↵</span>
-                      </div>
-                    ) : (
-                      <>
-                        {isLive && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[8px] font-black uppercase tracking-widest flex items-center">
-                            <span className="relative flex h-1.5 w-1.5 mr-1">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                            </span>
-                            {language === 'tr' ? 'CANLI' : 'LIVE'}
-                          </span>
-                        )}
-                        {isMovie && (
-                          <span className="px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[8px] font-black uppercase tracking-widest">
-                            {language === 'tr' ? 'SİNEMA' : 'MOVIE'}
-                          </span>
-                        )}
-                        {isSeries && (
-                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[8px] font-black uppercase tracking-widest">
-                            {language === 'tr' ? 'DİZİ' : 'SERIES'}
-                          </span>
-                        )}
-                        <ChevronRight size={12} className="text-neutral-700 group-hover:text-neutral-500 transition-colors ml-1" />
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+            <div className="flex flex-col gap-0.5">
+              {visibleResults.map((match, idx) => renderResultRow(match, idx, 'result'))}
+            </div>
           )}
         </div>
 
-        {/* Command Palette Footer */}
-        <div className="px-4 py-2 border-t border-white/5 bg-neutral-950 flex items-center justify-between text-[9px] font-semibold text-neutral-500 shrink-0 select-none">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
-              <kbd className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-black text-neutral-400 font-mono">↑↓</kbd>
-              <span>{language === 'tr' ? 'Gezin' : 'Navigate'}</span>
+        {/* Footer */}
+        <div className="spotlight-footer relative z-[1] flex items-center justify-between gap-3 px-4 py-2.5 shrink-0 select-none">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium text-white/28">
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="spotlight-kbd">↑↓</kbd>
+              {language === 'tr' ? 'Gezin' : 'Move'}
             </span>
-            <span className="flex items-center gap-1">
-              <kbd className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-black text-neutral-400 font-mono">Enter</kbd>
-              <span>{language === 'tr' ? 'Oynat/Aç' : 'Play/Open'}</span>
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="spotlight-kbd">↵</kbd>
+              {language === 'tr' ? 'Seç' : 'Select'}
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1.5">
+              <kbd className="spotlight-kbd">Ctrl 1-4</kbd>
+              {language === 'tr' ? 'Filtre' : 'Filter'}
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            <kbd className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-black text-neutral-400 font-mono">ESC</kbd>
-            <span>{language === 'tr' ? 'Kapat' : 'Close'}</span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-white/28">
+            <kbd className="spotlight-kbd">ESC</kbd>
+            {language === 'tr' ? 'Kapat' : 'Close'}
+          </span>
         </div>
       </div>
     </div>

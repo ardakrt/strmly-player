@@ -1,243 +1,315 @@
 import { useState, useEffect, useMemo, useRef, memo } from 'react';
-import { Tv } from 'lucide-react';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
-import { cleanMovieName, getTmdbApiKey, tmdbCache, globalSyncPosterMap, getResolvedTmdbResult, resolveTmdbImageSrc } from '../utils/tmdb';
-import { getFallbackGradient } from '../utils/helpers';
+import {
+  cleanMovieName,
+  getTmdbApiKey,
+  tmdbCache,
+  globalSyncPosterMap,
+  getResolvedTmdbResult,
+  resolveTmdbImageSrc,
+} from '../utils/tmdb';
 import { TMDB_CACHE_VERSION } from '../constants';
 import type { ImageWithFallbackProps } from '../types';
+import { TitleLogoPlate } from './TitleLogoPlate';
 
-export const ImageWithFallback = memo(({ src, name, group, size = 'md', itemType, isGenericLogo, aspect, cover, lazy = true }: ImageWithFallbackProps) => {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(!lazy);
+const TMDB_TIMEOUT_MS = 3200;
 
-  useEffect(() => {
-    if (!lazy) return;
-    const el = rootRef.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsVisible(true);
-      return;
-    }
+/**
+ * Poster for movie/series:
+ * 1) TMDB poster/backdrop
+ * 2) Else custom title-logo designed from TMDB official name (or cleaned playlist name)
+ *
+ * Live channels still use playlist logos.
+ */
+export const ImageWithFallback = memo(
+  ({
+    src,
+    name,
+    size = 'md',
+    itemType,
+    isGenericLogo,
+    aspect,
+    cover,
+    lazy = true,
+    fallbackToPlaylist = false,
+  }: ImageWithFallbackProps) => {
+    const rootRef = useRef<HTMLDivElement>(null);
+    const [isVisible, setIsVisible] = useState(!lazy);
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some(entry => entry.isIntersecting)) {
+    useEffect(() => {
+      if (!lazy) {
         setIsVisible(true);
-        observer.disconnect();
-      }
-    }, { rootMargin: '320px' });
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [lazy]);
-
-  const cleanTitle = useMemo(() => {
-    if (itemType === 'series') {
-      return parseSeriesEpisodeInfo(name).cleanTitle;
-    } else if (itemType === 'movie') {
-      return cleanMovieName(name);
-    }
-    return name;
-  }, [name, itemType]);
-
-  const resolvedAspect = aspect || 'portrait';
-
-  const cacheKey = useMemo(() => {
-    if (itemType !== 'movie' && itemType !== 'series') return '';
-    return `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle.toLowerCase()}-${resolvedAspect}`;
-  }, [cleanTitle, itemType, resolvedAspect]);
-
-  const usesTmdbCover = itemType === 'movie' || itemType === 'series';
-
-  // Cache'den poster URL'sini al (sadece bir kez)
-  const cachedPoster = useMemo(() => {
-    if (!cacheKey) return undefined;
-    const cached = globalSyncPosterMap.get(`resolved-poster-${cacheKey}`);
-    return cached || undefined;
-  }, [cacheKey]);
-
-  const [error, setError] = useState(false);
-  const [failedImageSrc, setFailedImageSrc] = useState<string | null>(null);
-  const [tmdbPoster, setTmdbPoster] = useState<string | null>(cachedPoster || null);
-  const [imgLoaded, setImgLoaded] = useState(!!cachedPoster);
-
-  const [prevSrc, setPrevSrc] = useState(src);
-  const [prevCachedPoster, setPrevCachedPoster] = useState(cachedPoster);
-
-  if (src !== prevSrc || cachedPoster !== prevCachedPoster) {
-    setPrevSrc(src);
-    setPrevCachedPoster(cachedPoster);
-    setError(false);
-    setFailedImageSrc(null);
-    if (!cachedPoster) {
-      setImgLoaded(false);
-    }
-  }
-
-  // Timeout for src images
-  useEffect(() => {
-    if (!isVisible || !src || cachedPoster) return;
-    const timer = setTimeout(() => {
-      if (!imgLoaded && !error) {
-        setError(true);
-        setImgLoaded(true);
-      }
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [src, imgLoaded, error, cachedPoster, isVisible]);
-
-  // Timeout for TMDB images - 5 seconds
-  useEffect(() => {
-    if (!isVisible || !usesTmdbCover || cachedPoster || !cacheKey) return;
-    const timer = setTimeout(() => {
-      if (!imgLoaded && !error) {
-        setError(true);
-        setImgLoaded(true);
-      }
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [usesTmdbCover, cachedPoster, cacheKey, imgLoaded, error, isVisible]);
-
-  // TMDB poster yükleme - sadece cache'de yoksa
-  useEffect(() => {
-    if (!isVisible || !usesTmdbCover || !cacheKey) return;
-    const memoryCacheKey = `resolved-poster-${cacheKey}`;
-    const existingPoster = globalSyncPosterMap.get(memoryCacheKey);
-    if (existingPoster) return; // Zaten başarılı şekilde cache'de var
-
-    const apiKey = getTmdbApiKey();
-    let cancelled = false;
-
-    const fetchPoster = async () => {
-      // Memory cache kontrol
-      const memCached = globalSyncPosterMap.get(memoryCacheKey);
-      if (memCached) {
-        if (!cancelled) {
-          setTmdbPoster(memCached);
-          setImgLoaded(true);
-        }
         return;
-      } else if (globalSyncPosterMap.has(memoryCacheKey)) {
-        globalSyncPosterMap.delete(memoryCacheKey);
+      }
+      const el = rootRef.current;
+      if (!el) {
+        setIsVisible(true);
+        return;
+      }
+      if (typeof IntersectionObserver === 'undefined') {
+        setIsVisible(true);
+        return;
       }
 
-      // IndexedDB cache kontrol
-      try {
-        const cachedResolved = await tmdbCache.get(memoryCacheKey);
-        if (cachedResolved) {
-          if (!String(cachedResolved).startsWith('app-file://')) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            setIsVisible(true);
+            observer.disconnect();
+          }
+        },
+        { rootMargin: '400px' },
+      );
+      observer.observe(el);
+      const failsafe = window.setTimeout(() => setIsVisible(true), 500);
+      return () => {
+        observer.disconnect();
+        window.clearTimeout(failsafe);
+      };
+    }, [lazy]);
+
+    const cleanTitle = useMemo(() => {
+      if (itemType === 'series') {
+        return parseSeriesEpisodeInfo(name).cleanTitle || name;
+      }
+      if (itemType === 'movie') {
+        return cleanMovieName(name) || name;
+      }
+      return name;
+    }, [name, itemType]);
+
+    const playlistName = (cleanTitle || name || '').trim() || 'İsimsiz';
+    const resolvedAspect = aspect || 'portrait';
+    const usesTmdbCover = itemType === 'movie' || itemType === 'series';
+
+    const cacheKey = useMemo(() => {
+      if (!usesTmdbCover) return '';
+      const cacheVersion = resolvedAspect === 'landscape'
+        ? `${TMDB_CACHE_VERSION}-backdrop-v2`
+        : TMDB_CACHE_VERSION;
+      return `${cacheVersion}-${itemType}-${playlistName.toLowerCase()}-${resolvedAspect}`;
+    }, [playlistName, itemType, resolvedAspect, usesTmdbCover]);
+
+    const cachedPoster = useMemo(() => {
+      if (!cacheKey) return undefined;
+      return globalSyncPosterMap.get(`resolved-poster-${cacheKey}`) || undefined;
+    }, [cacheKey]);
+
+    const [failedImageSrc, setFailedImageSrc] = useState<string | null>(null);
+    const [tmdbPoster, setTmdbPoster] = useState<string | null>(
+      cachedPoster || null,
+    );
+    /** Official name from TMDB search (preferred for title-logo) */
+    const [tmdbOfficialTitle, setTmdbOfficialTitle] = useState<string | null>(
+      null,
+    );
+    const [imgLoaded, setImgLoaded] = useState(!!cachedPoster);
+    const [fetchDone, setFetchDone] = useState(!!cachedPoster || !usesTmdbCover);
+
+    const [prevKey, setPrevKey] = useState(cacheKey);
+    if (cacheKey !== prevKey) {
+      setPrevKey(cacheKey);
+      setFailedImageSrc(null);
+      setTmdbPoster(cachedPoster || null);
+      setTmdbOfficialTitle(null);
+      setImgLoaded(!!cachedPoster);
+      setFetchDone(!!cachedPoster || !usesTmdbCover);
+    }
+
+    useEffect(() => {
+      if (!isVisible || !usesTmdbCover || !cacheKey) {
+        setFetchDone(true);
+        return;
+      }
+
+      const memoryCacheKey = `resolved-poster-${cacheKey}`;
+      const titleCacheKey = `resolved-title-${cacheKey}`;
+      const existing = globalSyncPosterMap.get(memoryCacheKey);
+      const existingTitle = globalSyncPosterMap.get(titleCacheKey);
+      if (existingTitle) setTmdbOfficialTitle(existingTitle);
+      if (existing) {
+        setTmdbPoster(existing);
+        setFetchDone(true);
+        return;
+      }
+
+      const apiKey = getTmdbApiKey();
+      if (!apiKey) {
+        setTmdbPoster(null);
+        setFetchDone(true);
+        return;
+      }
+
+      let cancelled = false;
+
+      const run = async () => {
+        try {
+          const cachedResolved = await tmdbCache.get(memoryCacheKey);
+          if (cancelled) return;
+          if (
+            cachedResolved &&
+            !String(cachedResolved).startsWith('app-file://')
+          ) {
             globalSyncPosterMap.set(memoryCacheKey, cachedResolved);
-            if (!cancelled) {
-              setTmdbPoster(cachedResolved);
-              setImgLoaded(true);
-            }
+            setTmdbPoster(cachedResolved);
+            setFetchDone(true);
+            setImgLoaded(false);
             return;
           }
+        } catch {
+          // continue
         }
-      } catch (e) {
-        console.error("IndexedDB resolved-poster read error:", e);
-      }
 
-      if (cancelled) return;
-
-      // TMDB API'den çek
-      try {
-        const endpoint = itemType === 'series' ? 'tv' : 'movie';
-        const result = await getResolvedTmdbResult(endpoint, apiKey, cleanTitle);
         if (cancelled) return;
 
-        const tmdbPath = resolvedAspect === 'landscape' 
-          ? (result?.backdrop_path || result?.poster_path) 
-          : (result?.poster_path || result?.backdrop_path);
-        const posterPath = await resolveTmdbImageSrc(tmdbPath, 'w500') || null;
-        if (posterPath) {
-          globalSyncPosterMap.set(memoryCacheKey, posterPath);
-        } else {
-          globalSyncPosterMap.delete(memoryCacheKey);
-        }
+        try {
+          const endpoint = itemType === 'series' ? 'tv' : 'movie';
+          const result = await Promise.race([
+            getResolvedTmdbResult(endpoint, apiKey, playlistName),
+            new Promise<null>((resolve) =>
+              window.setTimeout(() => resolve(null), TMDB_TIMEOUT_MS),
+            ),
+          ]);
 
-        // Don't cache app-file:// URLs in IndexedDB — they are install-specific
-        // and become stale when the app is reinstalled or disk cache is cleared.
-        if (posterPath && !posterPath.startsWith('app-file://')) {
-          try {
-            await tmdbCache.set(memoryCacheKey, posterPath);
-          } catch (e) {
-            console.error("IndexedDB resolved-poster write error:", e);
+          if (cancelled) return;
+
+          if (!result) {
+            setTmdbPoster(null);
+            setFetchDone(true);
+            return;
+          }
+
+          // Official title for custom logo plate
+          const official = (
+            result.name ||
+            result.title ||
+            result.original_name ||
+            result.original_title ||
+            ''
+          ).trim();
+          if (official) {
+            setTmdbOfficialTitle(official);
+            globalSyncPosterMap.set(titleCacheKey, official);
+          }
+
+          const tmdbPath = resolvedAspect === 'landscape'
+            ? result.backdrop_path || result.poster_path
+            : result.poster_path || result.backdrop_path;
+
+          const posterPath =
+            (await resolveTmdbImageSrc(tmdbPath, 'w500')) || null;
+          if (cancelled) return;
+
+          if (posterPath) {
+            globalSyncPosterMap.set(memoryCacheKey, posterPath);
+            if (!posterPath.startsWith('app-file://')) {
+              try {
+                await tmdbCache.set(memoryCacheKey, posterPath);
+              } catch {
+                // ignore
+              }
+            }
+            setTmdbPoster(posterPath);
+            setImgLoaded(false);
+          } else {
+            globalSyncPosterMap.delete(memoryCacheKey);
+            setTmdbPoster(null);
+          }
+          setFetchDone(true);
+        } catch {
+          if (!cancelled) {
+            setTmdbPoster(null);
+            setFetchDone(true);
           }
         }
+      };
 
-        if (!cancelled) {
-          setTmdbPoster(posterPath || null);
-          setImgLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setTmdbPoster(null);
-        }
-      }
-    };
+      void run();
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      cacheKey,
+      usesTmdbCover,
+      playlistName,
+      itemType,
+      isVisible,
+      resolvedAspect,
+    ]);
 
-    fetchPoster();
+    const playlistSrc =
+      isGenericLogo || !src || !String(src).trim() ? undefined : src;
+    const usablePlaylistSrc =
+      playlistSrc && playlistSrc !== failedImageSrc ? playlistSrc : undefined;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [cacheKey, usesTmdbCover, cleanTitle, itemType, cachedPoster, isVisible, resolvedAspect]);
+    const posterSrc = tmdbPoster || cachedPoster;
+    const usableTmdbSrc =
+      posterSrc && posterSrc !== failedImageSrc ? posterSrc : undefined;
 
-  const effectiveSrc = isGenericLogo ? undefined : src;
-  const posterSrc = tmdbPoster || cachedPoster;
-  const usablePosterSrc = posterSrc && posterSrc !== failedImageSrc ? posterSrc : undefined;
-  const usableFallbackSrc = effectiveSrc && !error && effectiveSrc !== failedImageSrc ? effectiveSrc : undefined;
+    // Movie/series: TMDB art only (playlist logos often broken/black)
+    const usesPlaylistFallback = Boolean(
+      usesTmdbCover && !usableTmdbSrc && fallbackToPlaylist && usablePlaylistSrc,
+    );
+    const displaySrc = usesTmdbCover
+      ? usableTmdbSrc || (usesPlaylistFallback ? usablePlaylistSrc : null)
+      : usablePlaylistSrc || null;
 
-  const displaySrc = isVisible && usesTmdbCover
-    ? (usablePosterSrc || usableFallbackSrc || null)
-    : (isVisible ? (usableFallbackSrc || null) : null);
+    const logoTitle = (tmdbOfficialTitle || playlistName).trim() || 'İsimsiz';
 
-  if (displaySrc) {
+    // ── Has poster image ──────────────────────────────────────
+    if (displaySrc) {
+      return (
+        <div
+          ref={rootRef}
+          className="absolute inset-0 z-[1] overflow-hidden bg-[#16161a]"
+        >
+          {!imgLoaded && (
+            <TitleLogoPlate
+              title={logoTitle}
+              kind={itemType}
+              size={size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : 'md'}
+              aspect={resolvedAspect}
+            />
+          )}
+          <img
+            src={displaySrc}
+            alt=""
+            onLoad={() => setImgLoaded(true)}
+            className={`absolute inset-0 z-10 h-full w-full transition-opacity duration-300 ${
+              imgLoaded ? 'opacity-100' : 'opacity-0'
+            } ${
+              usesPlaylistFallback
+                ? 'object-cover'
+                : usesTmdbCover || cover
+                ? 'object-cover'
+                : 'object-contain max-h-[85%] max-w-[85%] m-auto'
+            }`}
+            onError={() => {
+              setFailedImageSrc(displaySrc);
+              setTmdbPoster(null);
+              setImgLoaded(true);
+            }}
+          />
+        </div>
+      );
+    }
+
+    // ── No poster: custom title logo from TMDB name ───────────
+    // While still fetching, show logo plate immediately (not blank)
     return (
-      <div ref={rootRef} className="absolute inset-0 bg-neutral-900 overflow-hidden flex items-center justify-center">
-        {!imgLoaded && (
-          <div className="absolute inset-0 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 bg-[length:200%_100%] animate-shimmer" />
-        )}
-        <img
-          src={displaySrc}
-          alt=""
-          onLoad={() => setImgLoaded(true)}
-          className={`transition-opacity duration-500 ease-out ${imgLoaded ? 'opacity-100' : 'opacity-0'} ${
-            usesTmdbCover || cover
-              ? "w-full h-full object-cover z-10"
-              : (size === 'lg'
-                  ? "max-h-[60%] max-w-[60%] object-contain z-10"
-                  : "max-h-[70%] max-w-[70%] object-contain z-10")
-          }`}
-          onError={() => {
-            if (displaySrc) setFailedImageSrc(displaySrc);
-            setError(true);
-            setImgLoaded(true);
-          }}
+      <div ref={rootRef} className="absolute inset-0 z-[1]">
+        <TitleLogoPlate
+          title={logoTitle}
+          kind={itemType}
+          size={size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : 'md'}
+          aspect={resolvedAspect}
         />
+        {!fetchDone && usesTmdbCover ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden opacity-40">
+            <div className="h-full w-1/3 animate-pulse bg-white/40" />
+          </div>
+        ) : null}
       </div>
     );
-  }
-
-  const isLg = size === 'lg';
-  const circleSize = isLg ? "w-12 h-12" : "w-9 h-9";
-  const iconSize = isLg ? 24 : 16;
-  const textSize = isLg ? "text-xs font-extrabold" : "text-[9px] font-bold";
-
-  return (
-    <div
-      ref={rootRef}
-      className={`absolute inset-0 bg-gradient-to-tr ${getFallbackGradient(name)} flex flex-col items-center justify-center text-center select-none ${isLg ? 'p-6' : 'p-4'}`}
-    >
-      <div className={`${circleSize} rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-1.5 shadow-inner`}>
-        <Tv size={iconSize} className="text-white/60" />
-      </div>
-      <span className={`${textSize} uppercase tracking-widest text-neutral-200 max-w-full truncate px-1`}>
-        {cleanTitle}
-      </span>
-      <span className="text-[8px] text-neutral-500 uppercase tracking-widest font-semibold mt-0.5 max-w-full truncate">
-        {group || 'VOD'}
-      </span>
-    </div>
-  );
-});
+  },
+);

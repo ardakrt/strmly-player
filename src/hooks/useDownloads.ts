@@ -209,6 +209,7 @@ async function hydrateDownloadsForProfile(
           if (Array.isArray(legacyParsed) && legacyParsed.length > 0) {
             stored = legacyParsed;
             adapter.save(DOWNLOADS_SETTING_KEY, legacyParsed);
+            localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
           }
         }
       } catch {
@@ -254,7 +255,6 @@ async function startNextDownload() {
         ? {
             ...download,
             status: "downloading",
-            progress: 0,
             speed: "",
             timeLeft: "",
             queuePosition: undefined,
@@ -439,6 +439,9 @@ function ensureIpcListeners() {
                 timeLeft: "",
               };
             }
+            if (download.status === "paused") {
+              return download;
+            }
             return {
               ...download,
               progress: data.progress,
@@ -506,7 +509,6 @@ function scheduleAutoRetry(downloadId: string, error?: string) {
             ? {
                 ...d,
                 status: "pending",
-                progress: 0,
                 speed: "",
                 timeLeft: "",
                 error: undefined,
@@ -675,7 +677,6 @@ export function useDownloads() {
               ? {
                   ...d,
                   status: "pending",
-                  progress: 0,
                   speed: "",
                   timeLeft: "",
                   error: undefined,
@@ -802,7 +803,6 @@ export function useDownloads() {
           ? {
               ...item,
               status: "pending",
-              progress: 0,
               speed: "",
               timeLeft: "",
               error: undefined,
@@ -900,7 +900,6 @@ export function useDownloads() {
           ? {
               ...d,
               status: "pending",
-              progress: 0,
               speed: "",
               timeLeft: "",
               error: undefined,

@@ -231,6 +231,7 @@ export function useAppProvider() {
     setFocusedButtonIndex,
     spotlightInputRef,
     spotlightSearchResults,
+    isSearchingWorker,
   } = useSpotlightSearch({
     searchInputRef,
     items,
@@ -326,6 +327,7 @@ export function useAppProvider() {
     showcaseItems,
     featuredTmdbData,
     activeFeaturedIndex,
+    displayFeaturedIndex,
     setActiveFeaturedIndex,
     populerFilmler,
     populerDiziler,
@@ -384,16 +386,17 @@ export function useAppProvider() {
   const activeShowcaseList =
     showcaseItems.length > 0 ? showcaseItems : HERO_BACKDROPS;
   const isPlaylistHero = showcaseItems.length > 0;
+  // Paint hero from displayFeaturedIndex so title/logo/backdrop never desync while next slide loads.
   const currentHeroItem = useMemo(
     () =>
       isPlaylistHero
-        ? (showcaseItems[activeFeaturedIndex] as (typeof items)[number])
+        ? (showcaseItems[displayFeaturedIndex] as (typeof items)[number])
         : null,
-    [isPlaylistHero, showcaseItems, activeFeaturedIndex],
+    [isPlaylistHero, showcaseItems, displayFeaturedIndex],
   );
   const fallbackHeroItem = useMemo(
-    () => (!isPlaylistHero ? HERO_BACKDROPS[activeFeaturedIndex] : null),
-    [isPlaylistHero, activeFeaturedIndex],
+    () => (!isPlaylistHero ? HERO_BACKDROPS[displayFeaturedIndex] : null),
+    [isPlaylistHero, displayFeaturedIndex],
   );
 
   const [heroAmbientColors, setHeroAmbientColors] = useState<AmbientColors>(() => {
@@ -413,20 +416,21 @@ export function useAppProvider() {
         ? fallbackHeroItem.img
         : undefined;
 
-    const initialColors = getHashColors(activeItemName);
-    setHeroAmbientColors(initialColors);
-
-    if (backdropUrl) {
-      let active = true;
-      extractColorsFromImage(backdropUrl).then((extractedColors) => {
-        if (active && extractedColors) {
-          setHeroAmbientColors(extractedColors);
-        }
-      });
-      return () => {
-        active = false;
-      };
+    // Keep previous ambient colors while the next backdrop extracts — avoid hash-color snap flash.
+    if (!backdropUrl) {
+      setHeroAmbientColors(getHashColors(activeItemName));
+      return;
     }
+
+    let active = true;
+    extractColorsFromImage(backdropUrl).then((extractedColors) => {
+      if (active && extractedColors) {
+        setHeroAmbientColors(extractedColors);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, [currentHeroItem, fallbackHeroItem, featuredTmdbData]);
 
   useEffect(() => {
@@ -597,6 +601,7 @@ export function useAppProvider() {
       setFocusedButtonIndex,
       spotlightInputRef,
       spotlightSearchResults,
+      isSearchingWorker,
     },
     catalog: {
       items,
@@ -643,6 +648,7 @@ export function useAppProvider() {
       fallbackHeroItem,
       currentHeroItem,
       activeFeaturedIndex,
+      displayFeaturedIndex,
       setActiveFeaturedIndex,
       activeShowcaseList,
       uniqueRecentlyWatched,

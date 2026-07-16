@@ -5,7 +5,8 @@ import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
 import {
   cleanMovieName,
   getResolvedTmdbResult,
-  resolveTmdbImageSrc
+  resolveTmdbImageSrc,
+  fetchTmdbDetails,
 } from '../utils/tmdb';
 import { getMockDetails } from '../utils/helpers';
 
@@ -29,7 +30,16 @@ export function useDetailModal({
   const [activeSeason, setActiveSeason] = useState<number>(1);
   const [expandedEpisodeId, setExpandedEpisodeId] = useState<string | null>(null);
 
-  const [tmdbData, setTmdbData] = useState<{ id?: number; match: string; rating: string; year: string; desc: string; poster?: string; backdrop?: string } | null>(null);
+  const [tmdbData, setTmdbData] = useState<{
+    id?: number;
+    match: string;
+    rating: string;
+    year: string;
+    desc: string;
+    poster?: string;
+    backdrop?: string;
+    genres?: string[];
+  } | null>(null);
   const [tmdbShowId, setTmdbShowId] = useState<number | null>(null);
 
   // Sync TMDB/Mock data cache on Detail Modal open
@@ -61,6 +71,22 @@ export function useDetailModal({
             const posterPath = await resolveTmdbImageSrc(result.poster_path, 'w500', signal);
             const backdropPath = await resolveTmdbImageSrc(result.backdrop_path, 'original', signal);
             if (signal.aborted) return;
+
+            let genres: string[] = [];
+            let overview = result.overview || '';
+            try {
+              const details: any = await fetchTmdbDetails(endpoint, tmdbApiKey, result.id, signal);
+              if (details && !details.error) {
+                if (Array.isArray(details.genres)) {
+                  genres = details.genres.slice(0, 3).map((g: any) => String(g.name || '')).filter(Boolean);
+                }
+                if (details.overview?.trim()) overview = details.overview.trim();
+              }
+            } catch {
+              /* genres optional */
+            }
+            if (signal.aborted) return;
+
             setTmdbShowId(isSeries ? result.id : null);
             setTmdbData({
               id: result.id,
@@ -69,9 +95,10 @@ export function useDetailModal({
               year: isSeries
                 ? (result.first_air_date?.split('-')[0] || '2026')
                 : (result.release_date?.split('-')[0] || '2026'),
-              desc: result.overview || getMockDetails(cleanTitle, group).desc,
+              desc: overview || getMockDetails(cleanTitle, group).desc,
               poster: posterPath || undefined,
-              backdrop: backdropPath || undefined
+              backdrop: backdropPath || undefined,
+              genres: genres.length > 0 ? genres : undefined,
             });
           } else {
             setTmdbShowId(null);

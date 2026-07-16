@@ -45,8 +45,33 @@ try {
   if ($proc.ExitCode -ne 0) {
     throw "Performance benchmark failed with exit code $($proc.ExitCode)."
   }
-  if ($combined -notmatch "STRMLY_PERF_RESULT=") {
+  $resultMatch = [regex]::Match($combined, 'STRMLY_PERF_RESULT=(\{[^\r\n]+\})')
+  if (-not $resultMatch.Success) {
     throw "Performance benchmark exited without producing results."
+  }
+  $result = $resultMatch.Groups[1].Value | ConvertFrom-Json
+  $navigationPages = @($result.navigation.PSObject.Properties)
+  if ($navigationPages.Count -lt 7) {
+    throw "Performance benchmark did not measure every navigation page."
+  }
+  foreach ($page in $navigationPages) {
+    $metrics = $page.Value
+    if (@($metrics.samples).Count -ne [int]$iterations) {
+      throw "Navigation sample count mismatch for $($page.Name)."
+    }
+    if ([double]$metrics.p95Ms -gt 100 -or [double]$metrics.maxMs -gt 250) {
+      throw "Navigation performance regression on $($page.Name): p95=$($metrics.p95Ms)ms max=$($metrics.maxMs)ms."
+    }
+  }
+  $scrollablePages = @($result.scroll.PSObject.Properties | Where-Object { [double]$_.Value.scrollRange -gt 0 })
+  if ($scrollablePages.Count -eq 0) {
+    throw "Performance benchmark did not exercise any scrollable view."
+  }
+  foreach ($page in $scrollablePages) {
+    $metrics = $page.Value
+    if ([double]$metrics.p95FrameMs -gt 35 -or [double]$metrics.maxFrameMs -gt 100 -or [double]$metrics.missedFramePercent -gt 10) {
+      throw "Scroll performance regression on $($page.Name): p95=$($metrics.p95FrameMs)ms max=$($metrics.maxFrameMs)ms missed=$($metrics.missedFramePercent)%."
+    }
   }
   Write-Host "Performance benchmark completed successfully (iterations=$iterations warmups=$warmups)."
 } finally {

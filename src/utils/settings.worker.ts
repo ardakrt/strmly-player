@@ -11,7 +11,7 @@ self.onmessage = (e: MessageEvent<any>) => {
   } else if (type === 'import') {
     try {
       const settings = JSON.parse(payload);
-      if (settings && typeof settings === 'object') {
+      if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
         self.postMessage({ success: true, type: 'import', result: settings });
       } else {
         throw new Error('Geçersiz ayar dosyası yapısı.');

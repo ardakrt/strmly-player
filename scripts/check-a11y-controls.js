@@ -19,7 +19,7 @@ const HIGH_RISK_FILES = [
   'src/components/FavoritesEmptyState.tsx',
   'src/components/CreateProfileWizard.tsx',
   'src/components/Navbar.tsx',
-  'src/components/HomeHoverPreview.tsx',
+  'src/components/PrimeHoverCard.tsx',
 ];
 
 const REQUIRED_PATTERNS = [
@@ -37,11 +37,6 @@ const REQUIRED_PATTERNS = [
     id: 'modal-close',
     re: /aria-label=\{[^}]*(Close|Kapat)|aria-label="(Close|Kapat)"/i,
     files: ['src/components/SeriesModal.tsx', 'src/components/ChannelModal.tsx'],
-  },
-  {
-    id: 'voice-search',
-    re: /aria-label=\{[^}]*(Voice|Sesle)/i,
-    files: ['src/components/SpotlightSearch.tsx'],
   },
   {
     id: 'download-pause-or-cancel',

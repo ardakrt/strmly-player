@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, memo } from 'react';
-import { Play, ChevronLeft, ChevronRight, UploadCloud, Heart, Sparkles, Info, Trash2 } from 'lucide-react';
+import { Play, ChevronLeft, ChevronRight, UploadCloud, Heart, Info, Trash2 } from 'lucide-react';
 import type { ContentPreference, SavedPlaylist } from '../types';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { ImageWithFallback } from './ImageWithFallback';
-import { getFallbackGradient } from '../utils/helpers';
+import { pickHeroSynopsis, cleanPlaylistLabel } from '../utils/helpers';
 import { cleanMediaTitle, parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
+import { getMediaCardLabels } from '../utils/mediaLabels';
 import { getResolvedTmdbResult, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, fetchTmdbDetails, cleanMovieName } from '../utils/tmdb';
+import { PrimeHoverCard, useHoverPreview } from './PrimeHoverCard';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { useSettings } from '../context/SettingsContext';
 
@@ -18,16 +20,39 @@ interface VodPosterCardProps {
   onContextMenu?: (event: React.MouseEvent, item: any) => void;
 }
 
-
-
-interface TmdbMetadata {
-  posterUrl: string | null;
-  rating: string;
-  year: string;
-  overview: string;
-  genres: string[];
-  duration: string;
+function HomeRailHeader({
+  title,
+  actionLabel,
+  onAction,
+  mutedLabel,
+}: {
+  title: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  mutedLabel?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between px-0 mb-0.5">
+      <h3 className="text-[15px] md:text-base font-semibold tracking-tight text-white/85">{title}</h3>
+      {onAction && actionLabel ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="group/see-all inline-flex items-center gap-0.5 text-[12px] text-white/35 hover:text-white/70 font-medium transition-colors"
+        >
+          {actionLabel}
+          <ChevronRight size={14} className="transition-transform group-hover/see-all:translate-x-0.5" />
+        </button>
+      ) : mutedLabel ? (
+        <span className="text-[11px] text-white/25 font-medium">{mutedLabel}</span>
+      ) : null}
+    </div>
+  );
 }
+
+
+
+import type { TmdbMetadata } from '../utils/vodHelpers';
 
 const globalVodMetadataMap = new Map<string, TmdbMetadata>();
 
@@ -85,19 +110,17 @@ const translateDuration = (durationStr: string, language: 'tr' | 'en'): string =
     .replace(/DK/g, 'M');
 };
 
-const getQualityLabel = (name: string): string | null => {
-  const lower = name.toLowerCase();
-  if (lower.includes('4k') || lower.includes('uhd')) return '4K';
-  if (lower.includes('1080p') || lower.includes('fhd') || lower.includes('1080')) return 'FHD';
-  if (lower.includes('720p') || lower.includes('hd') || lower.includes('720')) return 'HD';
-  return null;
-};
-
 function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, onContextMenu }: VodPosterCardProps) {
   const { language } = useSettings();
-  const quality = getQualityLabel(channel.name);
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  const {
+    showPreview,
+    mountPreview,
+    handleMouseEnter,
+    handleMouseLeave,
+    handlePreviewEnter,
+  } = useHoverPreview();
 
   useEffect(() => {
     const el = cardRef.current;
@@ -129,7 +152,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
 
     let cancelled = false;
     const endpoint = channel.type === 'series' ? 'tv' : 'movie';
-    const cacheKey = `vod-meta-v2-${channel.type}-${cleanTitle}`;
+    const cacheKey = `vod-meta-v3-${channel.type}-${cleanTitle}`;
 
     const loadMetadata = async () => {
       if (globalVodMetadataMap.has(cacheKey)) {
@@ -202,12 +225,12 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
         }
 
         let posterUrl: string | null = null;
-        const tmdbImagePath = result.poster_path || result.backdrop_path;
-        if (tmdbImagePath) {
-          const resolved = await resolveTmdbImageSrc(tmdbImagePath, 'w500');
-          if (resolved) {
-            posterUrl = resolved;
-          }
+        let backdropUrl: string | null = null;
+        if (result.poster_path) {
+          posterUrl = await resolveTmdbImageSrc(result.poster_path, 'w500');
+        }
+        if (result.backdrop_path) {
+          backdropUrl = await resolveTmdbImageSrc(result.backdrop_path, 'w780');
         }
 
         const rating = result.vote_average && result.vote_average > 0
@@ -217,9 +240,12 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
         const year = (result.release_date || result.first_air_date || '').substring(0, 4);
 
         const overview = result.overview || '';
+        const tmdbTitle = (result.name || result.title || '').trim() || null;
 
         const finalMeta: TmdbMetadata = {
           posterUrl,
+          backdropUrl,
+          title: tmdbTitle,
           rating,
           year,
           overview,
@@ -272,16 +298,6 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
     ? metadata.genres.slice(0, 2)
     : (channel.group ? [channel.group.toUpperCase()] : []);
 
-  const displayOverview = metadata.overview || (
-    channel.type === 'series'
-      ? (language === 'tr'
-        ? `${displayTitle} dizisinin tüm sezon ve bölümlerini Türkçe izleyin.`
-        : `Watch all seasons and episodes of the series ${displayTitle} online.`)
-      : (language === 'tr'
-        ? `${displayTitle} filmini kesintisiz Full HD kalitede şimdi izleyin.`
-        : `Watch the movie ${displayTitle} in high quality now.`)
-  );
-
   let displayDuration = metadata.duration;
   if (displayDuration && displayDuration.endsWith(' DK')) {
     const rawMins = displayDuration.replace(' DK', '').trim();
@@ -314,13 +330,15 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   return (
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(); } }} tabIndex={0} role="button"
       ref={cardRef}
-      className="home-poster-card flex-shrink-0 w-[176px] md:w-[208px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.035] hover:z-20"
+      className="home-poster-card flex-shrink-0 w-[168px] md:w-[196px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.03] hover:z-20"
       onClick={handleCardClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
-      <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-neutral-950/60 border border-white/[0.07] shadow-[0_14px_38px_rgba(0,0,0,0.4)] flex items-center justify-center transition-all duration-300 group-hover:border-white/20 group-hover:shadow-[0_22px_55px_rgba(0,0,0,0.58)]">
+      <div className="home-poster-frame relative isolate aspect-[2/3] w-full overflow-hidden rounded-[16px] flex items-center justify-center">
         {posterSrc ? (
-          <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover animate-fade-in" />
+          <img src={posterSrc} alt="" className="home-poster-media animate-fade-in transition-transform duration-500" />
         ) : (
           <ImageWithFallback
             src={channel.logo}
@@ -331,33 +349,25 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
             aspect="portrait"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/15 to-black/20 pointer-events-none" />
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 pointer-events-none">
-          <span className="home-media-type-badge h-[22px] px-2.5 text-[9px] font-extrabold tracking-wider rounded-full text-white shadow-md flex items-center justify-center border border-white/10">
-            {channel.type === 'series' ? 'DİZİ' : 'FİLM'}
-          </span>
-          {quality && (
-            <span className="h-[22px] px-2.5 bg-[var(--accent-color)]/25 text-[var(--accent-color)] font-extrabold text-[9px] rounded-full flex items-center justify-center border border-[var(--accent-color)]/20 shadow-md">
-              {quality}
-            </span>
-          )}
-          {metadata.rating && (
-            <span className="h-[22px] px-2 bg-black/60 backdrop-blur-sm text-white font-extrabold text-[9px] md:text-[10px] rounded-full flex items-center justify-center gap-1 shadow-sm border border-white/10">
-              <span className="text-yellow-400 text-xs">★</span> {metadata.rating}
-            </span>
-          )}
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent pointer-events-none" />
 
-        {metadata.year && (
-          <div className="absolute top-3 right-3 z-10 pointer-events-none">
-            <span className="h-[22px] px-2.5 bg-black/60 backdrop-blur-sm text-neutral-200 font-extrabold text-[9px] md:text-[10px] rounded-full border border-white/10 shadow-sm flex items-center justify-center">
+        {/* Calm badges: type + year only */}
+        <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
+          <span className="h-5 px-2 text-[9px] font-semibold tracking-wide rounded-md text-white/90 bg-black/45 backdrop-blur-sm border border-white/10 flex items-center">
+            {channel.type === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') : (language === 'tr' ? 'Film' : 'Movie')}
+          </span>
+        </div>
+        {metadata.year ? (
+          <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
+            <span className="h-5 px-2 text-[9px] font-semibold text-white/70 bg-black/45 backdrop-blur-sm rounded-md border border-white/10 flex items-center">
               {metadata.year}
             </span>
           </div>
-        )}
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-15">
-          <div className="w-11 h-11 rounded-full bg-[var(--accent-color)] text-black flex items-center justify-center shadow-2xl transform scale-75 group-hover:scale-100 transition-transform duration-300">
-            <Play size={18} fill="#000" className="ml-1" />
+        ) : null}
+
+        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-15">
+          <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
+            <Play size={16} fill="#000" className="ml-0.5" />
           </div>
         </div>
 
@@ -366,32 +376,55 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
             e.stopPropagation();
             toggleFavorite(channel.id, e);
           }}
-          className="absolute bottom-3 right-3 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 shadow-lg"
+          className="absolute bottom-2.5 right-2.5 z-30 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/60 hover:text-red-400 transition-all"
           title="Favorilere Ekle"
          aria-label="Favorilere Ekle">
-          <Heart size={14} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
+          <Heart size={13} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
-        <div className="absolute inset-x-0 bottom-0 z-20 p-3.5 pr-12 pt-12 bg-gradient-to-t from-black via-black/90 to-transparent pointer-events-none">
-          <h4 className="text-sm md:text-[15px] font-extrabold text-white line-clamp-1 leading-tight drop-shadow">
+
+        <div className="absolute inset-x-0 bottom-0 z-20 p-3 pr-11 pointer-events-none">
+          <h4 className="text-[13px] font-semibold text-white line-clamp-1 leading-tight">
             {displayTitle}
           </h4>
-          <div className="mt-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wide text-white/55 transition-all duration-300 group-hover:text-white/75">
-            <span>{displayDuration}</span>
-            {displayGenres[0] && <><span className="text-white/25">•</span><span className="truncate">{displayGenres[0]}</span></>}
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-white/45">
+            {metadata.rating ? (
+              <span className="inline-flex items-center gap-0.5 text-amber-400/90">
+                <span className="text-[10px]">★</span> {metadata.rating}
+              </span>
+            ) : null}
+            {metadata.rating && displayDuration ? <span className="text-white/20">·</span> : null}
+            <span className="truncate">{displayDuration}</span>
+            {displayGenres[0] ? (
+              <>
+                <span className="text-white/20">·</span>
+                <span className="truncate">{displayGenres[0]}</span>
+              </>
+            ) : null}
           </div>
-          <p className="mt-0 max-h-0 translate-y-2 overflow-hidden text-[10px] leading-relaxed text-white/65 opacity-0 transition-all duration-300 line-clamp-2 group-hover:mt-2 group-hover:max-h-10 group-hover:translate-y-0 group-hover:opacity-100">
-            {displayOverview}
-          </p>
         </div>
         {channel.progress !== undefined && channel.progress > 0 && (
-          <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20 z-20">
+          <div className="absolute bottom-0 left-0 w-full h-[3px] bg-white/10 z-20">
             <div
-              className="h-full bg-[var(--accent-color)] transition-all duration-300"
+              className="h-full bg-white/90 transition-all duration-300"
               style={{ width: `${channel.progress}%` }}
             />
           </div>
         )}
       </div>
+
+      {mountPreview && (
+        <PrimeHoverCard
+          channel={getFlatItem(channel)}
+          metadata={metadata}
+          cardRef={cardRef}
+          visible={showPreview}
+          onClose={handleMouseLeave}
+          onPreviewEnter={handlePreviewEnter}
+          toggleFavorite={toggleFavorite}
+          globalFavorites={globalFavorites}
+          handleOpenDetails={handleOpenDetails}
+        />
+      )}
     </div>
   );
 }
@@ -404,6 +437,8 @@ interface HomeViewProps {
   fallbackHeroItem: any;
   currentHeroItem: PlaylistItem | null;
   activeFeaturedIndex: number;
+  /** Index currently painted (lags target until next slide is ready). */
+  displayFeaturedIndex: number;
   setActiveFeaturedIndex: (idx: number) => void;
   activeShowcaseList: any[];
   playlists: SavedPlaylist[];
@@ -437,6 +472,7 @@ export const HomeView = memo(function HomeView({
   fallbackHeroItem,
   currentHeroItem,
   activeFeaturedIndex,
+  displayFeaturedIndex,
   setActiveFeaturedIndex,
   activeShowcaseList,
   playlists,
@@ -460,6 +496,56 @@ export const HomeView = memo(function HomeView({
 }: HomeViewProps) {
   const { t, language } = useSettings();
   const [visibleHomeBlocks, setVisibleHomeBlocks] = useState(1);
+
+  const playlistHeroBackdrop = featuredTmdbData?.backdrop;
+  const playlistHeroPoster = featuredTmdbData?.poster || currentHeroItem?.logo;
+  const fallbackHeroImage = fallbackHeroItem?.img;
+  const heroBackdropImage = isPlaylistHero ? (playlistHeroBackdrop || playlistHeroPoster) : fallbackHeroImage;
+  // Arka plan resmi (Backdrop) için geçiş yönetimi — sadece hero kartının içinde
+  const [loadedBackdrop, setLoadedBackdrop] = useState<string | null>(null);
+  const [prevBackdrop, setPrevBackdrop] = useState<string | null>(null);
+  const loadedBackdropRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    loadedBackdropRef.current = loadedBackdrop;
+  }, [loadedBackdrop]);
+
+  useEffect(() => {
+    if (!heroBackdropImage) {
+      if (loadedBackdropRef.current === null) return;
+      setPrevBackdrop(loadedBackdropRef.current);
+      setLoadedBackdrop(null);
+      loadedBackdropRef.current = null;
+      return;
+    }
+    if (heroBackdropImage === loadedBackdropRef.current) return;
+
+    let cancelled = false;
+    const img = new Image();
+    const handleLoad = () => {
+      if (cancelled) return;
+      setPrevBackdrop(loadedBackdropRef.current);
+      setLoadedBackdrop(heroBackdropImage);
+      loadedBackdropRef.current = heroBackdropImage;
+    };
+    img.onload = handleLoad;
+    img.onerror = handleLoad;
+    img.src = heroBackdropImage;
+    return () => {
+      cancelled = true;
+    };
+  }, [heroBackdropImage]);
+
+  // Geçişten sonra eski resmi temizle (crossfade süresiyle uyumlu)
+  useEffect(() => {
+    if (prevBackdrop) {
+      const timer = setTimeout(() => {
+        setPrevBackdrop(null);
+      }, 900);
+      return () => clearTimeout(timer);
+    }
+  }, [prevBackdrop]);
+
   const homeSectionOrder = useMemo(() => {
     const preferredSections = contentPreferences.map(preference => {
       if (preference === 'series') return 'series';
@@ -598,6 +684,9 @@ export const HomeView = memo(function HomeView({
     );
   }
 
+  const railArrowClass =
+    'absolute top-[38%] -translate-y-1/2 z-30 w-9 h-9 rounded-full border border-white/10 bg-black/40 text-white/70 backdrop-blur-xl flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:bg-white/10 hover:text-white active:scale-95';
+
   const renderRailCard = (channel: PlaylistItem, keyPrefix: string) => (
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
         if (channel.type === 'live') {
@@ -607,7 +696,7 @@ export const HomeView = memo(function HomeView({
         }
       })(); } }} tabIndex={0} role="button"
       key={`${keyPrefix}-${channel.id}`}
-      className="flex-shrink-0 w-[170px] md:w-[210px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.035] hover:z-20"
+      className="flex-shrink-0 w-[168px] md:w-[200px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.03] hover:z-20"
       onClick={() => {
         if (channel.type === 'live') {
           handlePlayStream(channel);
@@ -617,7 +706,7 @@ export const HomeView = memo(function HomeView({
       }}
       onContextMenu={(event) => openContextMenu(event, channel)}
     >
-      <div className="relative w-full aspect-video rounded-[18px] overflow-hidden bg-neutral-900 border border-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.35)] group-hover:border-white/20 transition-all duration-300 flex items-center justify-center">
+      <div className="relative w-full aspect-video rounded-[14px] overflow-hidden bg-black/40 border border-white/[0.06] shadow-[0_10px_28px_rgba(0,0,0,0.35)] group-hover:border-white/12 transition-all duration-300 flex items-center justify-center">
         <ImageWithFallback
           src={channel.logo}
           name={channel.name}
@@ -626,32 +715,29 @@ export const HomeView = memo(function HomeView({
           isGenericLogo={channel.isGenericLogo}
           aspect="landscape"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent z-10" />
-        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
-          <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
-            <Play size={16} fill="#000" className="ml-0.5" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent z-10" />
+        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
+          <div className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
+            <Play size={14} fill="#000" className="ml-0.5" />
           </div>
         </div>
         <button type="button"
           onClick={(e) => toggleFavorite(channel.id, e)}
-          className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110"
+          className="absolute top-2 right-2 z-30 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/60 hover:text-red-400 transition-all"
           title="Favorilere Ekle"
          aria-label="Favorilere Ekle">
           <Heart size={12} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
         </button>
-        <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
-          <span className="block text-xs font-extrabold text-white truncate drop-shadow">{channel.name}</span>
-          <span className="block text-[9px] text-white/50 uppercase tracking-wider font-semibold mt-0.5 truncate">{channel.group || 'Genel'}</span>
+        <div className="absolute inset-x-0 bottom-0 z-20 px-2.5 pb-2 pt-6 pointer-events-none">
+          <span className="block text-[12px] font-semibold text-white truncate">{channel.name}</span>
+          <span className="block text-[10px] text-white/35 font-medium mt-0.5 truncate">
+            {cleanPlaylistLabel(channel.group || '') || (language === 'tr' ? 'Canlı' : 'Live')}
+          </span>
         </div>
       </div>
     </div>
   );
 
-  const playlistHeroBackdrop = featuredTmdbData?.backdrop;
-  const playlistHeroPoster = featuredTmdbData?.poster || currentHeroItem?.logo;
-  const fallbackHeroImage = fallbackHeroItem?.img;
-  const heroBackdropImage = isPlaylistHero ? (playlistHeroBackdrop || playlistHeroPoster) : fallbackHeroImage;
-  const heroAmbientImage = heroBackdropImage || (isPlaylistHero ? playlistHeroPoster : fallbackHeroImage);
   const heroTitle = isPlaylistHero
     ? (currentHeroItem?.type === 'series'
       ? parseSeriesEpisodeInfo(currentHeroItem.name).cleanTitle
@@ -662,6 +748,22 @@ export const HomeView = memo(function HomeView({
     : heroTitle.length > 20
       ? 'lg:text-[52px]'
       : 'lg:text-[58px]';
+  const heroIsSeries = isPlaylistHero
+    ? currentHeroItem?.type === 'series'
+    : /series|dizi/i.test(String(fallbackHeroItem?.category || ''));
+  const heroFavoriteId = currentHeroItem ? getFavoriteIdForItem(currentHeroItem) : '';
+  const heroIsFavorite = heroFavoriteId ? globalFavorites.includes(heroFavoriteId) : false;
+  const heroPrimaryLabel = language === 'tr'
+    ? (heroIsSeries ? 'İzlemeye Başla' : 'Şimdi İzle')
+    : (heroIsSeries ? 'Start Watching' : 'Watch Now');
+  const heroInfoLabel = language === 'tr' ? 'Daha Fazla Bilgi' : 'More Info';
+  // Display stored billboard blurb; only re-cut if a legacy long string slipped through.
+  const heroDescRaw = isPlaylistHero
+    ? (featuredTmdbData?.desc || '')
+    : (fallbackHeroItem?.desc || '');
+  const heroDesc = heroDescRaw.length > 220
+    ? pickHeroSynopsis({ overview: heroDescRaw, maxLen: 190 })
+    : heroDescRaw;
 
   const changeShowcase = (offset: number) => {
     if (activeShowcaseList.length === 0) return;
@@ -674,76 +776,91 @@ export const HomeView = memo(function HomeView({
       className="flex flex-col gap-6 page-transition-enter pb-12"
       onContextMenu={() => setContextMenu(null)}
     >
-      <div className="relative group/hero-outer mb-1">
-        <div className="absolute -inset-6 z-0 opacity-35 blur-[80px] transition-all duration-1000 pointer-events-none rounded-[42px] overflow-hidden select-none">
-          {heroAmbientImage ? (
+      <div className="relative group/hero-outer -mx-6 md:-mx-10 w-[calc(100%+3rem)] md:w-[calc(100%+5rem)] mb-2">
+        {/* Hero only — poster never bleeds under rails */}
+        <div
+          className="relative z-10 w-full h-[480px] md:h-[78vh] max-h-[820px] rounded-none overflow-hidden flex items-end select-none bg-[#030304]"
+        >
+          {prevBackdrop && (
             <img
-              key={heroAmbientImage}
-              src={heroAmbientImage}
+              src={prevBackdrop}
               alt=""
-              className="w-full h-full object-cover scale-125 animate-fade-in"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : (
-            <div
-              className="w-full h-full transition-all duration-1000"
-              style={{ background: getFallbackGradient(isPlaylistHero ? (currentHeroItem?.name || '') : (fallbackHeroItem?.title || '')) }}
+              className="absolute inset-0 w-full h-full object-cover home-hero-image-drift"
+              style={{ objectPosition: 'center 25%', zIndex: 1 }}
             />
           )}
-        </div>
-        <div
-          className="relative z-10 w-full min-h-[470px] md:h-[clamp(520px,58vh,680px)] rounded-[26px] overflow-hidden flex items-end select-none border border-white/[0.055] shadow-[0_28px_80px_rgba(0,0,0,0.42)] bg-neutral-950/20 backdrop-blur-[1px]"
-        >
-          {heroBackdropImage ? (
+          {loadedBackdrop && (
             <img
-              key={heroBackdropImage}
-              src={heroBackdropImage}
+              key={loadedBackdrop}
+              src={loadedBackdrop}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover animate-fade-in home-hero-image"
-              style={{ objectPosition: 'center 25%' }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              className="absolute inset-0 w-full h-full object-cover home-hero-image-fade"
+              style={{ objectPosition: 'center 25%', zIndex: 2 }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
             />
-          ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050507] via-neutral-950/25 to-black/25 z-10 pointer-events-none" />
+          )}
+          {/* Soft black floor — blend into elevated OLED surface, not pure void */}
+          <div className="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-[#0a0a0c] from-[10%] via-[#0a0a0c]/80 via-[36%] to-transparent to-[70%]" />
+          {/* Top-down Scrim for nav contrast */}
+          <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-[#0a0a0c]/85 via-[#0a0a0c]/30 to-transparent z-10 pointer-events-none" />
           <div className="home-hero-left-scrim absolute inset-0 z-10 pointer-events-none" />
-          <div className="home-hero-color-grade absolute inset-0 z-[11] pointer-events-none" />
+          <div className="absolute inset-0 z-[11] pointer-events-none bg-black/20" />
           <div className="home-hero-grain absolute inset-0 z-[12] pointer-events-none" />
 
-          <div key={`hero-copy-${activeFeaturedIndex}`} className="home-hero-copy absolute bottom-12 left-10 md:bottom-14 md:left-16 max-w-2xl flex flex-col gap-4 z-20">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-color)] shadow-[0_0_12px_var(--accent-color)]" />
-              <span className="text-[9px] text-white/85 font-extrabold tracking-[0.18em] uppercase">
-                {isPlaylistHero ? (language === 'tr' ? 'ÖNE ÇIKAN YAPIM' : 'FEATURED PRODUCTION') : (language === 'tr' ? 'STRMLY SEÇKİ' : 'STRMLY SELECTION')}
-              </span>
-              <span className="h-3 w-px bg-white/20" />
-              <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-[0.12em]">
-                {isPlaylistHero
-                  ? (currentHeroItem?.group || (currentHeroItem?.type === 'movie' ? (language === 'tr' ? 'Sinema (VOD)' : 'Movies (VOD)') : (language === 'tr' ? 'Dizi (VOD)' : 'Series (VOD)')))
-                  : fallbackHeroItem?.category}
-              </span>
-            </div>
-
-            <h1 className={`home-hero-title text-4xl md:text-5xl ${heroTitleSize} font-black tracking-[-0.045em] text-white leading-[0.92]`}>
-              {heroTitle}
-            </h1>
-
-            {isPlaylistHero && (
-              <div className="flex w-fit items-center gap-2.5 rounded-full border border-white/[0.09] bg-black/20 px-3 py-1.5 text-[10px] font-semibold text-neutral-300 backdrop-blur-md">
-                <span className="text-emerald-400 font-extrabold">{featuredTmdbData?.match || (language === 'tr' ? '95% Eşleşme' : '95% Match')}</span>
-                <span className="h-1 w-1 rounded-full bg-white/25" />
-                <span className="text-neutral-300">{featuredTmdbData?.year || '2025'}</span>
-                {featuredTmdbData?.rating && parseFloat(featuredTmdbData.rating) > 0 && (
-                  <><span className="h-1 w-1 rounded-full bg-white/25" /><span className="text-amber-400 font-bold">★ {featuredTmdbData.rating}</span></>
-                )}
+          <div
+            key={`hero-copy-${displayFeaturedIndex}`}
+            className="home-hero-copy absolute left-8 right-8 md:left-16 md:right-auto bottom-[28%] md:bottom-[32%] max-w-xl md:max-w-2xl flex flex-col gap-3.5 md:gap-4 z-20 select-none"
+          >
+            {featuredTmdbData?.logo ? (
+              <div key={featuredTmdbData.logo} className="z-10 flex justify-start">
+                <img
+                  src={featuredTmdbData.logo}
+                  alt={heroTitle}
+                  className="home-hero-title-logo max-h-[4.25rem] md:max-h-28 object-contain object-left w-auto max-w-[min(100%,420px)]"
+                />
               </div>
+            ) : (
+              <h1 className={`home-hero-title text-4xl md:text-6xl ${heroTitleSize} font-black tracking-[-0.04em] text-white leading-[0.95] z-10`}>
+                {heroTitle}
+              </h1>
             )}
 
-            <p className="text-[13px] md:text-sm text-neutral-300/90 leading-[1.65] font-normal max-w-xl drop-shadow line-clamp-2">
-              {isPlaylistHero ? (featuredTmdbData?.desc || (language === 'tr' ? 'Strmly kütüphanesinden benzersiz bir yapım.' : 'A unique production from the Strmly library.')) : fallbackHeroItem?.desc}
-            </p>
+            {/* Single quiet meta line — no chips */}
+            {isPlaylistHero && (() => {
+              const metaParts: string[] = [];
+              if (featuredTmdbData?.match) {
+                metaParts.push(language === 'tr' ? `%${featuredTmdbData.match} Eşleşme` : `${featuredTmdbData.match}% Match`);
+              }
+              if (featuredTmdbData?.year) metaParts.push(featuredTmdbData.year);
+              if (featuredTmdbData?.rating && parseFloat(featuredTmdbData.rating) > 0) {
+                metaParts.push(`★ ${featuredTmdbData.rating}`);
+              }
+              if (featuredTmdbData?.duration) metaParts.push(featuredTmdbData.duration);
+              if (!metaParts.length) return null;
+              return (
+                <p className="text-[12px] md:text-[13px] font-medium text-white/50 tracking-wide z-10">
+                  <span className="text-emerald-400/90 font-semibold">{metaParts[0]}</span>
+                  {metaParts.slice(1).map((part) => (
+                    <span key={part}>
+                      <span className="mx-2 text-white/20">·</span>
+                      <span className="text-white/55">{part}</span>
+                    </span>
+                  ))}
+                </p>
+              );
+            })()}
 
-            <div className="flex items-center gap-2.5 mt-1.5">
-              <button type="button"
+            {heroDesc ? (
+              <p className="text-[13px] md:text-[15px] text-white/65 leading-[1.55] font-normal max-w-xl z-10 line-clamp-3">
+                {heroDesc}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-3 mt-0.5 z-10">
+              <button
+                type="button"
                 onClick={() => {
                   if (isPlaylistHero && currentHeroItem) {
                     if (currentHeroItem.type === 'series') {
@@ -755,11 +872,14 @@ export const HomeView = memo(function HomeView({
                     showToast(language === 'tr' ? `${fallbackHeroItem.title} çalma listenizden aranıyor...` : `Searching for ${fallbackHeroItem.title} in your playlist...`);
                   }
                 }}
-                className="h-11 px-6 bg-white text-black font-extrabold rounded-full flex items-center gap-2 hover:bg-neutral-200 transition-all duration-200 shadow-[0_8px_20px_rgba(0,0,0,0.28)] transform active:scale-95 text-xs"
-               aria-label="Play">
-                <Play size={13} fill="#000" className="ml-0.5" /> {language === 'tr' ? 'Şimdi İzle' : 'Watch Now'}
+                className="h-11 px-6 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-white/90 transition-colors duration-200 active:scale-[0.98] text-sm cursor-pointer"
+                aria-label={heroPrimaryLabel}
+              >
+                <Play size={15} fill="#000" className="ml-0.5" />
+                {heroPrimaryLabel}
               </button>
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => {
                   if (isPlaylistHero && currentHeroItem) {
                     handleOpenDetails(currentHeroItem);
@@ -767,10 +887,27 @@ export const HomeView = memo(function HomeView({
                     showToast(language === 'tr' ? "Kendi çalma listenizi yükleyerek tüm içerik detaylarına erişebilirsiniz." : "Upload your own playlist to access all content details.");
                   }
                 }}
-                className="h-11 px-5 bg-white/[0.09] hover:bg-white/[0.15] backdrop-blur-xl border border-white/[0.12] text-white font-bold rounded-full transition-all duration-300 transform active:scale-95 text-xs flex items-center gap-2"
-               aria-label="Info">
-                <Info size={14} /> {language === 'tr' ? 'Detaylar' : 'Details'}
+                className="h-11 px-5 rounded-lg bg-white/10 hover:bg-white/15 text-white font-semibold flex items-center gap-2 transition-colors duration-200 active:scale-[0.98] cursor-pointer text-sm"
+                aria-label={heroInfoLabel}
+              >
+                <Info size={15} className="opacity-80" />
+                {heroInfoLabel}
               </button>
+              {isPlaylistHero && currentHeroItem ? (
+                <button
+                  type="button"
+                  onClick={(e) => toggleFavorite(heroFavoriteId, e)}
+                  className={`h-11 w-11 rounded-lg flex items-center justify-center transition-colors duration-200 cursor-pointer ${
+                    heroIsFavorite
+                      ? 'text-red-400 hover:text-red-300'
+                      : 'text-white/45 hover:text-white/80'
+                  }`}
+                  aria-label={language === 'tr' ? (heroIsFavorite ? 'Favoriden çıkar' : 'Favoriye ekle') : (heroIsFavorite ? 'Remove favorite' : 'Add favorite')}
+                  title={language === 'tr' ? (heroIsFavorite ? 'Favoriden çıkar' : 'Favoriye ekle') : (heroIsFavorite ? 'Remove favorite' : 'Add favorite')}
+                >
+                  <Heart size={18} fill={heroIsFavorite ? 'currentColor' : 'none'} />
+                </button>
+              ) : null}
             </div>
           </div>
           {activeShowcaseList.length > 1 && (
@@ -801,107 +938,125 @@ export const HomeView = memo(function HomeView({
                 type="button"
                 aria-label={`${language === 'tr' ? 'Vitrin' : 'Showcase'} ${idx + 1}`}
                 onClick={() => setActiveFeaturedIndex(idx)}
-                className={`h-1.5 rounded-full transition-all duration-300 ${activeFeaturedIndex === idx ? 'w-6 bg-white/90' : 'w-1.5 bg-white/30 hover:bg-white/60'}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${displayFeaturedIndex === idx ? 'w-6 bg-white/90' : 'w-1.5 bg-white/30 hover:bg-white/60'}`}
               />
             ))}
           </div>
 
         </div>
-        <div className="absolute -bottom-10 inset-x-3 h-20 bg-gradient-to-b from-neutral-950/70 to-transparent blur-xl pointer-events-none" />
+        {/* Blend hero into app surface */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[#0a0a0c] z-[5]" />
       </div>
-      {visibleHomeBlocks >= 1 && playlists.length > 0 && uniqueRecentlyWatched.length > 0 && (
-        <div className="order-1 relative z-20 -mt-2 flex flex-col gap-3 select-none animate-fade-in">
-          <div className="flex items-center justify-between px-0 mb-1">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[var(--accent-color)] animate-pulse" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'İzlemeye Devam Et' : 'Continue Watching'}</h3>
-            </div>
-            <button type="button"
-              onClick={() => {
-                clearRecentlyWatched();
-              }}
-              className="text-[10px] text-neutral-500 hover:text-red-400 font-bold uppercase tracking-wider transition-colors"
-            >
-              {t('home.clearHistory')}
-            </button>
-          </div>
+
+      <div className="relative z-20 mt-0 flex flex-col gap-9 select-none pb-4">
+        {visibleHomeBlocks >= 1 && playlists.length > 0 && uniqueRecentlyWatched.length > 0 && (
+        <div className="order-1 relative z-20 flex flex-col gap-2.5 select-none animate-fade-in">
+          <HomeRailHeader
+            title={language === 'tr' ? 'İzlemeye Devam Et' : 'Continue Watching'}
+            actionLabel={t('home.clearHistory')}
+            onAction={() => clearRecentlyWatched()}
+          />
 
           <div className="relative group/row">
             <button type="button"
               aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-history', 'left')}
-              className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} left-1`}
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={18} />
             </button>
 
             <div
               id="slider-history"
-              className="flex gap-6 overflow-x-auto pb-6 pt-2 pr-24 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
+              className="flex gap-3.5 overflow-x-auto pb-5 pt-1 pr-10 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
             >
-              {uniqueRecentlyWatched.map(channel => (
-                <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => {
-                    handlePlayStream(channel);
-                  })(); } }} tabIndex={0} role="button"
-                  key={`recent-${channel.id}`}
-                  className="flex-shrink-0 w-[200px] md:w-[240px] group cursor-pointer snap-start transition-all duration-300 hover:scale-[1.03]"
-                  onClick={() => {
-                    handlePlayStream(channel);
-                  }}
-                  onContextMenu={(event) => openContextMenu(event, channel, true)}
-                >
-                  <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-white/5 shadow-lg transition-all duration-300 group-hover:border-white/15 group-hover:shadow-[0_12px_28px_rgba(0,0,0,0.55)]">
-                    <ImageWithFallback
-                      src={channel.logo}
-                      name={channel.name}
-                      group={channel.group || 'LIVE'}
-                      itemType={channel.type}
-                      isGenericLogo={channel.isGenericLogo}
-                      aspect="landscape"
-                    />
+              {uniqueRecentlyWatched.map((channel) => {
+                const labels = getMediaCardLabels(channel, language);
+                const progress = channel.progress ?? 0;
+                const hasPlaylistArt = Boolean(
+                  channel.logo && String(channel.logo).trim() && !channel.isGenericLogo,
+                );
+                const cardTitle = labels.title;
+                const searchTitle = labels.searchTitle;
+                const subtitle =
+                  labels.subtitle ||
+                  (progress > 0
+                    ? language === 'tr'
+                      ? `Kaldığın yer %${Math.round(progress)}`
+                      : `${Math.round(progress)}% watched`
+                    : '');
 
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10 pointer-events-none" />
-                    <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-25">
-                      <div className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                        <Play size={15} fill="#000" className="ml-0.5" />
+                return (
+                  <div
+                    key={`recent-${channel.id}-${cardTitle}`}
+                    tabIndex={0}
+                    role="button"
+                    className="flex w-[200px] shrink-0 cursor-pointer snap-start flex-col gap-1.5 transition-transform duration-300 hover:scale-[1.02] md:w-[232px]"
+                    onClick={() => handlePlayStream(channel)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handlePlayStream(channel);
+                      }
+                    }}
+                    onContextMenu={(event) => openContextMenu(event, channel, true)}
+                  >
+                    {/* Artwork */}
+                    <div className="relative aspect-video w-full overflow-hidden rounded-[14px] border border-white/[0.08] bg-[#16161a] shadow-[0_10px_28px_rgba(0,0,0,0.35)]">
+                      <ImageWithFallback
+                        src={hasPlaylistArt ? channel.logo : undefined}
+                        name={searchTitle}
+                        group={channel.group || 'VOD'}
+                        itemType={
+                          channel.type === 'series' || channel.type === 'movie'
+                            ? channel.type
+                            : 'movie'
+                        }
+                        isGenericLogo={!hasPlaylistArt}
+                        aspect="landscape"
+                        lazy={false}
+                        fallbackToPlaylist
+                      />
+                      <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-lg">
+                          <Play size={14} fill="#000" className="ml-0.5" />
+                        </div>
                       </div>
+                      {progress > 0 && (
+                        <div className="absolute bottom-0 left-0 z-20 h-[3px] w-full bg-white/10">
+                          <div
+                            className="h-full bg-white transition-all duration-300"
+                            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
 
-                    {channel.progress !== undefined && channel.progress > 0 && (
-                      <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20 z-20">
-                        <div
-                          className="h-full bg-[var(--accent-color)] transition-all duration-300"
-                          style={{ width: `${channel.progress}%` }}
-                        />
-                      </div>
-                    )}
-                    <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-2.5 pt-8 pointer-events-none">
-                      {(() => {
-                        if (channel.type === 'series') {
-                          const parsed = parseSeriesEpisodeInfo(channel.name);
-                          if (parsed.season > 0 && parsed.episode > 0) {
-                            return (
-                              <span className="block text-xs font-extrabold text-white truncate drop-shadow">
-                                {parsed.cleanTitle} • {language === 'tr' ? `${parsed.season}. Sezon ${parsed.episode}. Bölüm` : `S${parsed.season} E${parsed.episode}`}
-                              </span>
-                            );
-                          }
-                        }
-                        return <span className="block text-xs font-extrabold text-white truncate drop-shadow">{channel.name}</span>;
-                      })()}
-                      <span className="block text-[9px] text-white/50 uppercase tracking-wider font-semibold mt-0.5 truncate">{channel.group || (language === 'tr' ? 'Genel' : 'General')}</span>
+                    {/* Title OUTSIDE the image — never masked/hidden by overlays or missing art */}
+                    <div className="min-w-0 px-0.5">
+                      <p className="truncate text-[12.5px] font-semibold leading-snug text-white">
+                        {cardTitle}
+                      </p>
+                      {(subtitle || progress > 0) && (
+                        <p className="mt-0.5 truncate text-[10.5px] font-medium text-white/45">
+                          {subtitle}
+                          {progress > 0 && progress < 100
+                            ? `${subtitle ? ' · ' : ''}%${Math.round(progress)}`
+                            : ''}
+                        </p>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <button type="button"
               aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-history', 'right')}
-              className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} right-1`}
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>
@@ -920,27 +1075,24 @@ export const HomeView = memo(function HomeView({
         />
       )}
       {visibleHomeBlocks >= getSectionPosition('live') && playlists.length > 0 && homeLiveTvQuickChannels.length > 0 && (
-        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('live') }}>
-          <div className="flex items-center justify-between px-0 mb-1">
-            <div className="flex items-center gap-2">
-              <Play size={15} className="text-emerald-400 fill-emerald-400" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{contentPreferences.includes('sports') ? (language === 'tr' ? 'Spor Kanalları' : 'Sports Channels') : (language === 'tr' ? 'Hızlı Canlı TV' : 'Quick Live TV')}</h3>
-            </div>
-            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">{contentPreferences.includes('sports') ? (language === 'tr' ? 'Tercihine göre sıralandı' : 'Sorted by preference') : (language === 'tr' ? 'Popüler Kanallar' : 'Popular Channels')}</span>
-          </div>
+        <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('live') }}>
+          <HomeRailHeader
+            title={contentPreferences.includes('sports') ? (language === 'tr' ? 'Spor Kanalları' : 'Sports Channels') : (language === 'tr' ? 'Hızlı Canlı TV' : 'Quick Live TV')}
+            mutedLabel={contentPreferences.includes('sports') ? (language === 'tr' ? 'Tercihine göre' : 'For you') : (language === 'tr' ? 'Popüler' : 'Popular')}
+          />
 
           <div className="relative group/row">
             <button type="button"
               aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-quick-live-tv', 'left')}
-              className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} left-1`}
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={18} />
             </button>
 
             <div
               id="slider-quick-live-tv"
-              className="flex gap-6 overflow-x-auto pb-6 pt-2 pr-24 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
+              className="flex gap-3.5 overflow-x-auto pb-5 pt-1 pr-20 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
             >
               {homeLiveTvQuickChannels.map(item => renderRailCard(item, 'quick-live'))}
             </div>
@@ -948,34 +1100,31 @@ export const HomeView = memo(function HomeView({
             <button type="button"
               aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-quick-live-tv', 'right')}
-              className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} right-1`}
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>
       )}
       {visibleHomeBlocks >= getSectionPosition('discovery') && playlists.length > 0 && homeDiscoveryItems.length > 0 && (
-        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('discovery') }}>
-          <div className="flex items-center justify-between px-0 mb-1">
-            <div className="flex items-center gap-2">
-              <Sparkles size={15} className="text-amber-400" fill="currentColor" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{contentPreferences.length ? (language === 'tr' ? 'Sana Özel' : 'For You') : (language === 'tr' ? 'Trend Olanlar' : 'Trending Now')}</h3>
-            </div>
-            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">{contentPreferences.length ? (language === 'tr' ? 'İçerik tercihlerine göre' : 'Based on content preferences') : (language === 'tr' ? 'Bugün en çok izlenenler' : 'Most watched today')}</span>
-          </div>
+        <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('discovery') }}>
+          <HomeRailHeader
+            title={contentPreferences.length ? (language === 'tr' ? 'Sana Özel' : 'For You') : (language === 'tr' ? 'Trend Olanlar' : 'Trending Now')}
+            mutedLabel={contentPreferences.length ? (language === 'tr' ? 'Tercihlerine göre' : 'Based on prefs') : (language === 'tr' ? 'Bugün' : 'Today')}
+          />
 
           <div className="relative group/row">
             <button type="button"
               aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-discovery-home', 'left')}
-              className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} left-1`}
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={18} />
             </button>
             <div
               id="slider-discovery-home"
-              className="flex gap-6 overflow-x-auto pb-6 pt-2 pr-24 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
+              className="flex gap-3.5 overflow-x-auto pb-5 pt-1 pr-20 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
             >
               {homeDiscoveryItems.map(item => (
                 <VodPosterCard
@@ -991,40 +1140,32 @@ export const HomeView = memo(function HomeView({
             <button type="button"
               aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-discovery-home', 'right')}
-              className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} right-1`}
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>
       )}
       {visibleHomeBlocks >= getSectionPosition('movies') && playlists.length > 0 && populerFilmler.length > 0 && (
-        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('movies') }}>
-          <div className="flex items-center justify-between px-0 mb-1">
-            <div className="flex items-center gap-2">
-              <Play size={14} className="text-white fill-white" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'Popüler Filmler' : 'Popular Movies'}</h3>
-            </div>
-            <button type="button"
-              onClick={() => setSelectedGroup('Sinema')}
-              className="group/see-all inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[9px] text-neutral-400 hover:bg-white/[0.08] hover:text-white font-bold uppercase tracking-wider transition-all"
-            >
-              {language === 'tr' ? 'Tümünü Gör' : 'See All'}
-              <ChevronRight size={12} className="transition-transform group-hover/see-all:translate-x-0.5" />
-            </button>
-          </div>
+        <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('movies') }}>
+          <HomeRailHeader
+            title={language === 'tr' ? 'Popüler Filmler' : 'Popular Movies'}
+            actionLabel={language === 'tr' ? 'Tümü' : 'See all'}
+            onAction={() => setSelectedGroup('Sinema')}
+          />
 
           <div className="relative group/row">
             <button type="button"
               aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-popular-movies', 'left')}
-              className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} left-1`}
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={18} />
             </button>
             <div
               id="slider-popular-movies"
-              className="flex gap-6 overflow-x-auto pb-6 pt-2 pr-24 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
+              className="flex gap-3.5 overflow-x-auto pb-5 pt-1 pr-20 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
             >
               {populerFilmler.map(item => (
                 <VodPosterCard
@@ -1041,40 +1182,32 @@ export const HomeView = memo(function HomeView({
             <button type="button"
               aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-popular-movies', 'right')}
-              className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} right-1`}
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>
       )}
       {visibleHomeBlocks >= getSectionPosition('series') && playlists.length > 0 && populerDiziler.length > 0 && (
-        <div className="flex flex-col gap-4 select-none animate-fade-in" style={{ order: getSectionPosition('series') }}>
-          <div className="flex items-center justify-between px-0 mb-1">
-            <div className="flex items-center gap-2">
-              <Sparkles size={14} className="text-white" />
-              <h3 className="text-sm md:text-base font-bold tracking-tight text-neutral-200">{language === 'tr' ? 'Popüler Diziler' : 'Popular Series'}</h3>
-            </div>
-            <button type="button"
-              onClick={() => setSelectedGroup('Diziler')}
-              className="group/see-all inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[9px] text-neutral-400 hover:bg-white/[0.08] hover:text-white font-bold uppercase tracking-wider transition-all"
-            >
-              {language === 'tr' ? 'Tümünü Gör' : 'See All'}
-              <ChevronRight size={12} className="transition-transform group-hover/see-all:translate-x-0.5" />
-            </button>
-          </div>
+        <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('series') }}>
+          <HomeRailHeader
+            title={language === 'tr' ? 'Popüler Diziler' : 'Popular Series'}
+            actionLabel={language === 'tr' ? 'Tümü' : 'See all'}
+            onAction={() => setSelectedGroup('Diziler')}
+          />
 
           <div className="relative group/row">
             <button type="button"
               aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'}
               onClick={() => handleScrollSlider('slider-popular-series', 'left')}
-              className="absolute left-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} left-1`}
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={18} />
             </button>
             <div
               id="slider-popular-series"
-              className="flex gap-6 overflow-x-auto pb-6 pt-2 pr-24 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
+              className="flex gap-3.5 overflow-x-auto pb-5 pt-1 pr-20 hide-scrollbar snap-x scroll-smooth slider-fading-mask"
             >
               {populerDiziler.map(item => (
                 <VodPosterCard
@@ -1091,9 +1224,9 @@ export const HomeView = memo(function HomeView({
             <button type="button"
               aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'}
               onClick={() => handleScrollSlider('slider-popular-series', 'right')}
-              className="absolute right-2 top-[35%] -translate-y-1/2 z-30 w-10 h-16 rounded-2xl bg-black/55 hover:bg-white/90 text-white hover:text-black border border-white/10 flex items-center justify-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 transition-all hover:scale-105 active:scale-95 shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className={`${railArrowClass} right-1`}
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>
@@ -1111,6 +1244,7 @@ export const HomeView = memo(function HomeView({
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 });

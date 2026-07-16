@@ -34,6 +34,7 @@ export function AppOverlays({ app }: AppOverlaysProps) {
         setSpotlightSearchInput={spotlight.setSpotlightSearchInput}
         spotlightInputRef={spotlight.spotlightInputRef}
         spotlightSearchResults={spotlight.spotlightSearchResults}
+        isSearchingWorker={spotlight.isSearchingWorker}
         handlePlayStream={playback.handlePlayStream}
         handleOpenDetails={catalog.handleOpenDetails}
         handleOpenSeriesModalDirect={catalog.handleOpenSeriesModalDirect}

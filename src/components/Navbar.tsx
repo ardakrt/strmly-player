@@ -47,12 +47,12 @@ export const Navbar = memo(function Navbar({
   if (!loaded) return null;
 
   return (
-    <div className={`fixed top-0 left-0 right-0 z-50 px-3 sm:px-5 lg:px-8 transition-[padding] duration-300 ${
+    <div className={`pointer-events-none fixed top-0 left-0 right-0 z-50 px-3 sm:px-5 lg:px-8 transition-[padding] duration-300 ${
       scrolled ? 'pt-2.5' : 'pt-4'
     }`}>
       <nav
         aria-label="Ana navigasyon"
-        className={`navbar-liquid-glass mx-auto flex w-full items-center justify-between gap-2 px-2.5 sm:px-3 transition-[max-width,height,background-color,border-color,box-shadow,backdrop-filter] duration-500 ease-in-out rounded-full ${
+        className={`pointer-events-auto navbar-liquid-glass mx-auto flex w-full items-center justify-between gap-2 px-2.5 sm:px-3 transition-[max-width,height,background-color,border-color,box-shadow,backdrop-filter] duration-500 ease-in-out rounded-full ${
           scrolled
             ? 'navbar-liquid-glass--scrolled h-11 max-w-[1040px]'
             : 'h-12 max-w-[1180px]'

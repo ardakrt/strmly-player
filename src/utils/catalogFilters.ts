@@ -179,3 +179,155 @@ export function takeTopByScore<T>(
   }
   return top.map((e) => e.item);
 }
+
+/** TMDB-enriched candidate for home hero showcase. */
+export interface PopularShowcaseCandidate {
+  item: PlaylistItem;
+  /** TMDB vote_average (0–10). */
+  rating: number;
+  popularity?: number;
+  voteCount?: number;
+  hasBackdrop?: boolean;
+}
+
+/**
+ * Netflix-style home billboard picker:
+ * - Ranks film and dizi in *separate* popular tiers (movies otherwise dominate TMDB votes)
+ * - Hard mix quotas (default ~half series) with soft preference tilt
+ * - Daily-stable weighted sample inside each tier
+ */
+export function selectMixedPopularShowcase(
+  candidates: PopularShowcaseCandidate[],
+  count: number,
+  daySeed: number,
+  prefs: string[] = [],
+): PlaylistItem[] {
+  if (count <= 0 || candidates.length === 0) return [];
+  if (candidates.length <= count) {
+    return candidates.map((c) => c.item);
+  }
+
+  const preferSeries = prefs.includes('series') && !prefs.includes('movies');
+  const preferMovies = prefs.includes('movies') && !prefs.includes('series');
+  // Default slightly series-friendly (ceil) so billboards aren't movie-only.
+  let seriesTarget = Math.ceil(count * 0.5);
+  if (preferSeries) seriesTarget = Math.round(count * 0.65);
+  if (preferMovies) seriesTarget = Math.round(count * 0.35);
+  // Keep both types when both exist in the catalog.
+  seriesTarget = Math.max(1, Math.min(count - 1, seriesTarget));
+  let movieTarget = count - seriesTarget;
+
+  const popularityScore = (c: PopularShowcaseCandidate) => {
+    const rating = Number.isFinite(c.rating) ? c.rating : 0;
+    const pop = Number.isFinite(c.popularity) ? (c.popularity as number) : 0;
+    const votes = Number.isFinite(c.voteCount) ? (c.voteCount as number) : 0;
+    // Cap vote volume — blockbuster movies otherwise drown out TV shows.
+    let score =
+      rating * 24 +
+      Math.min(pop, 80) * 0.5 +
+      Math.min(votes, 2500) / 100 +
+      (c.hasBackdrop ? 30 : 0);
+    // Mild daily jitter so the slate rotates inside the popular band.
+    const title = c.item.name || '';
+    let h = daySeed * 997;
+    for (let i = 0; i < title.length; i++) h = (h * 33 + title.charCodeAt(i)) >>> 0;
+    score += (h % 100) / 12;
+    return score;
+  };
+
+  type Ranked = { c: PopularShowcaseCandidate; score: number; index: number };
+
+  const rankType = (isSeries: boolean): Ranked[] =>
+    candidates
+      .filter((c) => (isSeries ? c.item.type === 'series' : c.item.type !== 'series'))
+      .map((c, index) => ({ c, score: popularityScore(c), index }))
+      .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  // Independent popular tiers — never filter series out of a movie-heavy combined top-N.
+  const tierPerType = Math.max(count * 5, 28);
+  const seriesRanked = rankType(true).slice(0, tierPerType);
+  const movieRanked = rankType(false).slice(0, tierPerType);
+
+  // If only one type exists, fill the whole billboard with it.
+  if (seriesRanked.length === 0) {
+    seriesTarget = 0;
+    movieTarget = count;
+  } else if (movieRanked.length === 0) {
+    seriesTarget = count;
+    movieTarget = 0;
+  }
+
+  let seed = (daySeed * 2654435761) >>> 0;
+  const rand = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
+  /** Weighted sample without replacement; higher score = more likely. */
+  const pickWeighted = (pool: Ranked[], n: number): PopularShowcaseCandidate[] => {
+    const available = [...pool];
+    const picked: PopularShowcaseCandidate[] = [];
+    while (picked.length < n && available.length > 0) {
+      const weights = available.map((e) => Math.max(e.score, 0.01));
+      const total = weights.reduce((s, w) => s + w, 0);
+      let r = rand() * total;
+      let idx = 0;
+      for (; idx < available.length; idx++) {
+        r -= weights[idx];
+        if (r <= 0) break;
+      }
+      idx = Math.min(idx, available.length - 1);
+      picked.push(available[idx].c);
+      available.splice(idx, 1);
+    }
+    return picked;
+  };
+
+  const seriesPicks = pickWeighted(seriesRanked, Math.min(seriesTarget, seriesRanked.length));
+  const moviePicks = pickWeighted(movieRanked, Math.min(movieTarget, movieRanked.length));
+
+  // Backfill only after that type's own popular tier is exhausted.
+  const pickedKeys = new Set(
+    [...seriesPicks, ...moviePicks].map((c) => c.item.url || c.item.id || c.item.name),
+  );
+  let need = count - seriesPicks.length - moviePicks.length;
+  if (need > 0 && seriesRanked.length > seriesPicks.length) {
+    const moreSeries = pickWeighted(
+      seriesRanked.filter((e) => !pickedKeys.has(e.c.item.url || e.c.item.id || e.c.item.name)),
+      need,
+    );
+    for (const c of moreSeries) {
+      seriesPicks.push(c);
+      pickedKeys.add(c.item.url || c.item.id || c.item.name);
+    }
+    need = count - seriesPicks.length - moviePicks.length;
+  }
+  if (need > 0 && movieRanked.length > moviePicks.length) {
+    const moreMovies = pickWeighted(
+      movieRanked.filter((e) => !pickedKeys.has(e.c.item.url || e.c.item.id || e.c.item.name)),
+      need,
+    );
+    for (const c of moreMovies) {
+      moviePicks.push(c);
+      pickedKeys.add(c.item.url || c.item.id || c.item.name);
+    }
+  }
+
+  // Interleave dizi / film so the carousel feels mixed (series-first when available).
+  const mixed: PlaylistItem[] = [];
+  let si = 0;
+  let mi = 0;
+  let preferSeriesNext = seriesPicks.length > 0;
+  while (mixed.length < count && (si < seriesPicks.length || mi < moviePicks.length)) {
+    if (preferSeriesNext && si < seriesPicks.length) {
+      mixed.push(seriesPicks[si++].item);
+    } else if (mi < moviePicks.length) {
+      mixed.push(moviePicks[mi++].item);
+    } else if (si < seriesPicks.length) {
+      mixed.push(seriesPicks[si++].item);
+    }
+    preferSeriesNext = !preferSeriesNext;
+  }
+
+  return mixed.slice(0, count);
+}
