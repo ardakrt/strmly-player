@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.1 - 2026-07-17
+
+### Fixes
+
+- Restored TMDB logos, artwork, metadata, and series descriptions in GitHub release builds by replacing the rejected release credential.
+- Added format and live TMDB authorization checks to the release workflow so an invalid API key can no longer produce a publishable build.
+
 ## 1.7.0 - 2026-07-16
 
 ### Highlights

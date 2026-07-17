@@ -34,10 +34,26 @@ jobs:
         env:
           VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY }}
         run: |
-          if [ -z "$VITE_TMDB_API_KEY" ]; then
-            echo "::error::VITE_TMDB_API_KEY GitHub Secret is missing. Add it in repository Settings > Secrets and variables > Actions."
-            exit 1
-          fi
+          node <<'NODE'
+          const key = process.env.VITE_TMDB_API_KEY?.trim() || '';
+
+          if (!/^[a-f0-9]{32}$/i.test(key)) {
+            console.error('::error::VITE_TMDB_API_KEY must be a 32-character TMDB v3 API key.');
+            process.exit(1);
+          }
+
+          (async () => {
+            const response = await fetch(`https://api.themoviedb.org/3/configuration?api_key=${key}`);
+            if (!response.ok) {
+              console.error(`::error::TMDB rejected VITE_TMDB_API_KEY with HTTP ${response.status}.`);
+              process.exit(1);
+            }
+            console.log('TMDB release key validation passed.');
+          })().catch((error) => {
+            console.error(`::error::TMDB release key validation failed: ${error.message}`);
+            process.exit(1);
+          });
+          NODE
         shell: bash
 
       - name: Build and package
