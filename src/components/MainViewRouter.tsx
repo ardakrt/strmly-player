@@ -34,6 +34,8 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
             displayFeaturedIndex={home.displayFeaturedIndex}
             setActiveFeaturedIndex={home.setActiveFeaturedIndex}
             activeShowcaseList={home.activeShowcaseList}
+            top10Movies={(home as any).top10Movies}
+            top10Series={(home as any).top10Series}
             playlists={catalog.playlists}
             uniqueRecentlyWatched={home.uniqueRecentlyWatched}
             clearRecentlyWatched={home.clearRecentlyWatched}

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
 @import "tailwindcss";
 
@@ -32,6 +32,16 @@
 
 :root {
   --font-sans: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+  --font-rank: 'Anton', 'Arial Black', sans-serif;
+  --top10-rank-fill: #07090a;
+  --top10-rank-stroke: rgba(255, 255, 255, 0.46);
+  --top10-rank-stroke-hover: rgba(255, 255, 255, 0.68);
+  --top10-rank-shadow: rgba(0, 0, 0, 0.72);
+  --top10-focus-ring: color-mix(in srgb, var(--accent-color) 72%, white);
+  --top10-rank-one-stroke: color-mix(in srgb, var(--accent-color) 56%, white);
+  --top10-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --top10-duration-fast: 160ms;
+  --top10-duration-base: 220ms;
   
   --accent-color: #ffffff;
   --accent-hover: #d1d1d6;
@@ -42,6 +52,7 @@
   --bg-surface-glass: rgba(10, 10, 12, 0.35);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
+  --hero-transition-floor: #0a0a0c;
   --bg-modal: rgba(5, 5, 6, 0.95);
   
   --text-primary: #f5f5f7;
@@ -799,38 +810,6 @@ button.focusable-item:focus-visible {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
-/* ── Prime hover preview (Netflix-style card portal) ── */
-.prime-hover-card {
-  border-radius: 18px;
-  background: #0c0c0e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 28px 80px rgba(0, 0, 0, 0.72),
-    0 0 0 1px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-  isolation: isolate;
-  will-change: transform, opacity;
-  opacity: 0;
-  transform: scale(0.92);
-  pointer-events: none;
-  transition:
-    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.prime-hover-card--in {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-}
-
-.prime-hover-card--out {
-  opacity: 0;
-  transform: scale(0.94);
-  pointer-events: none;
-}
-
 /* ── Series detail modal — black glass (no cool/blue cast) ── */
 .series-modal-sheet {
   background:
@@ -969,13 +948,20 @@ button.focusable-item:focus-visible {
     0 0 34px rgba(255, 255, 255, 0.035);
 }
 
-/* TMDB title art can be authored in black, which disappears into the hero scrim. */
-.home-hero-title-logo {
+/* Keep official TMDB artwork untouched. Contrast belongs to the wrapper so
+   coloured and detailed logos can never be flattened into a white silhouette. */
+.home-hero-title-logo-shell {
   filter:
-    grayscale(1)
-    brightness(0)
-    invert(1)
-    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.58));
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.55))
+    drop-shadow(0 4px 14px rgba(0, 0, 0, 0.82))
+    drop-shadow(0 9px 26px rgba(0, 0, 0, 0.5));
+  isolation: isolate;
+}
+
+.home-hero-title-logo {
+  filter: none !important;
+  mix-blend-mode: normal;
+  opacity: 1;
 }
 
 .home-hero-color-grade {
@@ -998,9 +984,414 @@ button.focusable-item:focus-visible {
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
+/* Hallmark · component: Top 10 rail · genre: atmospheric
+ * theme: studied-DNA (source: image) · studied: yes
+ * adaptation: integrated neutral rank watermark; Strmly tokens remain authoritative
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (46–50)
+ * pre-emit critique: P5 H5 E5 S5 R5 V5 */
+.top10-rail {
+  gap: 0.625rem;
+}
+
+.top10-rail .home-rail-header {
+  min-width: 0;
+  align-items: baseline;
+}
+
+.top10-rail .home-rail-title {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: clamp(0.95rem, 0.88rem + 0.25vw, 1.075rem);
+  font-weight: 650;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.top10-rail .home-rail-muted {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--text-primary) 34%, transparent);
+  font-size: 0.6875rem;
+  letter-spacing: 0.01em;
+}
+
+.top10-slider {
+  gap: clamp(0.75rem, 0.66rem + 0.4vw, 1rem);
+  padding-block: 0.5rem 1.5rem;
+}
+
+.top10-card {
+  align-items: flex-end;
+  isolation: isolate;
+}
+
+.top10-rank-stage {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  width: 118px;
+  height: 264px;
+  flex: 0 0 118px;
+  align-items: flex-end;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+}
+
+.top10-rank-number {
+  display: block;
+  font-family: var(--font-rank);
+  font-size: 292px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 0.86;
+  color: var(--top10-rank-fill);
+  opacity: 0.82;
+  -webkit-text-stroke: 3px var(--top10-rank-stroke);
+  paint-order: stroke fill;
+  text-shadow:
+    0 3px 0 var(--top10-rank-shadow),
+    0 16px 34px var(--top10-rank-shadow);
+  transform: translate3d(0, 0, 0);
+  transform-origin: left bottom;
+  transition:
+    opacity var(--top10-duration-fast) var(--top10-ease-out),
+    transform var(--top10-duration-base) var(--top10-ease-out),
+    -webkit-text-stroke-color var(--top10-duration-fast) var(--top10-ease-out);
+}
+
+.top10-card-poster {
+  margin-left: -38px;
+  transform: translate3d(0, 0, 0);
+  transition: transform var(--top10-duration-base) var(--top10-ease-out);
+}
+
+.top10-card .home-poster-card {
+  transform-origin: center bottom;
+  transition: transform var(--top10-duration-base) var(--top10-ease-out);
+}
+
+.top10-card .home-poster-frame {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 7%, transparent),
+    0 16px 34px color-mix(in srgb, var(--top10-rank-shadow) 58%, transparent);
+  transition: box-shadow var(--top10-duration-base) var(--top10-ease-out);
+}
+
+.top10-card--rank-one .top10-rank-stage {
+  width: 80px;
+  flex-basis: 80px;
+}
+
+.top10-card--rank-one .top10-card-poster {
+  margin-left: -20px;
+}
+
+.top10-card--rank-one .top10-rank-number {
+  opacity: 0.9;
+  -webkit-text-stroke-color: var(--top10-rank-stroke-hover);
+}
+
+.top10-card--double .top10-rank-stage {
+  width: 190px;
+  flex-basis: 190px;
+}
+
+.top10-card--double .top10-rank-number {
+  letter-spacing: -0.085em;
+}
+
+.top10-card--double .top10-card-poster {
+  margin-left: -56px;
+}
+
+.top10-card:has([data-card-state="loading"]) .top10-rank-number,
+.top10-card:has([data-card-state="idle"]) .top10-rank-number {
+  opacity: 0.24;
+}
+
+.top10-card:has([data-card-state="error"]) .top10-rank-number {
+  opacity: 0.52;
+}
+
+.top10-card:has([aria-disabled="true"]) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.top10-card:has([aria-disabled="true"]) .home-poster-card {
+  pointer-events: none;
+}
+
+.top10-card .home-poster-card:focus-visible {
+  z-index: 20;
+  outline: none;
+  transform: translate3d(0, -5px, 0) scale(1.02);
+}
+
+.top10-card .home-poster-card:focus-visible .home-poster-frame {
+  box-shadow:
+    0 0 0 3px var(--top10-focus-ring),
+    0 0 0 6px color-mix(in srgb, var(--bg-surface) 82%, transparent),
+    0 22px 44px var(--top10-rank-shadow);
+}
+
+.top10-card:focus-within .top10-rank-number {
+  opacity: 0.72;
+  transform: translate3d(-2px, 0, 0);
+  -webkit-text-stroke-color: var(--top10-rank-stroke-hover);
+}
+
+.top10-card .home-poster-card:active {
+  transform: translate3d(0, -1px, 0) scale(0.995);
+}
+
+@media (hover: hover) {
+  .top10-card:hover .top10-rank-number {
+    opacity: 0.72;
+    transform: translate3d(-2px, 0, 0);
+    -webkit-text-stroke-color: var(--top10-rank-stroke-hover);
+  }
+
+  .top10-card:hover .home-poster-card {
+    z-index: 20;
+    transform: translate3d(0, -4px, 0) scale(1.015);
+  }
+
+  .top10-card:hover .home-poster-frame {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 13%, transparent),
+      0 22px 44px var(--top10-rank-shadow);
+  }
+}
+
+@media (min-width: 768px) {
+  .top10-rank-stage {
+    width: 136px;
+    height: 312px;
+    flex-basis: 136px;
+  }
+
+  .top10-rank-number {
+    font-size: 342px;
+    -webkit-text-stroke-width: 4px;
+  }
+
+  .top10-card-poster {
+    margin-left: -46px;
+  }
+
+  .top10-card--rank-one .top10-rank-stage {
+    width: 90px;
+    flex-basis: 90px;
+  }
+
+  .top10-card--rank-one .top10-card-poster {
+    margin-left: -24px;
+  }
+
+  .top10-card--double .top10-rank-stage {
+    width: 222px;
+    flex-basis: 222px;
+  }
+
+  .top10-card--double .top10-card-poster {
+    margin-left: -66px;
+  }
+}
+
+@media (max-width: 414px) {
+  .top10-rail .home-rail-header {
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .top10-rail .home-rail-muted {
+    padding-top: 0.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top10-rank-number,
+  .top10-card-poster,
+  .top10-card .home-poster-card,
+  .top10-card .home-poster-frame {
+    transition-duration: 120ms;
+  }
+
+  .top10-card:hover .top10-rank-number,
+  .top10-card:focus-within .top10-rank-number,
+  .top10-card:hover .home-poster-card,
+  .top10-card .home-poster-card:focus-visible,
+  .top10-card .home-poster-card:active {
+    transform: none;
+  }
+}
+
+/* Reference-derived structure, deliberately redrawn in Strmly's own voice:
+   the rank lives inside the artwork, while copy and metadata keep the existing
+   compact overlay instead of reproducing the reference's lower info panel. */
+.top10-card {
+  width: 172px;
+  flex: 0 0 172px;
+}
+
+.top10-card-poster {
+  width: 100%;
+  margin-left: 0;
+}
+
+.top10-card--rank-one .top10-card-poster,
+.top10-card--double .top10-card-poster {
+  margin-left: 0;
+}
+
+.top10-card-poster > [data-card-state],
+.top10-card .home-poster-card {
+  width: 100%;
+}
+
+.top10-card .home-poster-frame {
+  border-radius: 18px;
+  background: var(--bg-card);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent),
+    0 14px 30px color-mix(in srgb, var(--top10-rank-shadow) 54%, transparent);
+}
+
+.top10-rank-overlay {
+  position: absolute;
+  z-index: 14;
+  left: 0.55rem;
+  bottom: 2.85rem;
+  display: block;
+  max-width: calc(100% - 1rem);
+  color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  font-family: var(--font-rank);
+  font-size: 7.25rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.065em;
+  line-height: 0.78;
+  opacity: 0.88;
+  pointer-events: none;
+  user-select: none;
+  -webkit-text-stroke: 1.5px color-mix(in srgb, var(--text-primary) 58%, transparent);
+  paint-order: stroke fill;
+  text-shadow: 0 10px 24px var(--top10-rank-shadow);
+  transform: translate3d(0, 0, 0);
+  transform-origin: left bottom;
+  transition:
+    opacity var(--top10-duration-fast) var(--top10-ease-out),
+    transform var(--top10-duration-base) var(--top10-ease-out),
+    -webkit-text-stroke-color var(--top10-duration-fast) var(--top10-ease-out);
+}
+
+.top10-card--rank-one .top10-rank-overlay {
+  color: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  -webkit-text-stroke-color: color-mix(in srgb, var(--text-primary) 70%, transparent);
+}
+
+.home-poster-card[data-rank="10"] .top10-rank-overlay {
+  left: 0.3rem;
+  font-size: 6.35rem;
+  letter-spacing: -0.1em;
+}
+
+.top10-card:focus-within .top10-rank-overlay {
+  opacity: 1;
+  transform: translate3d(0, -2px, 0);
+  -webkit-text-stroke-color: color-mix(in srgb, var(--text-primary) 76%, transparent);
+}
+
+@media (hover: hover) {
+  .top10-card:hover .top10-rank-overlay {
+    opacity: 1;
+    transform: translate3d(0, -2px, 0);
+    -webkit-text-stroke-color: color-mix(in srgb, var(--text-primary) 76%, transparent);
+  }
+}
+
+@media (min-width: 768px) {
+  .top10-card {
+    width: 200px;
+    flex-basis: 200px;
+  }
+
+  .top10-rank-overlay {
+    left: 0.65rem;
+    bottom: 3rem;
+    font-size: 8.35rem;
+  }
+
+  .home-poster-card[data-rank="10"] .top10-rank-overlay {
+    left: 0.35rem;
+    font-size: 7.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top10-rank-overlay {
+    transition-duration: 120ms;
+  }
+
+  .top10-card:hover .top10-rank-overlay,
+  .top10-card:focus-within .top10-rank-overlay {
+    transform: none;
+  }
+}
+
+/* Custom Catalog Stage Scrollbar - Ultra-sleek Dark Glass Scrollbar */
+.custom-catalog-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.custom-catalog-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-catalog-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9999px;
+  margin: 6px 2px;
+}
+
+.custom-catalog-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+.custom-catalog-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.custom-catalog-scrollbar::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.85);
+}
+
 .home-hero-copy > * {
   opacity: 0;
   animation: homeHeroCopyIn 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+ * Atmospheric hero-to-rail bridge: the first rail overlaps the cinematic
+ * floor while the active theme surface is introduced in restrained steps. */
+.home-hero-surface-bridge {
+  background: linear-gradient(
+    180deg,
+    var(--hero-transition-floor) 0%,
+    color-mix(in srgb, var(--hero-transition-floor) 84%, var(--bg-surface)) 38%,
+    color-mix(in srgb, var(--hero-transition-floor) 48%, var(--bg-surface)) 70%,
+    transparent 100%
+  );
 }
 
 .home-hero-copy > :nth-child(1) { animation-delay: 40ms; }
@@ -1231,6 +1622,24 @@ button.series-category-item.is-active:focus-visible {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* Staggered Card Cascade Animation for Movies, Series, and Live TV Grids */
+@keyframes cardCascade {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-card-cascade {
+  opacity: 0;
+  animation: cardCascade 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
 /* Skeleton Shimmer Loading States */
@@ -1534,4 +1943,31 @@ button.series-category-item.is-active:focus-visible {
   .spotlight-field {
     transition: none !important;
   }
+}
+
+/* LikeBurst Micro-Interaction Animations */
+@keyframes likeHeartPop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.42); }
+  60% { transform: scale(0.85); }
+  80% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes likeSparkBurst {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--spark-tx, 0px), var(--spark-ty, 0px)) scale(1.25);
+    opacity: 0;
+  }
+}
+
+.animate-like-heart-pop {
+  animation: likeHeartPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }

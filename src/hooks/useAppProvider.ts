@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useDeferredValue } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
 import type { ContentPreference } from "../types";
 import { HERO_BACKDROPS } from "../constants";
 import { getAccentStylesHelper } from "../utils/helpers";
@@ -329,6 +329,8 @@ export function useAppProvider() {
     activeFeaturedIndex,
     displayFeaturedIndex,
     setActiveFeaturedIndex,
+    top10Movies,
+    top10Series,
     populerFilmler,
     populerDiziler,
     homeDiscoveryItems,
@@ -450,16 +452,17 @@ export function useAppProvider() {
     setQualityFilter,
   ]);
 
-  const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
+  const handleMainScroll = useCallback((e: React.UIEvent<HTMLElement>) => {
     const scrollTop = e.currentTarget.scrollTop;
-    setScrolled(scrollTop > 10);
+    const isScrolled = scrollTop > 10;
+    setScrolled((prev) => (prev !== isScrolled ? isScrolled : prev));
     const bottom =
       e.currentTarget.scrollHeight - e.currentTarget.scrollTop <=
       e.currentTarget.clientHeight + 800;
     if (bottom) {
       setVisibleCount((prev) => prev + 100);
     }
-  };
+  }, []);
 
   const handleScrollSlider = (
     sliderId: string,
@@ -651,6 +654,8 @@ export function useAppProvider() {
       displayFeaturedIndex,
       setActiveFeaturedIndex,
       activeShowcaseList,
+      top10Movies,
+      top10Series,
       uniqueRecentlyWatched,
       clearRecentlyWatched,
       removeFromRecentlyWatched,

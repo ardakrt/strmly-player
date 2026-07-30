@@ -1,5 +1,6 @@
 import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from './seriesGroupers';
+import { cleanMediaTitle } from './seriesGroupers';
 import {
   getItemGroupLower,
   getItemNameLower,
@@ -21,7 +22,7 @@ export function matchesQualityFilter(rank: number, qualityFilter: string): boole
 }
 
 /** National (ulusal) groups only keep HD+ channels. */
-export function passesUlusalHdRule(item: PlaylistItem): boolean {
+function passesUlusalHdRule(item: PlaylistItem): boolean {
   const gLower = getItemGroupLower(item);
   if (!gLower.includes('ulusal')) return true;
   return isHdChannel(item.name);
@@ -64,6 +65,102 @@ export function applyCatalogPostFilters(
     out.push(ch);
   }
   return out;
+}
+
+const releaseYearPattern = /(?:^|\D)((?:19|20)\d{2})(?=\D|$)/g;
+
+function getReleaseYear(value: string): string {
+  let year = '';
+  for (const match of String(value || '').matchAll(releaseYearPattern)) {
+    year = match[1];
+  }
+  return year;
+}
+
+function getCatalogTitleKey(title: string, yearSource = title): string {
+  const cleanTitle = cleanMediaTitle(title)
+    .replace(/(?:^|\D)(?:19|20)\d{2}(?=\D|$)/g, ' ')
+    .replace(/\b(?:4k|uhd|fhd|hd|sd|2160p?|1080[pi]?|720[pi]?|576p?|480p?)\b/gi, ' ')
+    .normalize('NFKC')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  const year = getReleaseYear(yearSource);
+  return `${cleanTitle || String(title || '').trim().toLocaleLowerCase('tr-TR')}::${year}`;
+}
+
+function hasPreferredArtwork(item: PlaylistItem): boolean {
+  return Boolean(item.logo && !item.isGenericLogo);
+}
+
+/**
+ * Collapse provider duplicates in the Movies catalog without touching the
+ * underlying playlist. A release year remains part of the key so remakes with
+ * the same title continue to appear as separate films.
+ */
+export function dedupeMovieCatalogItems(items: PlaylistItem[]): PlaylistItem[] {
+  if (items.length < 2) return items;
+
+  const deduped: PlaylistItem[] = [];
+  const indexByTitle = new Map<string, number>();
+  for (const item of items) {
+    const key = getCatalogTitleKey(item.name);
+    const existingIndex = indexByTitle.get(key);
+    if (existingIndex === undefined) {
+      indexByTitle.set(key, deduped.length);
+      deduped.push(item);
+      continue;
+    }
+
+    const existing = deduped[existingIndex];
+    const existingRank = existing.qualityRank || getQualityRank(existing.name, existing.nameLower);
+    const candidateRank = item.qualityRank || getQualityRank(item.name, item.nameLower);
+    if (
+      candidateRank > existingRank
+      || (candidateRank === existingRank
+        && hasPreferredArtwork(item)
+        && !hasPreferredArtwork(existing))
+    ) {
+      deduped[existingIndex] = item;
+    }
+  }
+  return deduped;
+}
+
+function getSeriesYearSource(series: GroupedSeries): string {
+  for (const episodes of Object.values(series.seasons)) {
+    if (episodes[0]?.item?.name) return episodes[0].item.name;
+  }
+  return series.name;
+}
+
+/** Collapse the same grouped series repeated under multiple provider groups. */
+export function dedupeSeriesCatalogItems(items: GroupedSeries[]): GroupedSeries[] {
+  if (items.length < 2) return items;
+
+  const deduped: GroupedSeries[] = [];
+  const indexByTitle = new Map<string, number>();
+  for (const series of items) {
+    const key = getCatalogTitleKey(series.name, getSeriesYearSource(series));
+    const existingIndex = indexByTitle.get(key);
+    if (existingIndex === undefined) {
+      indexByTitle.set(key, deduped.length);
+      deduped.push(series);
+      continue;
+    }
+
+    const existing = deduped[existingIndex];
+    if (
+      series.episodesCount > existing.episodesCount
+      || (series.episodesCount === existing.episodesCount
+        && series.logo
+        && !series.isGenericLogo
+        && (!existing.logo || existing.isGenericLogo))
+    ) {
+      deduped[existingIndex] = series;
+    }
+  }
+  return deduped;
 }
 
 export function sortByNameAzZa<T extends { name: string }>(
@@ -190,6 +287,25 @@ export interface PopularShowcaseCandidate {
   hasBackdrop?: boolean;
 }
 
+/** Local calendar-day seed; includes the year so the slate does not repeat annually. */
+export function getLocalCalendarDaySeed(date = new Date()): number {
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
+}
+
+/** Source-backed TMDB ranking score used before the daily rotation is sampled. */
+export function getTmdbShowcaseScore(candidate: PopularShowcaseCandidate): number {
+  const rating = Number.isFinite(candidate.rating) ? candidate.rating : 0;
+  const popularity = Number.isFinite(candidate.popularity) ? (candidate.popularity as number) : 0;
+  const voteCount = Number.isFinite(candidate.voteCount) ? (candidate.voteCount as number) : 0;
+
+  return (
+    rating * 24
+    + Math.min(popularity, 80) * 0.5
+    + Math.min(voteCount, 2500) / 100
+    + (candidate.hasBackdrop ? 30 : 0)
+  );
+}
+
 /**
  * Netflix-style home billboard picker:
  * - Ranks film and dizi in *separate* popular tiers (movies otherwise dominate TMDB votes)
@@ -203,9 +319,6 @@ export function selectMixedPopularShowcase(
   prefs: string[] = [],
 ): PlaylistItem[] {
   if (count <= 0 || candidates.length === 0) return [];
-  if (candidates.length <= count) {
-    return candidates.map((c) => c.item);
-  }
 
   const preferSeries = prefs.includes('series') && !prefs.includes('movies');
   const preferMovies = prefs.includes('movies') && !prefs.includes('series');
@@ -217,30 +330,12 @@ export function selectMixedPopularShowcase(
   seriesTarget = Math.max(1, Math.min(count - 1, seriesTarget));
   let movieTarget = count - seriesTarget;
 
-  const popularityScore = (c: PopularShowcaseCandidate) => {
-    const rating = Number.isFinite(c.rating) ? c.rating : 0;
-    const pop = Number.isFinite(c.popularity) ? (c.popularity as number) : 0;
-    const votes = Number.isFinite(c.voteCount) ? (c.voteCount as number) : 0;
-    // Cap vote volume — blockbuster movies otherwise drown out TV shows.
-    let score =
-      rating * 24 +
-      Math.min(pop, 80) * 0.5 +
-      Math.min(votes, 2500) / 100 +
-      (c.hasBackdrop ? 30 : 0);
-    // Mild daily jitter so the slate rotates inside the popular band.
-    const title = c.item.name || '';
-    let h = daySeed * 997;
-    for (let i = 0; i < title.length; i++) h = (h * 33 + title.charCodeAt(i)) >>> 0;
-    score += (h % 100) / 12;
-    return score;
-  };
-
   type Ranked = { c: PopularShowcaseCandidate; score: number; index: number };
 
   const rankType = (isSeries: boolean): Ranked[] =>
     candidates
       .filter((c) => (isSeries ? c.item.type === 'series' : c.item.type !== 'series'))
-      .map((c, index) => ({ c, score: popularityScore(c), index }))
+      .map((c, index) => ({ c, score: getTmdbShowcaseScore(c), index }))
       .sort((a, b) => b.score - a.score || a.index - b.index);
 
   // Independent popular tiers — never filter series out of a movie-heavy combined top-N.
@@ -268,7 +363,11 @@ export function selectMixedPopularShowcase(
     const available = [...pool];
     const picked: PopularShowcaseCandidate[] = [];
     while (picked.length < n && available.length > 0) {
-      const weights = available.map((e) => Math.max(e.score, 0.01));
+      const weights = available.map((e, index) => {
+        // TMDB rank stays primary; the seeded RNG only rotates within the popular tier.
+        const rankWeight = ((available.length - index) / available.length) ** 2;
+        return Math.max(e.score, 0.01) * rankWeight;
+      });
       const total = weights.reduce((s, w) => s + w, 0);
       let r = rand() * total;
       let idx = 0;
@@ -313,11 +412,11 @@ export function selectMixedPopularShowcase(
     }
   }
 
-  // Interleave dizi / film so the carousel feels mixed (series-first when available).
+  // Interleave dizi / film; the larger default series quota starts first to avoid adjacent types.
   const mixed: PlaylistItem[] = [];
   let si = 0;
   let mi = 0;
-  let preferSeriesNext = seriesPicks.length > 0;
+  let preferSeriesNext = seriesPicks.length >= moviePicks.length;
   while (mixed.length < count && (si < seriesPicks.length || mi < moviePicks.length)) {
     if (preferSeriesNext && si < seriesPicks.length) {
       mixed.push(seriesPicks[si++].item);

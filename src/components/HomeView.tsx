@@ -7,9 +7,9 @@ import { pickHeroSynopsis, cleanPlaylistLabel } from '../utils/helpers';
 import { cleanMediaTitle, parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 import { getMediaCardLabels } from '../utils/mediaLabels';
 import { getResolvedTmdbResult, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, fetchTmdbDetails, cleanMovieName } from '../utils/tmdb';
-import { PrimeHoverCard, useHoverPreview } from './PrimeHoverCard';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { useSettings } from '../context/SettingsContext';
+import { TiltHoverCard } from './TiltHoverCard';
 
 interface VodPosterCardProps {
   channel: any; // Can be PlaylistItem or GroupedSeries
@@ -17,6 +17,8 @@ interface VodPosterCardProps {
   toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
   handleOpenDetails: (item: PlaylistItem) => void;
   requireTmdbPoster?: boolean;
+  rank?: number;
+  rankLabel?: string;
   onContextMenu?: (event: React.MouseEvent, item: any) => void;
 }
 
@@ -32,8 +34,8 @@ function HomeRailHeader({
   mutedLabel?: string;
 }) {
   return (
-    <div className="flex items-center justify-between px-0 mb-0.5">
-      <h3 className="text-[15px] md:text-base font-semibold tracking-tight text-white/85">{title}</h3>
+    <div className="home-rail-header flex items-center justify-between px-0 mb-0.5">
+      <h3 className="home-rail-title text-[15px] md:text-base font-semibold tracking-tight text-white/85">{title}</h3>
       {onAction && actionLabel ? (
         <button
           type="button"
@@ -44,7 +46,7 @@ function HomeRailHeader({
           <ChevronRight size={14} className="transition-transform group-hover/see-all:translate-x-0.5" />
         </button>
       ) : mutedLabel ? (
-        <span className="text-[11px] text-white/25 font-medium">{mutedLabel}</span>
+        <span className="home-rail-muted text-[11px] text-white/25 font-medium">{mutedLabel}</span>
       ) : null}
     </div>
   );
@@ -110,17 +112,10 @@ const translateDuration = (durationStr: string, language: 'tr' | 'en'): string =
     .replace(/DK/g, 'M');
 };
 
-function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, onContextMenu }: VodPosterCardProps) {
+function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDetails, rank, rankLabel, onContextMenu }: VodPosterCardProps) {
   const { language } = useSettings();
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
-  const {
-    showPreview,
-    mountPreview,
-    handleMouseEnter,
-    handleMouseLeave,
-    handlePreviewEnter,
-  } = useHoverPreview();
 
   useEffect(() => {
     const el = cardRef.current;
@@ -227,10 +222,10 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
         let posterUrl: string | null = null;
         let backdropUrl: string | null = null;
         if (result.poster_path) {
-          posterUrl = await resolveTmdbImageSrc(result.poster_path, 'w500');
+          posterUrl = (await resolveTmdbImageSrc(result.poster_path, 'w500')) || null;
         }
         if (result.backdrop_path) {
-          backdropUrl = await resolveTmdbImageSrc(result.backdrop_path, 'w780');
+          backdropUrl = (await resolveTmdbImageSrc(result.backdrop_path, 'w780')) || null;
         }
 
         const rating = result.vote_average && result.vote_average > 0
@@ -279,12 +274,12 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   }, [channel.type, cleanTitle, isVisible]);
 
   if (!isVisible) {
-    return <div ref={cardRef} className="flex-shrink-0 w-[176px] md:w-[208px] aspect-[2/3] snap-start" />;
+    return <div ref={cardRef} data-card-state="idle" className="flex-shrink-0 w-[176px] md:w-[208px] aspect-[2/3] snap-start" />;
   }
 
   if (!metadata) {
     return (
-      <div ref={cardRef} className="flex-shrink-0 w-[176px] md:w-[208px] snap-start">
+      <div ref={cardRef} data-card-state="loading" className="flex-shrink-0 w-[176px] md:w-[208px] snap-start" aria-hidden="true">
         <div className="relative aspect-[2/3] w-full rounded-[22px] overflow-hidden border border-white/5 skeleton-card-shimmer" />
       </div>
     );
@@ -330,101 +325,128 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
   return (
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(); } }} tabIndex={0} role="button"
       ref={cardRef}
-      className="home-poster-card flex-shrink-0 w-[168px] md:w-[196px] group cursor-pointer snap-start transition-transform duration-300 hover:scale-[1.03] hover:z-20"
+      aria-label={rankLabel ? `${rankLabel}: ${displayTitle}` : displayTitle}
+      data-card-state="ready"
+      data-rank={rank}
+      className={`home-poster-card flex-shrink-0 w-[168px] md:w-[196px] group cursor-pointer snap-start transition-colors duration-300 hover:z-20 ${rank ? 'home-poster-card--ranked' : ''}`}
       onClick={handleCardClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       onContextMenu={(event) => onContextMenu?.(event, channel)}
     >
-      <div className="home-poster-frame relative isolate aspect-[2/3] w-full overflow-hidden rounded-[16px] flex items-center justify-center">
-        {posterSrc ? (
-          <img src={posterSrc} alt="" className="home-poster-media animate-fade-in transition-transform duration-500" />
-        ) : (
-          <ImageWithFallback
-            src={channel.logo}
-            name={channel.name}
-            group={channel.group || 'VOD'}
-            itemType={channel.type}
-            isGenericLogo={false}
-            aspect="portrait"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent pointer-events-none" />
+      <TiltHoverCard className="w-full rounded-[16px]">
+        <div className="home-poster-frame relative isolate aspect-[2/3] w-full overflow-hidden rounded-[16px] flex items-center justify-center">
+          {posterSrc ? (
+            <img src={posterSrc} alt="" className="home-poster-media animate-fade-in transition-transform duration-500" />
+          ) : (
+            <ImageWithFallback
+              src={channel.logo}
+              name={channel.name}
+              group={channel.group || 'VOD'}
+              itemType={channel.type}
+              isGenericLogo={false}
+              aspect="portrait"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent pointer-events-none" />
+          {rank ? (
+            <span className="top10-rank-overlay" aria-hidden="true">{rank}</span>
+          ) : null}
 
-        {/* Calm badges: type + year only */}
-        <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
-          <span className="h-5 px-2 text-[9px] font-semibold tracking-wide rounded-md text-white/90 bg-black/45 backdrop-blur-sm border border-white/10 flex items-center">
-            {channel.type === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') : (language === 'tr' ? 'Film' : 'Movie')}
-          </span>
-        </div>
-        {metadata.year ? (
-          <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
-            <span className="h-5 px-2 text-[9px] font-semibold text-white/70 bg-black/45 backdrop-blur-sm rounded-md border border-white/10 flex items-center">
-              {metadata.year}
+          {/* Calm badges: type + year only */}
+          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
+            <span className="h-5 px-2 text-[9px] font-semibold tracking-wide rounded-md text-white/90 bg-black/45 backdrop-blur-sm border border-white/10 flex items-center">
+              {channel.type === 'series' ? (language === 'tr' ? 'Dizi' : 'Series') : (language === 'tr' ? 'Film' : 'Movie')}
             </span>
           </div>
-        ) : null}
-
-        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-15">
-          <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
-            <Play size={16} fill="#000" className="ml-0.5" />
-          </div>
-        </div>
-
-        <button type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleFavorite(channel.id, e);
-          }}
-          className="absolute bottom-2.5 right-2.5 z-30 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/60 hover:text-red-400 transition-all"
-          title="Favorilere Ekle"
-         aria-label="Favorilere Ekle">
-          <Heart size={13} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
-        </button>
-
-        <div className="absolute inset-x-0 bottom-0 z-20 p-3 pr-11 pointer-events-none">
-          <h4 className="text-[13px] font-semibold text-white line-clamp-1 leading-tight">
-            {displayTitle}
-          </h4>
-          <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-white/45">
-            {metadata.rating ? (
-              <span className="inline-flex items-center gap-0.5 text-amber-400/90">
-                <span className="text-[10px]">★</span> {metadata.rating}
+          {metadata.year ? (
+            <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
+              <span className="h-5 px-2 text-[9px] font-semibold text-white/70 bg-black/45 backdrop-blur-sm rounded-md border border-white/10 flex items-center">
+                {metadata.year}
               </span>
-            ) : null}
-            {metadata.rating && displayDuration ? <span className="text-white/20">·</span> : null}
-            <span className="truncate">{displayDuration}</span>
-            {displayGenres[0] ? (
-              <>
-                <span className="text-white/20">·</span>
-                <span className="truncate">{displayGenres[0]}</span>
-              </>
-            ) : null}
-          </div>
-        </div>
-        {channel.progress !== undefined && channel.progress > 0 && (
-          <div className="absolute bottom-0 left-0 w-full h-[3px] bg-white/10 z-20">
-            <div
-              className="h-full bg-white/90 transition-all duration-300"
-              style={{ width: `${channel.progress}%` }}
-            />
-          </div>
-        )}
-      </div>
+            </div>
+          ) : null}
 
-      {mountPreview && (
-        <PrimeHoverCard
-          channel={getFlatItem(channel)}
-          metadata={metadata}
-          cardRef={cardRef}
-          visible={showPreview}
-          onClose={handleMouseLeave}
-          onPreviewEnter={handlePreviewEnter}
-          toggleFavorite={toggleFavorite}
+          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-15">
+            <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform duration-300">
+              <Play size={16} fill="#000" className="ml-0.5" />
+            </div>
+          </div>
+
+          <button type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(channel.id, e);
+            }}
+            className="absolute bottom-2.5 right-2.5 z-30 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/60 hover:text-red-400 transition-all"
+            title="Favorilere Ekle"
+           aria-label="Favorilere Ekle">
+            <Heart size={13} fill={globalFavorites.includes(channel.id) ? 'currentColor' : 'none'} className={globalFavorites.includes(channel.id) ? 'text-red-500' : ''} />
+          </button>
+
+          <div className="absolute inset-x-0 bottom-0 z-20 p-3 pr-11 pointer-events-none">
+            <h4 className="text-[13px] font-semibold text-white line-clamp-1 leading-tight">
+              {displayTitle}
+            </h4>
+            <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-white/45">
+              {metadata.rating ? (
+                <span className="inline-flex items-center gap-0.5 text-amber-400/90">
+                  <span className="text-[10px]">★</span> {metadata.rating}
+                </span>
+              ) : null}
+              {metadata.rating && displayDuration ? <span className="text-white/20">·</span> : null}
+              <span className="truncate">{displayDuration}</span>
+              {displayGenres[0] ? (
+                <>
+                  <span className="text-white/20">·</span>
+                  <span className="truncate">{displayGenres[0]}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          {channel.progress !== undefined && channel.progress > 0 && (
+            <div className="absolute bottom-0 inset-x-0 h-1 bg-white/20 z-30">
+              <div
+                className="h-full bg-red-500"
+                style={{ width: `${Math.min(Math.max(channel.progress, 0), 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      </TiltHoverCard>
+    </div>
+  );
+}
+
+function Top10Card({
+  rank,
+  rankLabel,
+  item,
+  globalFavorites,
+  toggleFavorite,
+  handleOpenDetails,
+  onContextMenu,
+}: {
+  rank: number;
+  rankLabel: string;
+  item: any;
+  globalFavorites: string[];
+  toggleFavorite: (itemId: string, e?: React.MouseEvent) => void;
+  handleOpenDetails: (item: PlaylistItem) => void;
+  onContextMenu?: (event: React.MouseEvent, item: any) => void;
+}) {
+  return (
+    <div className={`top10-card group/top10 relative flex shrink-0 items-end snap-start ${rank === 1 ? 'top10-card--rank-one' : ''} ${rank === 10 ? 'top10-card--double' : ''}`}>
+      <div className="top10-card-poster relative z-10 w-full">
+        <VodPosterCard
+          channel={item}
+          rank={rank}
+          rankLabel={rankLabel}
           globalFavorites={globalFavorites}
+          toggleFavorite={toggleFavorite}
           handleOpenDetails={handleOpenDetails}
+          onContextMenu={onContextMenu}
+          requireTmdbPoster
         />
-      )}
+      </div>
     </div>
   );
 }
@@ -441,6 +463,8 @@ interface HomeViewProps {
   displayFeaturedIndex: number;
   setActiveFeaturedIndex: (idx: number) => void;
   activeShowcaseList: any[];
+  top10Movies?: PlaylistItem[];
+  top10Series?: any[];
   playlists: SavedPlaylist[];
   uniqueRecentlyWatched: PlaylistItem[];
   clearRecentlyWatched: () => void;
@@ -475,6 +499,8 @@ export const HomeView = memo(function HomeView({
   displayFeaturedIndex,
   setActiveFeaturedIndex,
   activeShowcaseList,
+  top10Movies,
+  top10Series,
   playlists,
   uniqueRecentlyWatched,
   clearRecentlyWatched,
@@ -553,7 +579,7 @@ export const HomeView = memo(function HomeView({
       if (preference === 'sports' || preference === 'live') return 'live';
       return 'discovery';
     });
-    return [...new Set([...preferredSections, 'discovery', 'live', 'movies', 'series'])];
+    return [...new Set(['discovery', ...preferredSections, 'live', 'movies', 'series'])];
   }, [contentPreferences]);
   const getSectionPosition = (section: 'discovery' | 'live' | 'movies' | 'series') => homeSectionOrder.indexOf(section) + 2;
   const [contextMenu, setContextMenu] = useState<{
@@ -814,7 +840,7 @@ export const HomeView = memo(function HomeView({
             className="home-hero-copy absolute left-8 right-8 md:left-16 md:right-auto bottom-[28%] md:bottom-[32%] max-w-xl md:max-w-2xl flex flex-col gap-3.5 md:gap-4 z-20 select-none"
           >
             {featuredTmdbData?.logo ? (
-              <div key={featuredTmdbData.logo} className="z-10 flex justify-start">
+              <div key={featuredTmdbData.logo} className="home-hero-title-logo-shell z-10 flex justify-start">
                 <img
                   src={featuredTmdbData.logo}
                   alt={heroTitle}
@@ -944,11 +970,15 @@ export const HomeView = memo(function HomeView({
           </div>
 
         </div>
-        {/* Blend hero into app surface */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[#0a0a0c] z-[5]" />
+        {/* Extend the cinematic floor beneath the hero so the themed surface
+            arrives gradually behind the first rail instead of at a hard seam. */}
+        <div
+          className="home-hero-surface-bridge pointer-events-none absolute inset-x-0 -bottom-36 z-[15] h-60"
+          aria-hidden="true"
+        />
       </div>
 
-      <div className="relative z-20 mt-0 flex flex-col gap-9 select-none pb-4">
+      <div className="relative z-20 -mt-16 md:-mt-20 flex flex-col gap-9 select-none pb-4">
         {visibleHomeBlocks >= 1 && playlists.length > 0 && uniqueRecentlyWatched.length > 0 && (
         <div className="order-1 relative z-20 flex flex-col gap-2.5 select-none animate-fade-in">
           <HomeRailHeader
@@ -973,9 +1003,6 @@ export const HomeView = memo(function HomeView({
               {uniqueRecentlyWatched.map((channel) => {
                 const labels = getMediaCardLabels(channel, language);
                 const progress = channel.progress ?? 0;
-                const hasPlaylistArt = Boolean(
-                  channel.logo && String(channel.logo).trim() && !channel.isGenericLogo,
-                );
                 const cardTitle = labels.title;
                 const searchTitle = labels.searchTitle;
                 const subtitle =
@@ -991,7 +1018,7 @@ export const HomeView = memo(function HomeView({
                     key={`recent-${channel.id}-${cardTitle}`}
                     tabIndex={0}
                     role="button"
-                    className="flex w-[200px] shrink-0 cursor-pointer snap-start flex-col gap-1.5 transition-transform duration-300 hover:scale-[1.02] md:w-[232px]"
+                    className="group/history flex w-[152px] shrink-0 cursor-pointer snap-start flex-col gap-1.5 transition-colors duration-300 md:w-[176px]"
                     onClick={() => handlePlayStream(channel)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -1001,36 +1028,36 @@ export const HomeView = memo(function HomeView({
                     }}
                     onContextMenu={(event) => openContextMenu(event, channel, true)}
                   >
-                    {/* Artwork */}
-                    <div className="relative aspect-video w-full overflow-hidden rounded-[14px] border border-white/[0.08] bg-[#16161a] shadow-[0_10px_28px_rgba(0,0,0,0.35)]">
-                      <ImageWithFallback
-                        src={hasPlaylistArt ? channel.logo : undefined}
-                        name={searchTitle}
-                        group={channel.group || 'VOD'}
-                        itemType={
-                          channel.type === 'series' || channel.type === 'movie'
-                            ? channel.type
-                            : 'movie'
-                        }
-                        isGenericLogo={!hasPlaylistArt}
-                        aspect="landscape"
-                        lazy={false}
-                        fallbackToPlaylist
-                      />
-                      <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-lg">
-                          <Play size={14} fill="#000" className="ml-0.5" />
+                    {/* Real TMDB poster; official series wordmark is optional and source-backed. */}
+                    <TiltHoverCard className="w-full rounded-[18px]">
+                      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[18px] border border-white/[0.08] bg-[var(--bg-card)] shadow-[0_10px_28px_rgba(0,0,0,0.35)]">
+                        <ImageWithFallback
+                          name={searchTitle}
+                          group={channel.group || 'VOD'}
+                          itemType={
+                            channel.type === 'series' || channel.type === 'movie'
+                              ? channel.type
+                              : 'movie'
+                          }
+                          isGenericLogo
+                          aspect="portrait"
+                          lazy={false}
+                        />
+                        <div className="pointer-events-none absolute inset-0 z-[15] flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover/history:opacity-100">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-lg">
+                            <Play size={14} fill="#000" className="ml-0.5" />
+                          </div>
                         </div>
+                        {progress > 0 && (
+                          <div className="absolute bottom-0 left-0 z-20 h-[3px] w-full bg-white/10">
+                            <div
+                              className="h-full bg-white transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
-                      {progress > 0 && (
-                        <div className="absolute bottom-0 left-0 z-20 h-[3px] w-full bg-white/10">
-                          <div
-                            className="h-full bg-white transition-all duration-300"
-                            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
+                    </TiltHoverCard>
 
                     {/* Title OUTSIDE the image — never masked/hidden by overlays or missing art */}
                     <div className="min-w-0 px-0.5">
@@ -1110,8 +1137,12 @@ export const HomeView = memo(function HomeView({
       {visibleHomeBlocks >= getSectionPosition('discovery') && playlists.length > 0 && homeDiscoveryItems.length > 0 && (
         <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('discovery') }}>
           <HomeRailHeader
-            title={contentPreferences.length ? (language === 'tr' ? 'Sana Özel' : 'For You') : (language === 'tr' ? 'Trend Olanlar' : 'Trending Now')}
-            mutedLabel={contentPreferences.length ? (language === 'tr' ? 'Tercihlerine göre' : 'Based on prefs') : (language === 'tr' ? 'Bugün' : 'Today')}
+            title={language === 'tr' ? 'Sana Özel' : 'For You'}
+            mutedLabel={uniqueRecentlyWatched.length > 0
+              ? (language === 'tr' ? 'İzleme geçmişine göre' : 'Based on watch history')
+              : contentPreferences.length
+                ? (language === 'tr' ? 'Tercihlerine göre' : 'Based on preferences')
+                : (language === 'tr' ? 'Keşfetmen için' : 'Picked for discovery')}
           />
 
           <div className="relative group/row">
@@ -1147,6 +1178,57 @@ export const HomeView = memo(function HomeView({
           </div>
         </div>
       )}
+      {visibleHomeBlocks >= 2 && playlists.length > 0 && (
+        (top10Movies?.length ?? 0) > 0
+        || (visibleHomeBlocks >= 3 && (top10Series?.length ?? 0) > 0)
+      ) && (
+        <div className="top10-stack order-2 flex flex-col gap-9">
+      {top10Movies && top10Movies.length > 0 && (
+        <div className="top10-rail flex flex-col gap-2.5 select-none animate-fade-in">
+          <HomeRailHeader
+            title={language === 'tr' ? 'Top 10 Filmler' : 'Top 10 Movies'}
+            mutedLabel={language === 'tr' ? 'TMDB seçkisi' : 'TMDB picks'}
+          />
+          <div className="relative group/row">
+            <button type="button" aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'} onClick={() => handleScrollSlider('slider-top10-movies', 'left')} className={`${railArrowClass} left-1`}>
+              <ChevronLeft size={18} />
+            </button>
+            <div id="slider-top10-movies" className="top10-slider flex gap-3 md:gap-4 overflow-x-auto pb-5 pt-2 pr-20 hide-scrollbar snap-x scroll-smooth slider-fading-mask">
+              {top10Movies.slice(0, 10).map((item, index) => (
+                <Top10Card key={`tmdb-top-movie-${item.id || index}`} rank={index + 1} rankLabel={language === 'tr' ? `${index + 1}. sıra` : `Rank ${index + 1}`} item={item} globalFavorites={globalFavorites} toggleFavorite={toggleFavorite} handleOpenDetails={handleOpenDetails} onContextMenu={openContextMenu} />
+              ))}
+            </div>
+            <button type="button" aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'} onClick={() => handleScrollSlider('slider-top10-movies', 'right')} className={`${railArrowClass} right-1`}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {visibleHomeBlocks >= 3 && top10Series && top10Series.length > 0 && (
+        <div className="top10-rail flex flex-col gap-2.5 select-none animate-fade-in">
+          <HomeRailHeader
+            title={language === 'tr' ? 'Top 10 Diziler' : 'Top 10 Series'}
+            mutedLabel={language === 'tr' ? 'TMDB seçkisi' : 'TMDB picks'}
+          />
+          <div className="relative group/row">
+            <button type="button" aria-label={language === 'tr' ? 'Sola kaydır' : 'Scroll left'} onClick={() => handleScrollSlider('slider-top10-series', 'left')} className={`${railArrowClass} left-1`}>
+              <ChevronLeft size={18} />
+            </button>
+            <div id="slider-top10-series" className="top10-slider flex gap-3 md:gap-4 overflow-x-auto pb-5 pt-2 pr-20 hide-scrollbar snap-x scroll-smooth slider-fading-mask">
+              {top10Series.slice(0, 10).map((item, index) => (
+                <Top10Card key={`tmdb-top-series-${item.id || index}`} rank={index + 1} rankLabel={language === 'tr' ? `${index + 1}. sıra` : `Rank ${index + 1}`} item={item} globalFavorites={globalFavorites} toggleFavorite={toggleFavorite} handleOpenDetails={handleOpenDetails} onContextMenu={openContextMenu} />
+              ))}
+            </div>
+            <button type="button" aria-label={language === 'tr' ? 'Sağa kaydır' : 'Scroll right'} onClick={() => handleScrollSlider('slider-top10-series', 'right')} className={`${railArrowClass} right-1`}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+        </div>
+      )}
+
       {visibleHomeBlocks >= getSectionPosition('movies') && playlists.length > 0 && populerFilmler.length > 0 && (
         <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('movies') }}>
           <HomeRailHeader

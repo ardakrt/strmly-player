@@ -19,7 +19,6 @@ const HIGH_RISK_FILES = [
   'src/components/FavoritesEmptyState.tsx',
   'src/components/CreateProfileWizard.tsx',
   'src/components/Navbar.tsx',
-  'src/components/PrimeHoverCard.tsx',
 ];
 
 const REQUIRED_PATTERNS = [
