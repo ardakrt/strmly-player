@@ -1,4 +1,4 @@
-import { parseM3U } from './m3uParser';
+import { getPlaylistContentRevision, parseM3U } from './m3uParser';
 import { preprocessPlaylistItems } from './searchHelpers';
 
 self.onmessage = (e: MessageEvent<string | ArrayBuffer>) => {
@@ -11,6 +11,7 @@ self.onmessage = (e: MessageEvent<string | ArrayBuffer>) => {
     }
     const result = parseM3U(content);
     result.items = preprocessPlaylistItems(result.items);
+    result.revision = getPlaylistContentRevision(result.items);
     self.postMessage({ success: true, result });
   } catch (err: any) {
     self.postMessage({ success: false, error: err.message || String(err) });

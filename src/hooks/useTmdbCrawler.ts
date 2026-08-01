@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
-import { TMDB_CACHE_VERSION } from '../constants';
 import {
   globalSyncPosterMap,
-  cleanMovieName
+  cleanMovieName,
+  getTmdbPosterCacheKey,
 } from '../utils/tmdb';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 
@@ -54,7 +54,7 @@ export function useTmdbCrawler({
 
     // Filter out items already in memory cache to prevent redundant work
     const unfilteredItems = itemsToPreFetch.filter(item => {
-      const cacheKeyPortrait = `${TMDB_CACHE_VERSION}-${item.itemType}-${item.cleanTitle}-portrait`;
+      const cacheKeyPortrait = getTmdbPosterCacheKey(item.itemType, item.cleanTitle, 'portrait');
       return !globalSyncPosterMap.has(`resolved-poster-${cacheKeyPortrait}`);
     });
 
@@ -65,8 +65,8 @@ export function useTmdbCrawler({
     worker.onmessage = (e) => {
       const { type, cleanTitle, itemType, portraitSrc, landscapeSrc } = e.data;
       if (type === 'progress') {
-        const cacheKeyPortrait = `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle}-portrait`;
-        const cacheKeyLandscape = `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle}-landscape`;
+        const cacheKeyPortrait = getTmdbPosterCacheKey(itemType, cleanTitle, 'portrait');
+        const cacheKeyLandscape = getTmdbPosterCacheKey(itemType, cleanTitle, 'landscape');
         if (portraitSrc) {
           globalSyncPosterMap.set(`resolved-poster-${cacheKeyPortrait}`, portraitSrc);
         }
@@ -105,7 +105,7 @@ export function useTmdbCrawler({
       const allItems = [...moviesToCrawl, ...seriesToCrawl];
 
       const unfilteredItems = allItems.filter(item => {
-        const cacheKeyPortrait = `${TMDB_CACHE_VERSION}-${item.itemType}-${item.cleanTitle}-portrait`;
+        const cacheKeyPortrait = getTmdbPosterCacheKey(item.itemType, item.cleanTitle, 'portrait');
         return !globalSyncPosterMap.has(`resolved-poster-${cacheKeyPortrait}`);
       });
 
@@ -116,8 +116,8 @@ export function useTmdbCrawler({
       worker.onmessage = (e) => {
         const { type, cleanTitle, itemType, portraitSrc, landscapeSrc } = e.data;
         if (type === 'progress') {
-          const cacheKeyPortrait = `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle}-portrait`;
-          const cacheKeyLandscape = `${TMDB_CACHE_VERSION}-${itemType}-${cleanTitle}-landscape`;
+          const cacheKeyPortrait = getTmdbPosterCacheKey(itemType, cleanTitle, 'portrait');
+          const cacheKeyLandscape = getTmdbPosterCacheKey(itemType, cleanTitle, 'landscape');
           if (portraitSrc) {
             globalSyncPosterMap.set(`resolved-poster-${cacheKeyPortrait}`, portraitSrc);
           }

@@ -8,7 +8,6 @@ import {
   resolveTmdbImageSrc,
   fetchTmdbDetails,
 } from '../utils/tmdb';
-import { getMockDetails } from '../utils/helpers';
 
 interface UseDetailModalProps {
   tmdbApiKey: string;
@@ -32,17 +31,16 @@ export function useDetailModal({
 
   const [tmdbData, setTmdbData] = useState<{
     id?: number;
-    match: string;
-    rating: string;
-    year: string;
-    desc: string;
+    rating?: string;
+    year?: string;
+    desc?: string;
     poster?: string;
     backdrop?: string;
     genres?: string[];
   } | null>(null);
   const [tmdbShowId, setTmdbShowId] = useState<number | null>(null);
 
-  // Sync TMDB/Mock data cache on Detail Modal open
+  // Show only metadata returned by TMDB for the currently open item.
   useEffect(() => {
     const activeItem = selectedChannelForModal || selectedSeriesForModal;
     if (!activeItem) {
@@ -56,10 +54,11 @@ export function useDetailModal({
       : (activeItem.type === 'series'
         ? parseSeriesEpisodeInfo(activeItem.name).cleanTitle
         : cleanMovieName(activeItem.name));
-    const group = activeItem.group;
-
     const controller = new AbortController();
     const { signal } = controller;
+
+    setTmdbData(null);
+    setTmdbShowId(null);
 
     if (tmdbApiKey) {
       const endpoint = isSeries ? 'tv' : 'movie';
@@ -67,7 +66,11 @@ export function useDetailModal({
         .then(async (result) => {
           if (signal.aborted) return;
           if (result) {
-            const rating = result.vote_average || 7.5;
+            const rating = typeof result.vote_average === 'number'
+              && Number.isFinite(result.vote_average)
+              && result.vote_average > 0
+              ? `★ ${result.vote_average.toFixed(1)}`
+              : undefined;
             const posterPath = await resolveTmdbImageSrc(result.poster_path, 'w500', signal);
             const backdropPath = await resolveTmdbImageSrc(result.backdrop_path, 'original', signal);
             if (signal.aborted) return;
@@ -90,40 +93,25 @@ export function useDetailModal({
             setTmdbShowId(isSeries ? result.id : null);
             setTmdbData({
               id: result.id,
-              match: `%${Math.floor(rating * 10) || 85} Eşleşme`,
-              rating: `★ ${rating.toFixed(1)}`,
+              rating,
               year: isSeries
-                ? (result.first_air_date?.split('-')[0] || '2026')
-                : (result.release_date?.split('-')[0] || '2026'),
-              desc: overview || getMockDetails(cleanTitle, group).desc,
+                ? (result.first_air_date?.split('-')[0] || undefined)
+                : (result.release_date?.split('-')[0] || undefined),
+              desc: overview.trim() || undefined,
               poster: posterPath || undefined,
               backdrop: backdropPath || undefined,
               genres: genres.length > 0 ? genres : undefined,
             });
           } else {
             setTmdbShowId(null);
-            setTmdbData({
-              ...getMockDetails(cleanTitle, group),
-              poster: undefined,
-              backdrop: undefined
-            });
+            setTmdbData(null);
           }
         })
         .catch((error) => {
           if (signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
           setTmdbShowId(null);
-          setTmdbData({
-            ...getMockDetails(cleanTitle, group),
-            poster: undefined,
-            backdrop: undefined
-          });
+          setTmdbData(null);
         });
-    } else {
-      setTmdbData({
-        ...getMockDetails(cleanTitle, group),
-        poster: undefined,
-        backdrop: undefined
-      });
     }
 
     return () => {

@@ -43,11 +43,12 @@ export interface TitleLogoPlateProps {
   size?: 'sm' | 'md' | 'lg';
   aspect?: 'portrait' | 'landscape' | string;
   language?: string;
+  overlayOnly?: boolean;
 }
 
 /**
- * Custom title-as-logo when TMDB poster/backdrop is missing.
- * Uses the resolved series/movie name (TMDB title preferred) for a unique plate.
+ * Custom title-as-logo when TMDB poster/backdrop is missing,
+ * or as a styled title overlay on top of backdrop images.
  */
 export const TitleLogoPlate = memo(function TitleLogoPlate({
   title,
@@ -55,6 +56,7 @@ export const TitleLogoPlate = memo(function TitleLogoPlate({
   size = 'md',
   aspect = 'portrait',
   language = 'tr',
+  overlayOnly = false,
 }: TitleLogoPlateProps) {
   const display = (title || '').trim() || (language === 'tr' ? 'İsimsiz' : 'Untitled');
   const colors = useMemo(() => titlePalette(display), [display]);
@@ -95,23 +97,29 @@ export const TitleLogoPlate = memo(function TitleLogoPlate({
 
   return (
     <div
-      className="absolute inset-0 z-[1] flex flex-col items-center justify-center select-none overflow-hidden"
+      className={`absolute inset-0 flex flex-col items-center justify-center select-none overflow-hidden ${
+        overlayOnly ? 'z-20 pointer-events-none' : 'z-0'
+      }`}
       style={{
-        background: `linear-gradient(155deg, ${colors.from} 0%, ${colors.mid} 48%, ${colors.to} 100%)`,
+        background: overlayOnly
+          ? 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.40) 50%, rgba(0,0,0,0.15) 100%)'
+          : `linear-gradient(155deg, ${colors.from} 0%, ${colors.mid} 48%, ${colors.to} 100%)`,
       }}
       title={display}
       data-title-logo="1"
     >
       {/* Soft vignette + glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `
-            radial-gradient(ellipse 70% 55% at 50% 42%, ${colors.glow} 0%, transparent 70%),
-            radial-gradient(ellipse 100% 80% at 50% 100%, rgba(0,0,0,0.55) 0%, transparent 55%)
-          `,
-        }}
-      />
+      {!overlayOnly && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse 70% 55% at 50% 42%, ${colors.glow} 0%, transparent 70%),
+              radial-gradient(ellipse 100% 80% at 50% 100%, rgba(0,0,0,0.55) 0%, transparent 55%)
+            `,
+          }}
+        />
+      )}
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{

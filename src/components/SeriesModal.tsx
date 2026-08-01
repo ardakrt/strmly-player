@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { CheckCircle2, Clock3, Play, X, Heart, Download, Info } from 'lucide-react';
+import { CheckCircle2, Clock3, Play, X, Download, Info } from 'lucide-react';
+import { LikeBurstButton } from './LikeBurstButton';
 import { ImageWithFallback } from './ImageWithFallback';
 import { EpisodeThumb } from './EpisodeThumb';
 import { cleanMediaTitle } from '../utils/seriesGroupers';
@@ -457,15 +458,12 @@ export const SeriesModal = ({
                     <p className="mt-1 truncate text-[11px] text-white/32">{cleanedGroup}</p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={onToggleFavorite}
-                  className={`series-icon-btn shrink-0 cursor-pointer ${isFavorite ? 'text-red-400 hover:text-red-300' : ''}`}
-                  title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-                  aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-                >
-                  <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
-                </button>
+                <LikeBurstButton
+                  isLiked={isFavorite}
+                  size={16}
+                  onToggle={(_, e) => onToggleFavorite(e)}
+                  ariaLabel={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
+                />
               </div>
 
               {metaParts.length > 0 && (

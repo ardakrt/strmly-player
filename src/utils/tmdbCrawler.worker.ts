@@ -1,7 +1,7 @@
-import { TMDB_CACHE_VERSION } from '../constants';
 import {
   tmdbCache,
   getResolvedTmdbResult,
+  getTmdbPosterCacheKey,
   resolveTmdbImageSrc
 } from './tmdb';
 
@@ -16,15 +16,15 @@ self.onmessage = async (e: MessageEvent<any>) => {
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const cacheKeyPortrait = `${TMDB_CACHE_VERSION}-${item.itemType}-${item.cleanTitle}-portrait`;
-    const cacheKeyLandscape = `${TMDB_CACHE_VERSION}-${item.itemType}-${item.cleanTitle}-landscape`;
+    const cacheKeyPortrait = getTmdbPosterCacheKey(item.itemType, item.cleanTitle, 'portrait');
+    const cacheKeyLandscape = getTmdbPosterCacheKey(item.itemType, item.cleanTitle, 'landscape');
 
     try {
       // 1. Check IndexedDB first
       const port = await tmdbCache.get(`resolved-poster-${cacheKeyPortrait}`);
       const land = await tmdbCache.get(`resolved-poster-${cacheKeyLandscape}`);
       
-      if (port !== null && land !== null) {
+      if (typeof port === 'string' && port.trim() && typeof land === 'string' && land.trim()) {
         self.postMessage({
           success: true,
           type: 'progress',
@@ -44,6 +44,8 @@ self.onmessage = async (e: MessageEvent<any>) => {
       // Save to IndexedDB (only non-app-file URLs)
       if (portraitSrc && !portraitSrc.startsWith('app-file://')) {
         await tmdbCache.set(`resolved-poster-${cacheKeyPortrait}`, portraitSrc);
+      }
+      if (landscapeSrc && !landscapeSrc.startsWith('app-file://')) {
         await tmdbCache.set(`resolved-poster-${cacheKeyLandscape}`, landscapeSrc);
       }
 

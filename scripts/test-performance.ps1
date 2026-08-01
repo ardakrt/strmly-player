@@ -42,11 +42,11 @@ try {
   $combined | Set-Content -Path $electronLog -Encoding UTF8
   Write-Host $combined
 
-  if ($proc.ExitCode -ne 0) {
-    throw "Performance benchmark failed with exit code $($proc.ExitCode)."
-  }
   $resultMatch = [regex]::Match($combined, 'STRMLY_PERF_RESULT=(\{[^\r\n]+\})')
   if (-not $resultMatch.Success) {
+    if ($proc.ExitCode -ne 0) {
+      throw "Performance benchmark failed with exit code $($proc.ExitCode)."
+    }
     throw "Performance benchmark exited without producing results."
   }
   $result = $resultMatch.Groups[1].Value | ConvertFrom-Json
@@ -59,17 +59,21 @@ try {
     if (@($metrics.samples).Count -ne [int]$iterations) {
       throw "Navigation sample count mismatch for $($page.Name)."
     }
-    if ([double]$metrics.p95Ms -gt 100 -or [double]$metrics.maxMs -gt 250) {
+    if ([double]$metrics.p95Ms -gt 60 -or [double]$metrics.maxMs -gt 100) {
       throw "Navigation performance regression on $($page.Name): p95=$($metrics.p95Ms)ms max=$($metrics.maxMs)ms."
     }
   }
-  $scrollablePages = @($result.scroll.PSObject.Properties | Where-Object { [double]$_.Value.scrollRange -gt 0 })
-  if ($scrollablePages.Count -eq 0) {
-    throw "Performance benchmark did not exercise any scrollable view."
+  $requiredScrollablePages = @("Canli TV", "Sinema", "Diziler")
+  foreach ($pageName in $requiredScrollablePages) {
+    $page = $result.scroll.PSObject.Properties[$pageName]
+    if ($null -eq $page -or [double]$page.Value.scrollRange -lt 1000) {
+      throw "Performance benchmark did not exercise the $pageName catalog (scrollRange=$($page.Value.scrollRange))."
+    }
   }
+  $scrollablePages = @($result.scroll.PSObject.Properties | Where-Object { [double]$_.Value.scrollRange -gt 0 })
   foreach ($page in $scrollablePages) {
     $metrics = $page.Value
-    if ([double]$metrics.p95FrameMs -gt 35 -or [double]$metrics.maxFrameMs -gt 100 -or [double]$metrics.missedFramePercent -gt 10) {
+    if ([double]$metrics.p95FrameMs -gt 24 -or [double]$metrics.maxFrameMs -gt 80 -or [double]$metrics.missedFramePercent -gt 5) {
       throw "Scroll performance regression on $($page.Name): p95=$($metrics.p95FrameMs)ms max=$($metrics.maxFrameMs)ms missed=$($metrics.missedFramePercent)%."
     }
   }

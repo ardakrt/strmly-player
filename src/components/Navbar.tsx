@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Search, ArrowLeft, Settings, ChevronDown } from 'lucide-react';
+import { Search, X, ArrowLeft, Settings, ChevronDown, RefreshCw } from 'lucide-react';
 import type { Profile, SavedPlaylist } from '../types';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { useSettings } from '../context/SettingsContext';
@@ -13,6 +13,10 @@ interface NavbarProps {
   setSearchQuery: (val: string) => void;
   setShowSpotlight: (show: boolean) => void;
   setSpotlightScope: (scope: 'all' | 'live' | 'movie' | 'series') => void;
+  spotlightSearchInput: string;
+  setSpotlightSearchInput: (val: string) => void;
+  spotlightInputRef: React.RefObject<HTMLInputElement | null>;
+  showSpotlight: boolean;
   profileDropdownOpen: boolean;
   setProfileDropdownOpen: (open: boolean) => void;
   currentProfile: Profile | undefined;
@@ -35,6 +39,10 @@ export const Navbar = memo(function Navbar({
   setSearchQuery,
   setShowSpotlight,
   setSpotlightScope,
+  spotlightSearchInput,
+  setSpotlightSearchInput,
+  spotlightInputRef,
+  showSpotlight,
   profileDropdownOpen,
   setProfileDropdownOpen,
   currentProfile,
@@ -43,17 +51,32 @@ export const Navbar = memo(function Navbar({
   handleSelectProfile,
   handleLogoutProfile
 }: NavbarProps) {
-  const { t, language } = useSettings();
+  const { t, language, pendingPlaylistUpdate, applyPendingUpdate } = useSettings();
   if (!loaded) return null;
 
+  const exitSearch = () => {
+    setShowSpotlight(false);
+    setSpotlightSearchInput('');
+  };
+
+  const openSearch = () => {
+    setSpotlightScope('all');
+    setShowSpotlight(true);
+  };
+
+  const clearCatalogSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+  };
+
   return (
-    <div className={`pointer-events-none fixed top-0 left-0 right-0 z-50 px-3 sm:px-5 lg:px-8 transition-[padding] duration-300 ${
-      scrolled ? 'pt-2.5' : 'pt-4'
+    <div className={`pointer-events-none fixed top-0 left-0 right-0 z-50 px-3 sm:px-5 lg:px-8 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+      scrolled || showSpotlight ? 'pt-2.5' : 'pt-4'
     }`}>
       <nav
         aria-label="Ana navigasyon"
-        className={`pointer-events-auto navbar-liquid-glass mx-auto flex w-full items-center justify-between gap-2 px-2.5 sm:px-3 transition-[max-width,height,background-color,border-color,box-shadow,backdrop-filter] duration-500 ease-in-out rounded-full ${
-          scrolled
+        className={`pointer-events-auto navbar-liquid-glass mx-auto flex w-full items-center justify-between gap-2 px-2.5 sm:px-3 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] rounded-full ${
+          scrolled || showSpotlight
             ? 'navbar-liquid-glass--scrolled h-11 max-w-[1040px]'
             : 'h-12 max-w-[1180px]'
         }`}
@@ -63,7 +86,11 @@ export const Navbar = memo(function Navbar({
             type="button"
             aria-label={t('navbar.home')}
             className="flex shrink-0 items-center group cursor-pointer focusable-item rounded-full px-2 sm:px-3"
-            onClick={() => { setSelectedGroup('Ana Sayfa'); setSearchInput(''); setSearchQuery(''); }}
+            onClick={() => {
+              exitSearch();
+              setSelectedGroup('Ana Sayfa');
+              clearCatalogSearch();
+            }}
           >
             <span className="text-[14px] font-black tracking-[-0.015em] text-white leading-none transition-opacity duration-200 group-hover:opacity-80">Strmly</span>
           </button>
@@ -77,16 +104,16 @@ export const Navbar = memo(function Navbar({
               { id: 'Favorilerim', label: t('navbar.favorites') },
               { id: 'İndirilenler', label: language === 'tr' ? 'Kaydedilenler' : 'Saved' }
             ].map(link => {
-              const isActive = selectedGroup === link.id;
+              const isActive = !showSpotlight && selectedGroup === link.id;
               return (
                 <button
                   key={link.id}
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => {
+                    exitSearch();
                     setSelectedGroup(link.id);
-                    setSearchInput('');
-                    setSearchQuery('');
+                    clearCatalogSearch();
                   }}
                   className={`navbar-nav-item relative shrink-0 px-3 sm:px-3.5 py-1.5 rounded-full border text-[10px] sm:text-[11px] font-bold transition-all duration-200 cursor-pointer focusable-item ${isActive
                       ? 'text-white bg-white/[0.09] border-white/[0.10] shadow-[inset_0_1px_0_rgba(255,255,255,0.055)]'
@@ -100,23 +127,71 @@ export const Navbar = memo(function Navbar({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 relative">
-          <div className="relative hidden md:flex items-center">
-            <button
-              type="button"
+          <div
+            className={`relative flex h-8 items-center rounded-full border transition-all duration-200 ${
+              showSpotlight
+                ? 'w-[min(46vw,18rem)] sm:w-52 lg:w-64 border-white/25 bg-black/55'
+                : 'w-9 md:w-44 lg:w-56 xl:w-64 border-white/[0.10] bg-white/[0.07] hover:border-white/[0.16] hover:bg-white/[0.10]'
+            }`}
+          >
+            <Search
+              size={14}
+              className={`pointer-events-none absolute left-2.5 transition-colors ${
+                showSpotlight ? 'text-white/70' : 'text-neutral-500'
+              }`}
+            />
+            <input
+              ref={spotlightInputRef}
+              type="text"
+              value={spotlightSearchInput}
+              placeholder={t('navbar.searchPlaceholder')}
               aria-label={t('navbar.searchTitle')}
-              onClick={() => { setShowSpotlight(true); setSpotlightScope('all'); }}
-              className="h-8 w-44 lg:w-56 xl:w-64 bg-white/[0.07] hover:bg-white/[0.10] border border-white/[0.10] hover:border-white/[0.16] rounded-full flex items-center px-3 transition-all duration-200 group text-left cursor-pointer focusable-item"
-              title={t('navbar.searchTitle')}
-            >
-              <Search size={14} className="text-neutral-500 group-hover:text-neutral-200 transition-colors duration-200" />
-              <span className="text-[11px] text-neutral-400 group-hover:text-neutral-200 transition-colors ml-2 select-none truncate flex-1">
-                {t('navbar.searchPlaceholder')}
-              </span>
-              <div className="hidden lg:flex items-center px-1.5 py-0.5 rounded-md bg-white/[0.045] border border-white/[0.08] text-[8px] font-bold text-neutral-500 group-hover:text-neutral-300 group-hover:border-white/15 transition-all select-none">
+              autoComplete="off"
+              spellCheck={false}
+              onFocus={openSearch}
+              onChange={(event) => {
+                openSearch();
+                setSpotlightSearchInput(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  exitSearch();
+                  event.currentTarget.blur();
+                }
+              }}
+              className="h-full w-full min-w-0 rounded-full bg-transparent pl-8 pr-8 text-[11px] font-medium text-white outline-none placeholder:text-neutral-500"
+            />
+            {showSpotlight && spotlightSearchInput ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSpotlightSearchInput('');
+                  spotlightInputRef.current?.focus();
+                }}
+                className="absolute right-1.5 grid h-6 w-6 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white cursor-pointer"
+                aria-label={language === 'tr' ? 'Temizle' : 'Clear'}
+              >
+                <X size={12} />
+              </button>
+            ) : !showSpotlight ? (
+              <div className="pointer-events-none absolute right-2 hidden lg:flex items-center px-1.5 py-0.5 rounded-md bg-white/[0.045] border border-white/[0.08] text-[8px] font-bold text-neutral-500 select-none">
                 Ctrl K
               </div>
-            </button>
+            ) : null}
           </div>
+          {pendingPlaylistUpdate && (
+            <button
+              type="button"
+              onClick={applyPendingUpdate}
+              title={language === 'tr' ? 'Güncellenmiş listeyi yükle' : 'Apply updated playlist'}
+              className="h-8 px-3 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-500/10 shrink-0"
+            >
+              <RefreshCw size={12} className="animate-spin" style={{ animationDuration: '4s' }} />
+              <span className="hidden sm:inline">{language === 'tr' ? 'Yeni Liste Hazır' : 'Playlist Updated'} ({pendingPlaylistUpdate.channelCount})</span>
+              <span className="sm:hidden">{language === 'tr' ? 'Yenile' : 'Refresh'}</span>
+            </button>
+          )}
           <div className="relative">
             <button
               type="button"

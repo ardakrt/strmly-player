@@ -13,6 +13,7 @@ export const ACCENT_COLORS = [
 
 export const THEMES = [
   { id: 'space-black', label: 'OLED Siyah' },
+  { id: 'emerald-aurora', label: 'Emerald Aurora' },
   { id: 'deep-space', label: 'Gece Mavisi' },
   { id: 'slate-dark', label: 'Koyu Slate' },
   { id: 'forest-mint', label: 'Orman Yeşili' },

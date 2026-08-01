@@ -14,6 +14,7 @@ const tmp = os.tmpdir();
 const catalogOut = path.join(tmp, `strmly-catalog-filters-${process.pid}.cjs`);
 const searchOut = path.join(tmp, `strmly-search-helpers-${process.pid}.cjs`);
 const seriesOut = path.join(tmp, `strmly-series-groupers-${process.pid}.cjs`);
+const parserOut = path.join(tmp, `strmly-m3u-parser-${process.pid}.cjs`);
 
 function bundle(entry, outfile) {
   execSync(
@@ -25,15 +26,21 @@ function bundle(entry, outfile) {
 bundle(path.join(root, 'src/utils/catalogFilters.ts'), catalogOut);
 bundle(path.join(root, 'src/utils/searchHelpers.ts'), searchOut);
 bundle(path.join(root, 'src/utils/seriesGroupers.ts'), seriesOut);
+bundle(path.join(root, 'src/utils/m3uParser.ts'), parserOut);
 
 const {
   matchesQualityFilter,
   applyCatalogPostFilters,
+  dedupeMovieCatalogItems,
+  dedupeSeriesCatalogItems,
   seriesMatchesQuery,
   seriesMatchesQuality,
   sortByNameAzZa,
   takeTopByScore,
   dailyStableScore,
+  getLocalCalendarDaySeed,
+  getTmdbShowcaseScore,
+  selectMixedPopularShowcase,
 } = require(catalogOut);
 
 const {
@@ -43,6 +50,7 @@ const {
   isHdChannel,
 } = require(searchOut);
 const { groupPlaylistItemsToSeries } = require(seriesOut);
+const { getPlaylistContentRevision } = require(parserOut);
 
 // --- quality / catalog filters ---
 assert.strictEqual(matchesQualityFilter(4, '4k'), true);
@@ -65,6 +73,17 @@ assert.ok(ulusalOnly.some((i) => i.id === '3'), 'non-ulusal kept');
 const q4k = applyCatalogPostFilters(items, 'movie', '4k');
 assert.strictEqual(q4k.length, 1);
 assert.strictEqual(q4k[0].id, '3');
+
+const duplicateMovies = dedupeMovieCatalogItems([
+  { id: 'm-sd', name: '[TR] Korkunç Bir Film 2024 SD', group: 'Sinema', type: 'movie', url: 'movie-sd' },
+  { id: 'm-4k', name: 'Korkunç Bir Film (2024) 4K', group: '4K', type: 'movie', url: 'movie-4k', logo: 'poster.jpg' },
+  { id: 'm-remake', name: 'Korkunç Bir Film (2025) 4K', group: '4K', type: 'movie', url: 'movie-remake' },
+]);
+assert.deepStrictEqual(
+  duplicateMovies.map((item) => item.id),
+  ['m-4k', 'm-remake'],
+  'movie catalog keeps one best-quality card per title and release year',
+);
 
 const sorted = sortByNameAzZa([{ name: 'b' }, { name: 'a' }, { name: 'c' }], 'az');
 assert.deepStrictEqual(
@@ -136,6 +155,52 @@ assert.deepStrictEqual(
   'takeTopByScore matches full sort top-80',
 );
 
+// --- daily TMDB-ranked mixed showcase ---
+assert.notStrictEqual(
+  getLocalCalendarDaySeed(new Date(2026, 6, 27)),
+  getLocalCalendarDaySeed(new Date(2027, 6, 27)),
+  'calendar seed includes year',
+);
+const showcasePool = [];
+for (let i = 0; i < 12; i++) {
+  showcasePool.push({
+    item: { id: `s${i}`, name: `Series ${i}`, type: 'series', url: `series-${i}` },
+    rating: 8.8 - i * 0.1,
+    popularity: 75 - i,
+    voteCount: 2200 - i * 50,
+    hasBackdrop: true,
+  });
+  showcasePool.push({
+    item: { id: `m${i}`, name: `Movie ${i}`, type: 'movie', url: `movie-${i}` },
+    rating: 8.7 - i * 0.1,
+    popularity: 78 - i,
+    voteCount: 2300 - i * 50,
+    hasBackdrop: true,
+  });
+}
+assert.ok(
+  getTmdbShowcaseScore(showcasePool[0]) > getTmdbShowcaseScore(showcasePool[10]),
+  'stronger TMDB metadata ranks higher',
+);
+const dayOne = selectMixedPopularShowcase(showcasePool, 7, 20_301, []);
+const dayOneAgain = selectMixedPopularShowcase(showcasePool, 7, 20_301, []);
+const dayTwo = selectMixedPopularShowcase(showcasePool, 7, 20_302, []);
+assert.deepStrictEqual(
+  dayOne.map((item) => item.id),
+  dayOneAgain.map((item) => item.id),
+  'showcase is stable throughout the same day',
+);
+assert.notDeepStrictEqual(
+  dayOne.map((item) => item.id),
+  dayTwo.map((item) => item.id),
+  'showcase rotates on the next calendar day',
+);
+assert.ok(dayOne.some((item) => item.type === 'series'), 'daily showcase includes series');
+assert.ok(dayOne.some((item) => item.type === 'movie'), 'daily showcase includes movies');
+for (let i = 1; i < dayOne.length; i++) {
+  assert.notStrictEqual(dayOne[i].type, dayOne[i - 1].type, 'showcase interleaves movies and series');
+}
+
 // --- urlHasVodExtension: parity with historic vodExtensions.some() ---
 const vodExts = ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.mpeg', '.mpg', '.m4v', '.webm', '.wmv'];
 function historicVod(urlLower) {
@@ -189,6 +254,20 @@ assert.strictEqual(raw[3].type, 'movie', '/.mp4/ path → VOD movie (not live)')
 assert.strictEqual(raw[4].type, 'movie', '.mp4& → VOD movie (not live)');
 assert.ok(raw[0].nameLower && raw[0].qualityRank);
 
+// Catalog revisions prevent expensive no-op refreshes while detecting additions.
+const revisionItems = [
+  { name: 'Live One', group: 'Live', url: 'https://example.test/live/1', type: 'live' },
+  { name: 'Demo S01E01', group: 'Series', url: 'https://example.test/series/1', type: 'series' },
+];
+const revisionA = getPlaylistContentRevision(revisionItems);
+const revisionB = getPlaylistContentRevision(revisionItems.map((item) => ({ ...item })));
+const revisionWithNewSeries = getPlaylistContentRevision([
+  ...revisionItems,
+  { name: 'Demo S01E02', group: 'Series', url: 'https://example.test/series/2', type: 'series' },
+]);
+assert.strictEqual(revisionA, revisionB, 'identical catalogs have the same revision');
+assert.notStrictEqual(revisionA, revisionWithNewSeries, 'new series content changes the revision');
+
 // --- series grouping dedup ---
 const eps = [
   { name: 'Demo S01E01', group: 'Drama', url: 'u1', type: 'series', logo: 'a.png' },
@@ -202,7 +281,23 @@ assert.strictEqual(grouped[0].seasons[1].length, 2);
 assert.strictEqual(grouped[0].seasons[1][0].episodeNumber, 1);
 assert.strictEqual(grouped[0].seasons[1][1].episodeNumber, 2);
 
-for (const f of [catalogOut, searchOut, seriesOut]) {
+const duplicateSeries = dedupeSeriesCatalogItems([
+  grouped[0],
+  {
+    ...grouped[0],
+    id: 'series-demo-other-group',
+    group: 'Platform',
+    seasons: {
+      ...grouped[0].seasons,
+      2: [{ item: { name: 'Demo S02E01', group: 'Platform', url: 'u3', type: 'series' } }],
+    },
+    episodesCount: 3,
+  },
+]);
+assert.strictEqual(duplicateSeries.length, 1, 'series catalog collapses category duplicates');
+assert.strictEqual(duplicateSeries[0].id, 'series-demo-other-group', 'richer series entry wins');
+
+for (const f of [catalogOut, searchOut, seriesOut, parserOut]) {
   try {
     fs.unlinkSync(f);
   } catch {

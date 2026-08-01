@@ -60,6 +60,7 @@ export function useAppProvider() {
     setActiveAccent,
     setActiveTheme,
     setTranscodeMode,
+    iptvUpdateMode,
   } = appSettings;
 
   const preferences = useProfilePreferences({
@@ -77,6 +78,7 @@ export function useAppProvider() {
     isParsing,
     setIsParsing,
     language,
+    iptvUpdateMode,
   });
 
   const playerState = usePlayerState({
@@ -260,6 +262,7 @@ export function useAppProvider() {
     setVisibleMovieCategoryLimit,
   } = useAppCategories({
     playlists,
+    language,
     saveAppSetting,
     uniqueLiveCategories,
     uniqueSeriesCategories,
@@ -344,6 +347,7 @@ export function useAppProvider() {
     recentlyWatched,
     tmdbApiKey,
     activeContentPreferences,
+    globalFavorites,
   });
 
   const { filteredDisplayItems, groupedSeriesList, favoriteSeriesList } =
@@ -462,7 +466,7 @@ export function useAppProvider() {
     if (bottom) {
       setVisibleCount((prev) => prev + 100);
     }
-  }, []);
+  }, [setScrolled, setVisibleCount]);
 
   const handleScrollSlider = (
     sliderId: string,

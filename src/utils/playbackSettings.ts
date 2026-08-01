@@ -4,9 +4,9 @@ export const BUFFER_SIZE_KEY = 'strmly_buffer_size';
 export const CONNECTION_TIMEOUT_KEY = 'strmly_connection_timeout';
 export const RETRY_COUNT_KEY = 'strmly_retry_count';
 
-export const DEFAULT_BUFFER_SECONDS = 30;
-export const DEFAULT_CONNECTION_TIMEOUT_SECONDS = 22;
-export const DEFAULT_RETRY_COUNT = 3;
+const DEFAULT_BUFFER_SECONDS = 30;
+const DEFAULT_CONNECTION_TIMEOUT_SECONDS = 22;
+const DEFAULT_RETRY_COUNT = 3;
 
 type StorageReader = Pick<Storage, 'getItem'>;
 

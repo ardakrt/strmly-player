@@ -5,6 +5,7 @@ import { useCategoryManager } from './useCategoryManager';
 
 interface UseAppCategoriesProps {
   playlists: SavedPlaylist[];
+  language: 'tr' | 'en';
   saveAppSetting: (key: string, value: any) => Promise<void>;
   uniqueLiveCategories: string[];
   uniqueSeriesCategories: string[];
@@ -37,6 +38,7 @@ interface UseAppCategoriesProps {
 
 export function useAppCategories({
   playlists,
+  language,
   saveAppSetting,
   uniqueLiveCategories,
   uniqueSeriesCategories,
@@ -166,6 +168,7 @@ export function useAppCategories({
 
   const liveCat = useCategoryManager({
     domain: 'live',
+    language,
     uniqueCategories: uniqueLiveCategories,
     categorySearchQuery,
     saveAppSetting,
@@ -186,6 +189,7 @@ export function useAppCategories({
 
   const seriesCat = useCategoryManager({
     domain: 'series',
+    language,
     uniqueCategories: uniqueSeriesCategories,
     categorySearchQuery,
     saveAppSetting,
@@ -206,6 +210,7 @@ export function useAppCategories({
 
   const movieCat = useCategoryManager({
     domain: 'movie',
+    language,
     uniqueCategories: uniqueMovieCategories,
     categorySearchQuery,
     saveAppSetting,

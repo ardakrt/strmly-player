@@ -14,7 +14,7 @@ self.onmessage = (e: MessageEvent<any>) => {
       if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
         self.postMessage({ success: true, type: 'import', result: settings });
       } else {
-        throw new Error('Geçersiz ayar dosyası yapısı.');
+        throw new Error('Invalid settings file structure. / Geçersiz ayar dosyası yapısı.');
       }
     } catch (err: any) {
       self.postMessage({ success: false, type: 'import', error: err.message || String(err) });

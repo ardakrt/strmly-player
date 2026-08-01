@@ -4,6 +4,7 @@ type Domain = 'live' | 'series' | 'movie';
 
 interface UseCategoryManagerOptions {
   domain: Domain;
+  language: 'tr' | 'en';
   uniqueCategories: string[];
   categorySearchQuery: string;
   saveAppSetting: (key: string, value: any) => Promise<void>;
@@ -49,15 +50,23 @@ const LABELS: Record<Domain, { singular: string; plural: string }> = {
   movie: { singular: 'film kategorisi', plural: 'film kategoriler' },
 };
 
+// English variants of the same toast labels
+const LABELS_EN: Record<Domain, { singular: string; plural: string }> = {
+  live: { singular: 'category', plural: 'categories' },
+  series: { singular: 'series category', plural: 'series categories' },
+  movie: { singular: 'movie category', plural: 'movie categories' },
+};
+
 export function useCategoryManager(options: UseCategoryManagerOptions) {
   const {
-    domain, uniqueCategories, categorySearchQuery, saveAppSetting, showToast,
+    domain, language, uniqueCategories, categorySearchQuery, saveAppSetting, showToast,
     activeCategory, setActiveCategory,
     favorites, setFavorites, customOrder, setCustomOrder, hidden, setHidden,
     editMode, setEditMode, draggedCategory, setDraggedCategory,
   } = options;
   const keys = KEYS[domain];
   const labels = LABELS[domain];
+  const labelsEn = LABELS_EN[domain];
 
 
 
@@ -79,24 +88,24 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
     const updated = [...hidden, categoryName];
     setHidden(updated);
     saveAppSetting(keys.hidden, updated);
-    showToast(`"${categoryName}" ${labels.singular} gizlendi`);
+    showToast(language === 'tr' ? `"${categoryName}" ${labels.singular} gizlendi` : `"${categoryName}" ${labelsEn.singular} hidden`);
     if (activeCategory === categoryName) {
       setActiveCategory('Tümü');
     }
-  }, [hidden, keys.hidden, saveAppSetting, showToast, labels.singular, activeCategory, setActiveCategory, setHidden]);
+  }, [hidden, keys.hidden, saveAppSetting, showToast, labels.singular, labelsEn.singular, activeCategory, setActiveCategory, setHidden, language]);
 
   const handleRestore = useCallback((categoryName: string) => {
     const updated = hidden.filter(c => c !== categoryName);
     setHidden(updated);
     saveAppSetting(keys.hidden, updated);
-    showToast(`"${categoryName}" ${labels.singular} geri getirildi`);
-  }, [hidden, keys.hidden, saveAppSetting, showToast, labels.singular, setHidden]);
+    showToast(language === 'tr' ? `"${categoryName}" ${labels.singular} geri getirildi` : `"${categoryName}" ${labelsEn.singular} restored`);
+  }, [hidden, keys.hidden, saveAppSetting, showToast, labels.singular, labelsEn.singular, setHidden, language]);
 
   const handleResetHidden = useCallback(() => {
     setHidden([]);
     saveAppSetting(keys.hidden, []);
-    showToast(`Tüm gizlenen ${labels.plural} geri getirildi`);
-  }, [keys.hidden, saveAppSetting, showToast, labels.plural, setHidden]);
+    showToast(language === 'tr' ? `Tüm gizlenen ${labels.plural} geri getirildi` : `All hidden ${labelsEn.plural} restored`);
+  }, [keys.hidden, saveAppSetting, showToast, labels.plural, labelsEn.plural, setHidden, language]);
 
   const handleDragStart = useCallback((e: React.DragEvent, category: string) => {
     if (!editMode) {
@@ -152,7 +161,7 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
       }
       setFavorites(newFavs);
       saveAppSetting(keys.favorites, newFavs);
-      showToast(`"${draggedCategory}" favori ${labels.plural}ine eklendi`);
+      showToast(language === 'tr' ? `"${draggedCategory}" favori ${labels.plural}ine eklendi` : `"${draggedCategory}" added to favorite ${labelsEn.plural}`);
     } else if (isDraggedFav && !isTargetFav) {
       newFavs = newFavs.filter(c => c !== draggedCategory);
       setFavorites(newFavs);
@@ -167,11 +176,11 @@ export function useCategoryManager(options: UseCategoryManagerOptions) {
       }
       setCustomOrder(newOrder);
       saveAppSetting(keys.customOrder, newOrder);
-      showToast(`"${draggedCategory}" favori ${labels.plural}inden kaldırıldı`);
+      showToast(language === 'tr' ? `"${draggedCategory}" favori ${labels.plural}inden kaldırıldı` : `"${draggedCategory}" removed from favorite ${labelsEn.plural}`);
     }
 
     setDraggedCategory(null);
-  }, [editMode, draggedCategory, favorites, customOrder, uniqueCategories, keys, saveAppSetting, showToast, labels.plural, setFavorites, setCustomOrder, setDraggedCategory]);
+  }, [editMode, draggedCategory, favorites, customOrder, uniqueCategories, keys, saveAppSetting, showToast, labels.plural, labelsEn.plural, setFavorites, setCustomOrder, setDraggedCategory, language]);
 
   // Memos
   const orderedCategories = useMemo(() => {

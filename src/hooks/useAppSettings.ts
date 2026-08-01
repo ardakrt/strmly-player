@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Language } from '../utils/translations';
+export type IptvUpdateMode = 'prompt' | 'silent' | 'manual';
 import { getTranslation } from '../utils/translations';
 import { GLOBAL_KEYS } from '../constants';
 import { getTmdbApiKey } from '../utils/tmdb';
@@ -102,6 +103,19 @@ export function useAppSettings() {
     return 'full';
   });
 
+  const [iptvUpdateMode, setIptvUpdateModeState] = useState<IptvUpdateMode>(() => {
+    try {
+      const stored = localStorage.getItem('cinema_iptv_update_mode');
+      if (stored) {
+        const parsed = stored.startsWith('"') ? JSON.parse(stored) : stored;
+        if (parsed === 'prompt' || parsed === 'silent' || parsed === 'manual') return parsed;
+      }
+    } catch {
+      // Ignore
+    }
+    return 'silent';
+  });
+
   const [language, setLanguageState] = useState<Language>(() => {
     try {
       const stored = localStorage.getItem('cinema_language');
@@ -145,6 +159,15 @@ export function useAppSettings() {
       historyIndexRef.current--;
       const prevGroup = historyRef.current[historyIndexRef.current];
       setSelectedGroupState(prevGroup);
+    } else {
+      setSelectedGroupState((current) => {
+        if (current !== 'Ana Sayfa') {
+          historyRef.current = ['Ana Sayfa'];
+          historyIndexRef.current = 0;
+          return 'Ana Sayfa';
+        }
+        return current;
+      });
     }
   }, []);
 
@@ -157,26 +180,49 @@ export function useAppSettings() {
   }, []);
 
   useEffect(() => {
-    const handleMouseUp = (e: MouseEvent) => {
+    let lastNavTime = 0;
+
+    const triggerBack = () => {
+      const now = Date.now();
+      if (now - lastNavTime < 200) return;
+      lastNavTime = now;
+      navigateBack();
+    };
+
+    const triggerForward = () => {
+      const now = Date.now();
+      if (now - lastNavTime < 200) return;
+      lastNavTime = now;
+      navigateForward();
+    };
+
+    const handleMouseSideButtons = (e: MouseEvent) => {
       if (e.button === 3) {
         e.preventDefault();
-        navigateBack();
+        e.stopPropagation();
+        triggerBack();
       } else if (e.button === 4) {
         e.preventDefault();
-        navigateForward();
+        e.stopPropagation();
+        triggerForward();
       }
     };
-    window.addEventListener('mouseup', handleMouseUp);
+
+    window.addEventListener('mousedown', handleMouseSideButtons, true);
+    window.addEventListener('mouseup', handleMouseSideButtons, true);
+    window.addEventListener('auxclick', handleMouseSideButtons, true);
 
     const unsubBack = window.electronAPI?.onNavigateBack?.(() => {
-      navigateBack();
+      triggerBack();
     });
     const unsubForward = window.electronAPI?.onNavigateForward?.(() => {
-      navigateForward();
+      triggerForward();
     });
 
     return () => {
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousedown', handleMouseSideButtons, true);
+      window.removeEventListener('mouseup', handleMouseSideButtons, true);
+      window.removeEventListener('auxclick', handleMouseSideButtons, true);
       if (unsubBack) unsubBack();
       if (unsubForward) unsubForward();
     };
@@ -229,19 +275,44 @@ export function useAppSettings() {
     saveAppSetting('cinema_transcode_mode', mode);
   }, [saveAppSetting]);
 
+  const setIptvUpdateMode = useCallback((mode: IptvUpdateMode) => {
+    setIptvUpdateModeState(mode);
+    saveAppSetting('cinema_iptv_update_mode', mode);
+  }, [saveAppSetting]);
+
   const loadAppSetting = useCallback(async (key: string, isJson = false, profileIdOverride?: string | null): Promise<any> => {
     let finalKey = key;
     const profId = profileIdOverride !== undefined ? profileIdOverride : activeProfileIdRef.current;
     if (profId && !GLOBAL_KEYS.includes(key)) {
       finalKey = `profile_${profId}_${key}`;
     }
-    if (window.electronAPI && window.electronAPI.loadConfig) {
-      const val = await window.electronAPI.loadConfig(finalKey);
-      if (val !== null && val !== undefined) return val;
+
+    try {
+      if (window.electronAPI && window.electronAPI.loadConfig) {
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1200));
+        const val = await Promise.race([
+          window.electronAPI.loadConfig(finalKey),
+          timeoutPromise
+        ]);
+        if (val !== null && val !== undefined) return val;
+      }
+    } catch (e) {
+      console.warn(`IPC loadConfig error for ${finalKey}:`, e);
     }
-    const stored = localStorage.getItem(finalKey);
-    if (!stored) return null;
-    return isJson ? JSON.parse(stored) : stored;
+
+    try {
+      const stored = localStorage.getItem(finalKey);
+      if (!stored) return null;
+      if (!isJson) return stored;
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return stored;
+      }
+    } catch (e) {
+      console.warn(`localStorage read error for ${finalKey}:`, e);
+      return null;
+    }
   }, []);
 
   const setLanguage = useCallback((lang: Language) => {
@@ -263,6 +334,8 @@ export function useAppSettings() {
     setDefaultPlayer,
     transcodeMode,
     setTranscodeMode,
+    iptvUpdateMode,
+    setIptvUpdateMode,
     tmdbApiKey,
     setTmdbApiKey,
     activeAccent,
@@ -285,6 +358,8 @@ export function useAppSettings() {
     setScrolled,
     selectedGroup,
     setSelectedGroup,
+    navigateBack,
+    navigateForward,
     categorySearchQuery,
     setCategorySearchQuery,
     saveAppSetting,

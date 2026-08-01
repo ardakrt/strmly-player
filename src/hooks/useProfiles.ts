@@ -227,7 +227,7 @@ export function useProfiles({
       setActiveProfileId(profileId);
     } catch (error) {
       console.error("Error loading selected profile:", error);
-      showToast("Profil verileri yüklenirken bir hata oluştu.");
+      showToast(language === 'tr' ? "Profil verileri yüklenirken bir hata oluştu." : "An error occurred while loading profile data.");
     } finally {
       setIsParsing(false);
       setProfileEntryReady(false);
@@ -288,7 +288,7 @@ export function useProfiles({
     if (activeProfileId === profileId) {
       await handleLogoutProfile();
     }
-    showToast("Profil ve tüm verileri silindi.");
+    showToast(language === 'tr' ? "Profil ve tüm verileri silindi." : "Profile and all its data were deleted.");
   };
 
   const handleAvatarSearch = async (query: string) => {
@@ -338,7 +338,9 @@ export function useProfiles({
       setAvatarSearchResults(finalResults.slice(0, 18));
     } catch (e) {
       console.error("Error searching avatars from TMDB:", e);
-      showToast("TMDB görsel araması sırasında bir hata oluştu.");
+      showToast(language === 'tr'
+        ? "TMDB görsel araması sırasında bir hata oluştu."
+        : "An error occurred while searching TMDB images.");
     } finally {
       setAvatarSearchLoading(false);
     }
@@ -347,15 +349,15 @@ export function useProfiles({
   const handleSaveProfile = async () => {
     if (profileSaveInProgressRef.current) return;
     if (!profileFormName.trim()) {
-      showToast("Lütfen bir profil ismi girin.");
+      showToast(language === 'tr' ? "Lütfen bir profil ismi girin." : "Please enter a profile name.");
       return;
     }
     profileSaveInProgressRef.current = true;
     setProfileSetupStatus({
       active: true,
       step: 1,
-      title: 'Profil hazırlanıyor',
-      detail: 'Bilgiler kontrol ediliyor...'
+      title: language === 'tr' ? 'Profil hazırlanıyor' : 'Preparing profile',
+      detail: language === 'tr' ? 'Bilgiler kontrol ediliyor...' : 'Checking details...'
     });
     setIsParsing(true);
     await yieldToInterface();
@@ -378,10 +380,10 @@ export function useProfiles({
         setProfileSetupStatus({
           active: true,
           step: 1,
-          title: 'Kanal listesine bağlanılıyor',
-          detail: 'M3U sunucusundan yanıt bekleniyor...'
+          title: language === 'tr' ? 'Kanal listesine bağlanılıyor' : 'Connecting to channel list',
+          detail: language === 'tr' ? 'M3U sunucusundan yanıt bekleniyor...' : 'Waiting for response from M3U server...'
         });
-        showToast("M3U Listesi indiriliyor...");
+        showToast(language === 'tr' ? "M3U Listesi indiriliyor..." : "Downloading M3U list...");
         try {
           const res = await fetch(getCacheBustedUrl(profileM3uUrl), {
             cache: 'no-store',
@@ -389,24 +391,24 @@ export function useProfiles({
               'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
             }
           });
-          if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
+          if (!res.ok) throw new Error(language === 'tr' ? "HTTP Hatası: " + res.status : "HTTP Error: " + res.status);
           setProfileSetupStatus({
             active: true,
             step: 2,
-            title: 'Kanal listesi indiriliyor',
-            detail: 'İçerikler güvenli şekilde alınıyor...'
+            title: language === 'tr' ? 'Kanal listesi indiriliyor' : 'Downloading channel list',
+            detail: language === 'tr' ? 'İçerikler güvenli şekilde alınıyor...' : 'Safely fetching contents...'
           });
           const data = await res.arrayBuffer();
           setProfileSetupStatus({
             active: true,
             step: 2,
-            title: 'Kanallar düzenleniyor',
-            detail: 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...'
+            title: language === 'tr' ? 'Kanallar düzenleniyor' : 'Organizing channels',
+            detail: language === 'tr' ? 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...' : 'Separating series, movies, and live channels...'
           });
           await yieldToInterface();
           const parsedPlaylist = await parseM3UAsync(data);
           loadedItems = parsedPlaylist.items;
-          if (loadedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
+          if (loadedItems.length === 0) throw new Error(language === 'tr' ? "Çözümlenebilir kanal bulunamadı!" : "No playable channels found!");
 
           newPlaylist = {
             id: Date.now().toString(),
@@ -417,20 +419,23 @@ export function useProfiles({
             playlistMode: 'm3u',
             url: profileM3uUrl.trim(),
             autoUpdateIntervalHours: profileAutoUpdateIntervalHours,
-            lastAutoUpdatedAt: Date.now()
+            lastAutoUpdatedAt: Date.now(),
+            contentRevision: parsedPlaylist.revision,
           };
         } catch (e: any) {
           console.error(e);
-          showToast(`Kanal listesi yüklenemedi: ${e.message || e}. Profil playlist olmadan oluşturulacak.`);
+          showToast(language === 'tr'
+            ? `Kanal listesi yüklenemedi: ${e.message || e}. Profil playlist olmadan oluşturulacak.`
+            : `Could not load channel list: ${e.message || e}. The profile will be created without a playlist.`);
         }
       } else if (profilePlaylistType === 'xtream' && profileXtreamUrl.trim() && profileXtreamUser.trim() && profileXtreamPass.trim()) {
         setProfileSetupStatus({
           active: true,
           step: 1,
-          title: 'Xtream sunucusuna bağlanılıyor',
-          detail: 'Hesap ve sunucu bilgileri doğrulanıyor...'
+          title: language === 'tr' ? 'Xtream sunucusuna bağlanılıyor' : 'Connecting to Xtream server',
+          detail: language === 'tr' ? 'Hesap ve sunucu bilgileri doğrulanıyor...' : 'Verifying account and server details...'
         });
-        showToast("Xtream Codes API'ye bağlanılıyor...");
+        showToast(language === 'tr' ? "Xtream Codes API'ye bağlanılıyor..." : "Connecting to Xtream Codes API...");
         try {
           const cleanUrl = profileXtreamUrl.trim().replace(/\/$/, "");
           const finalUrl = `${cleanUrl}/get.php?username=${profileXtreamUser.trim()}&password=${profileXtreamPass.trim()}&type=m3u_plus&output=m3u8`;
@@ -440,24 +445,24 @@ export function useProfiles({
               'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
             }
           });
-          if (!res.ok) throw new Error("Bağlantı Hatası: " + res.status);
+          if (!res.ok) throw new Error(language === 'tr' ? "Bağlantı Hatası: " + res.status : "Connection Error: " + res.status);
           setProfileSetupStatus({
             active: true,
             step: 2,
-            title: 'Kanal listesi indiriliyor',
-            detail: 'Xtream içerikleri alınıyor...'
+            title: language === 'tr' ? 'Kanal listesi indiriliyor' : 'Downloading channel list',
+            detail: language === 'tr' ? 'Xtream içerikleri alınıyor...' : 'Fetching Xtream contents...'
           });
           const data = await res.arrayBuffer();
           setProfileSetupStatus({
             active: true,
             step: 2,
-            title: 'Kanallar düzenleniyor',
-            detail: 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...'
+            title: language === 'tr' ? 'Kanallar düzenleniyor' : 'Organizing channels',
+            detail: language === 'tr' ? 'Diziler, filmler ve canlı kanallar ayrıştırılıyor...' : 'Separating series, movies, and live channels...'
           });
           await yieldToInterface();
           const parsedPlaylist = await parseM3UAsync(data);
           loadedItems = parsedPlaylist.items;
-          if (loadedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
+          if (loadedItems.length === 0) throw new Error(language === 'tr' ? "Çözümlenebilir kanal bulunamadı!" : "No playable channels found!");
 
           newPlaylist = {
             id: Date.now().toString(),
@@ -470,11 +475,14 @@ export function useProfiles({
             xtreamUser: profileXtreamUser.trim(),
             xtreamPass: profileXtreamPass.trim(),
             autoUpdateIntervalHours: profileAutoUpdateIntervalHours,
-            lastAutoUpdatedAt: Date.now()
+            lastAutoUpdatedAt: Date.now(),
+            contentRevision: parsedPlaylist.revision,
           };
         } catch (e: any) {
           console.error(e);
-          showToast(`Xtream bağlantısı başarısız: ${e.message || e}. Profil playlist olmadan oluşturulacak.`);
+          showToast(language === 'tr'
+            ? `Xtream bağlantısı başarısız: ${e.message || e}. Profil playlist olmadan oluşturulacak.`
+            : `Xtream connection failed: ${e.message || e}. The profile will be created without a playlist.`);
         }
       }
 
@@ -488,10 +496,12 @@ export function useProfiles({
       setProfileSetupStatus({
         active: true,
         step: 3,
-        title: 'Profil kaydediliyor',
+        title: language === 'tr' ? 'Profil kaydediliyor' : 'Saving profile',
         detail: loadedItems.length > 0
-          ? `${loadedItems.length.toLocaleString('tr-TR')} içerik profilinize ekleniyor...`
-          : 'Profil tercihleri güvenli şekilde kaydediliyor...',
+          ? (language === 'tr'
+            ? `${loadedItems.length.toLocaleString('tr-TR')} içerik profilinize ekleniyor...`
+            : `${loadedItems.length.toLocaleString('en-US')} items are being added to your profile...`)
+          : (language === 'tr' ? 'Profil tercihleri güvenli şekilde kaydediliyor...' : 'Saving your profile preferences securely...'),
         itemCount: loadedItems.length || undefined
       });
       await yieldToInterface();
@@ -530,8 +540,8 @@ export function useProfiles({
       setProfileSetupStatus({
         active: true,
         step: 4,
-        title: 'Ana sayfa hazırlanıyor',
-        detail: 'Kategoriler ve kişisel öneriler oluşturuluyor...',
+        title: language === 'tr' ? 'Ana sayfa hazırlanıyor' : 'Preparing home page',
+        detail: language === 'tr' ? 'Kategoriler ve kişisel öneriler oluşturuluyor...' : 'Building categories and personal recommendations...',
         itemCount: loadedItems.length || undefined
       });
       await yieldToInterface();
@@ -548,10 +558,12 @@ export function useProfiles({
       setProfileAutoUpdateIntervalHours(DEFAULT_AUTO_UPDATE_INTERVAL_HOURS);
       setAvatarSearchQuery('');
       setAvatarSearchResults([]);
-      showToast(isEditing ? "Profil güncellendi." : `Hoş geldiniz, ${newProfile.name}!`);
+      showToast(isEditing
+        ? (language === 'tr' ? "Profil güncellendi." : "Profile updated.")
+        : (language === 'tr' ? `Hoş geldiniz, ${newProfile.name}!` : `Welcome, ${newProfile.name}!`));
     } catch (e) {
       console.error(e);
-      showToast("Profil kaydedilirken bir hata oluştu.");
+      showToast(language === 'tr' ? "Profil kaydedilirken bir hata oluştu." : "An error occurred while saving the profile.");
     } finally {
       profileSaveInProgressRef.current = false;
       setProfileSetupStatus(previous => ({ ...previous, active: false }));

@@ -6,6 +6,7 @@ import type { GroupedSeries } from '../utils/seriesGroupers';
 import { ImageWithFallback } from './ImageWithFallback';
 import { VirtualizedGrid } from './VirtualizedGrid';
 import { MediaCardContextMenu } from './MediaCardContextMenu';
+import { AnimatedTicker } from './AnimatedTicker';
 import { useSettings } from '../context/SettingsContext';
 import { cleanMovieName, getCachedTmdbResult } from '../utils/tmdb';
 import { useDownloads } from '../hooks/useDownloads';
@@ -92,78 +93,80 @@ export const SeriesCard = React.memo(({
   const quality = getQualityLabel(series.name);
   return (
     <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => onClick(series))(); } }} role="button"
-      className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item"
+      className="group flex flex-col gap-2.5 cursor-pointer relative focusable-item w-full"
       tabIndex={0}
       onClick={() => onClick(series)}
       onContextMenu={(event) => onContextMenu?.(event, series)}
     >
-      <div className="premium-card aspect-[2/3] flex items-center justify-center relative">
-        <ImageWithFallback
-          src={series.logo}
-          name={series.name}
-          group={series.group || 'SERIES'}
-          itemType="series"
-          isGenericLogo={isGenericLogo}
-          aspect="portrait"
-        />
+      <div className="w-full">
+        <div className="premium-card aspect-[2/3] flex items-center justify-center relative">
+          <ImageWithFallback
+            src={series.logo}
+            name={series.name}
+            group={series.group || 'SERIES'}
+            itemType="series"
+            isGenericLogo={isGenericLogo}
+            aspect="portrait"
+          />
 
-        {rating !== null && rating > 0 && (
-          <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md border border-white/10 text-[9px] font-black text-amber-400 flex items-center gap-0.5 shadow-md animate-fade-in">
-            <Star size={9} fill="currentColor" />
-            <span>{rating.toFixed(1)}</span>
-          </div>
-        )}
-
-        {/* Seasons/Episodes Badge Overlay */}
-        <div className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-wider text-neutral-300 flex items-center gap-1.5 shadow-md">
-          <span>
-            {language === 'tr'
-              ? `${seasonsCount} S • ${series.episodesCount} B`
-              : `${seasonsCount} S • ${series.episodesCount} E`}
-          </span>
-          {quality && (
-            <span className="px-1 rounded bg-[var(--accent-color)]/25 text-[var(--accent-color)] text-[8px] font-black">{quality}</span>
-          )}
-        </div>
-
-        {/* Hover Glassmorphism Play Button */}
-        <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10 duration-300">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border border-white/20">
-              <Play size={15} fill="#000" className="ml-0.5" />
+          {rating !== null && rating > 0 && (
+            <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md border border-white/10 text-[9px] font-black text-amber-400 flex items-center gap-0.5 shadow-md">
+              <Star size={9} fill="currentColor" />
+              <span>{rating.toFixed(1)}</span>
             </div>
-            {onDownload && (
-              <button type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isDownloading) onDownload(series);
-                }}
-                className={`w-10 h-10 rounded-full flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border cursor-pointer ${
-                  isDownloading
-                    ? 'bg-blue-500/80 text-white border-blue-400/30 animate-pulse'
-                    : 'bg-white/90 text-black border-white/20 hover:bg-white'
-                }`}
-                title={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}
-               aria-label={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}>
-                <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
-              </button>
+          )}
+
+          {/* Seasons/Episodes Badge Overlay */}
+          <div className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-wider text-neutral-300 flex items-center gap-1.5 shadow-md">
+            <span>
+              {language === 'tr'
+                ? `${seasonsCount} S • ${series.episodesCount} B`
+                : `${seasonsCount} S • ${series.episodesCount} E`}
+            </span>
+            {quality && (
+              <span className="px-1 rounded bg-[var(--accent-color)]/25 text-[var(--accent-color)] text-[8px] font-black">{quality}</span>
             )}
           </div>
-        </div>
 
-        {/* Favorite Button */}
-        <button type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(series.id, e);
-          }}
-          className={`absolute top-2.5 right-2.5 z-20 w-7 h-7 rounded-full bg-black/80 border border-white/10 flex items-center justify-center text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 cursor-pointer ${
-            isFavorite ? 'opacity-100 text-red-500 border-red-500/20' : 'opacity-0 group-hover:opacity-100'
-          }`}
-          title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-         aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}>
-          <Heart size={11} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
-        </button>
+          {/* Hover Glassmorphism Play Button */}
+          <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10 duration-300">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border border-white/20">
+                <Play size={15} fill="#000" className="ml-0.5" />
+              </div>
+              {onDownload && (
+                <button type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isDownloading) onDownload(series);
+                  }}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 border cursor-pointer ${
+                    isDownloading
+                      ? 'bg-blue-500/80 text-white border-blue-400/30 animate-pulse'
+                      : 'bg-white/90 text-black border-white/20 hover:bg-white'
+                  }`}
+                  title={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}
+                 aria-label={isDownloading ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...') : (language === 'tr' ? 'Kaydet' : 'Save')}>
+                  <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Favorite Button */}
+          <button type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(series.id, e);
+            }}
+            className={`absolute top-2.5 right-2.5 z-20 w-7 h-7 rounded-full bg-black/80 border border-white/10 flex items-center justify-center text-neutral-300 hover:text-red-500 transition-all transform hover:scale-110 cursor-pointer ${
+              isFavorite ? 'opacity-100 text-red-500 border-red-500/20' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
+           aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}>
+            <Heart size={11} fill={isFavorite ? 'currentColor' : 'none'} className={isFavorite ? 'text-red-500' : ''} />
+          </button>
+        </div>
       </div>
       <div className="flex flex-col px-1">
         <span className="text-xs font-bold premium-card-title truncate" title={series.name}>{cleanMovieName(series.name)}</span>
@@ -204,8 +207,6 @@ export const SeriesView = React.memo(function SeriesView({
     event.stopPropagation();
     setContextMenu({ x: event.clientX, y: event.clientY, item });
   };
-
-
 
   const otherCategories = seriesCat.filteredOtherCategories;
 
@@ -289,7 +290,7 @@ export const SeriesView = React.memo(function SeriesView({
 
   return (
     <div
-      className="series-catalog-shell grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[218px_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-3"
+      className="series-catalog-shell grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden page-transition-enter md:grid-cols-[218px_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-3"
       onContextMenu={() => setContextMenu(null)}
     >
       {/* Categories — flush rail, full height under navbar */}
@@ -365,7 +366,7 @@ export const SeriesView = React.memo(function SeriesView({
       </aside>
 
       {/* Series grid — edge-to-edge; divider runs full height of shell content */}
-      <section className="series-catalog-panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-white/[0.07]">
+      <section className="series-catalog-panel relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-white/[0.07]">
         <header className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3.5 lg:px-6">
           <div className="min-w-0">
             <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
@@ -375,17 +376,14 @@ export const SeriesView = React.memo(function SeriesView({
               {activeTitle}
             </h2>
           </div>
-          <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[10px] font-semibold tabular-nums text-white/38">
-            {groupedSeriesList.length > 0
-              ? language === 'tr'
-                ? `${groupedSeriesList.length} dizi`
-                : `${groupedSeriesList.length} series`
-              : null}
+          <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[10px] font-semibold tabular-nums text-white/38 flex items-center gap-1">
+            <AnimatedTicker value={groupedSeriesList.length} />
+            <span>{language === 'tr' ? 'dizi' : 'series'}</span>
           </span>
         </header>
 
         <div
-          className="hide-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5"
+          className="custom-catalog-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5"
           onScroll={handleMainScroll}
         >
           {groupedSeriesList.length === 0 ? (
@@ -402,7 +400,7 @@ export const SeriesView = React.memo(function SeriesView({
               items={groupedSeriesList}
               compactLargeCards
               renderItem={(series) => {
-                const firstEpisode = series.seasons[1]?.[0]?.item;
+                const firstEpisode = Object.values(series.seasons)[0]?.[0]?.item;
                 return (
                   <SeriesCard
                     key={series.id}
@@ -425,7 +423,7 @@ export const SeriesView = React.memo(function SeriesView({
 
       {contextMenu &&
         (() => {
-          const firstEpisode = contextMenu.item.seasons[1]?.[0]?.item;
+          const firstEpisode = Object.values(contextMenu.item.seasons)[0]?.[0]?.item;
           return (
             <MediaCardContextMenu
               x={contextMenu.x}

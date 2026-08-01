@@ -17,6 +17,7 @@ const http = require("http");
 const { randomUUID } = require("crypto");
 const { spawnDetached } = require("./process-launcher");
 const { migrateProfileData } = require("./migration");
+const { recoverXtreamCredentials } = require("./playlist-credentials");
 const {
   isSafeConfiguredDownloadFolder,
   isSafeDownloadFolderSelection,
@@ -43,6 +44,7 @@ if (process.env.STRMLY_PERF_BENCH === "1") {
   app.commandLine.appendSwitch("disable-renderer-backgrounding");
   app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 }
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 // Check config for hardware acceleration setting
 let disableHW = process.env.STRMLY_DISABLE_HW_ACCELERATION === "1";
@@ -334,9 +336,9 @@ function createWindow() {
 
   // Handle mouse side buttons (back/forward) globally on the window
   mainWindow.on("app-command", (e, cmd) => {
-    if (cmd === "browser-backward") {
+    if (cmd === "browser-backward" || cmd === "back" || cmd === "app-command-back") {
       mainWindow.webContents.send("navigate-back");
-    } else if (cmd === "browser-forward") {
+    } else if (cmd === "browser-forward" || cmd === "forward" || cmd === "app-command-forward") {
       mainWindow.webContents.send("navigate-forward");
     }
   });
@@ -605,6 +607,7 @@ app.whenReady().then(async () => {
     .catch((err) => console.error("Startup background load error:", err));
 
   createWindow();
+  scheduleStartupUpdateCheck();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -944,6 +947,28 @@ ipcMain.handle("load-config", async (event, { key }) => {
   } catch (err) {
     console.error("Config load error:", err);
     return null;
+  }
+});
+
+ipcMain.handle("recover-playlist-credentials", async (_event, { profileId, playlistId }) => {
+  try {
+    const safeProfileId = String(profileId || "");
+    const safePlaylistId = String(playlistId || "");
+    if (
+      !/^[a-zA-Z0-9_-]+$/.test(safeProfileId) ||
+      !/^[a-zA-Z0-9_-]+$/.test(safePlaylistId)
+    ) {
+      return { success: false, error: "Invalid profile or playlist id" };
+    }
+
+    const config = await ensureConfigLoaded();
+    const playlist = recoverXtreamCredentials(config, safeProfileId, safePlaylistId);
+    if (!playlist) return { success: false };
+    await queueConfigWrite();
+    return { success: true, playlist };
+  } catch (err) {
+    console.error("Playlist credential recovery error:", err);
+    return { success: false, error: err.message };
   }
 });
 
@@ -1293,7 +1318,7 @@ ipcMain.handle(
       args.push("-map", "0:v:0?");
 
       const mappedAudioId = Number(audioStreamId);
-      if (Number.isFinite(mappedAudioId) && mappedAudioId >= 0) {
+      if (Number.isFinite(mappedAudioId) && mappedAudioId > 0) {
         args.push("-map", `0:${mappedAudioId}?`);
       } else {
         args.push("-map", "0:a:0?");
@@ -1581,7 +1606,7 @@ ipcMain.handle("probe-audio-codec", async (event, { url }) => {
 
 function getAllAudioCodecs(stderrText) {
   const codecs = [];
-  const regex = /Audio:\s+([a-zA-Z0-9_]+)/gi;
+  const regex = /Audio:\s+([a-zA-Z0-9_-]+)/gi;
   let match;
   while ((match = regex.exec(stderrText)) !== null) {
     codecs.push(match[1].toLowerCase());
@@ -1590,7 +1615,7 @@ function getAllAudioCodecs(stderrText) {
 }
 
 function getVideoCodecFromProbe(stderrText) {
-  const match = stderrText.match(/Video:\s+([a-zA-Z0-9_]+)/i);
+  const match = stderrText.match(/Video:\s+([a-zA-Z0-9_-]+)/i);
   return match ? match[1].toLowerCase() : undefined;
 }
 
@@ -1605,7 +1630,7 @@ function getDurationFromProbe(stderrText) {
 }
 
 function parseFfmpegProbeOutput(stderrOutput) {
-  const audioMatch = stderrOutput.match(/Audio:\s+([a-zA-Z0-9_]+)/i);
+  const audioMatch = stderrOutput.match(/Audio:\s+([a-zA-Z0-9_-]+)/i);
   return {
     success: !!audioMatch || !!getVideoCodecFromProbe(stderrOutput),
     codec: audioMatch ? audioMatch[1].toLowerCase() : "unknown",
@@ -1618,7 +1643,7 @@ function parseFfmpegProbeOutput(stderrOutput) {
 
 function getAudioStreamsInfo(stderrText) {
   const streams = [];
-  const regex = /Stream #0:(\d+)(?:\(([^)]+)\))?:\s*Audio:\s*([a-zA-Z0-9_]+)/gi;
+  const regex = /Stream #0:(\d+)(?:\[[^\]]+\])?(?:\(([^)]+)\))?(?:\[[^\]]+\])?:\s*Audio:\s*([a-zA-Z0-9_-]+)/gi;
   let match;
   let audioIdx = 0;
   while ((match = regex.exec(stderrText)) !== null) {
@@ -1659,12 +1684,15 @@ ipcMain.handle("check-ffmpeg", async () => {
 // --- AUTO-UPDATE INTEGRATION ---
 // Auto-updates are configured through electron-updater and the package publish settings.
 let autoUpdaterInstance = null;
+let currentUpdateState = { status: "idle", message: "" };
+let installDownloadedUpdateAutomatically = false;
 function getAutoUpdater() {
   if (autoUpdaterInstance) return autoUpdaterInstance;
 
   const { autoUpdater } = require("electron-updater");
   autoUpdater.logger = console;
-  autoUpdater.autoDownload = false;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on("checking-for-update", () => {
     sendUpdateStatus("update-status", {
@@ -1677,7 +1705,7 @@ function getAutoUpdater() {
     sendUpdateStatus("update-status", {
       status: "available",
       version: info.version,
-      message: `Yeni sürüm bulundu (v${info.version}). İndirmek için onay verin.`,
+      message: `Yeni sürüm bulundu (v${info.version}). Arka planda indiriliyor...`,
     });
   });
 
@@ -1706,8 +1734,14 @@ function getAutoUpdater() {
     sendUpdateStatus("update-status", {
       status: "downloaded",
       version: info.version,
-      message: `Sürüm v${info.version} hazır. Yüklemek için yeniden başlatın.`,
+      message: installDownloadedUpdateAutomatically
+        ? `Sürüm v${info.version} hazır. Uygulama güncelleniyor...`
+        : `Sürüm v${info.version} hazır. Yüklemek için yeniden başlatın.`,
     });
+    if (installDownloadedUpdateAutomatically) {
+      installDownloadedUpdateAutomatically = false;
+      setTimeout(() => getAutoUpdater().quitAndInstall(false, true), 1500);
+    }
   });
 
   autoUpdaterInstance = autoUpdater;
@@ -1715,6 +1749,9 @@ function getAutoUpdater() {
 }
 
 function sendUpdateStatus(channel, data) {
+  if (channel === "update-status") {
+    currentUpdateState = { ...currentUpdateState, ...data };
+  }
   if (mainWindow && mainWindow.webContents) {
     mainWindow.webContents.send(channel, data);
   }
@@ -1753,6 +1790,26 @@ ipcMain.handle("install-update", async () => {
     return { success: false, error: err.message };
   }
 });
+
+let startupUpdateCheckTimer = null;
+function scheduleStartupUpdateCheck() {
+  if (startupUpdateCheckTimer) clearTimeout(startupUpdateCheckTimer);
+  startupUpdateCheckTimer = setTimeout(async () => {
+    try {
+      if (!app.isPackaged) return;
+      installDownloadedUpdateAutomatically = true;
+      await getAutoUpdater().checkForUpdates();
+    } catch (e) {
+      installDownloadedUpdateAutomatically = false;
+      console.warn("Startup update check failed:", e);
+    }
+  }, 10000);
+}
+
+ipcMain.handle("get-update-state", async () => {
+  return currentUpdateState;
+});
+
 
 
 // Download management (extracted to electron/download-manager.js)

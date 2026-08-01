@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react';
 import type { AppProviderValue } from '../hooks/useAppProvider';
 import { APP_VIEWS, isLiveTvView } from '../navigation/views';
 import { FavoritesEmptyState } from './FavoritesEmptyState';
+import { SpotlightSearch } from './SpotlightSearch';
+import { CatalogPageSkeleton } from './CatalogPageSkeleton';
 
 const HomeView = lazy(() => import('./HomeView').then(m => ({ default: m.HomeView })));
 const LiveTvView = lazy(() => import('./LiveTvView').then(m => ({ default: m.LiveTvView })));
@@ -16,13 +18,31 @@ interface MainViewRouterProps {
 }
 
 export function MainViewRouter({ app }: MainViewRouterProps) {
-  const { navigation, catalog, home, playback, showToast } = app;
+  const { navigation, catalog, home, playback, showToast, spotlight } = app;
   const { selectedGroup, deferredSearchQuery, setSelectedGroup, setActiveSettingsTab, setShowAddPlaylistForm } = navigation;
+
+  if (spotlight.showSpotlight) {
+    return (
+      <SpotlightSearch
+        showSpotlight={spotlight.showSpotlight}
+        setShowSpotlight={spotlight.setShowSpotlight}
+        spotlightScope={spotlight.spotlightScope}
+        setSpotlightScope={spotlight.setSpotlightScope}
+        spotlightSearchInput={spotlight.spotlightSearchInput}
+        setSpotlightSearchInput={spotlight.setSpotlightSearchInput}
+        spotlightSearchResults={spotlight.spotlightSearchResults}
+        isSearchingWorker={spotlight.isSearchingWorker}
+        handlePlayStream={playback.handlePlayStream}
+        handleOpenDetails={catalog.handleOpenDetails}
+        handleOpenSeriesModalDirect={catalog.handleOpenSeriesModalDirect}
+      />
+    );
+  }
 
   return (
     <>
       {selectedGroup === APP_VIEWS.home && !deferredSearchQuery.trim() && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <HomeView
             selectedGroup={selectedGroup}
             searchQuery={deferredSearchQuery}
@@ -73,7 +93,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
       )}
 
       {selectedGroup === APP_VIEWS.favorites && (catalog.favItems.length > 0 || catalog.favSeries.length > 0 || deferredSearchQuery.trim()) && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <FavoritesView
             selectedGroup={selectedGroup}
             favChannels={catalog.favChannels}
@@ -90,7 +110,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
       )}
 
       {isLiveTvView(selectedGroup) && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <LiveTvView
             selectedGroup={selectedGroup}
             activeLiveCategory={catalog.activeLiveCategory}
@@ -113,9 +133,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
       )}
 
       {selectedGroup === APP_VIEWS.series && (
-        <Suspense
-          fallback={<div className="flex-1 min-h-0" />}
-        >
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <SeriesView
             selectedGroup={selectedGroup}
             activeSeriesCategory={catalog.activeSeriesCategory}
@@ -137,9 +155,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
       )}
 
       {selectedGroup === APP_VIEWS.movies && (
-        <Suspense
-          fallback={<div className="flex-1 min-h-0" />}
-        >
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <MoviesView
             selectedGroup={selectedGroup}
             activeMovieCategory={catalog.activeMovieCategory}
@@ -162,16 +178,14 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
         </Suspense>
       )}
 
-
-
       {selectedGroup === APP_VIEWS.settings && !deferredSearchQuery.trim() && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <SettingsPanel onNavigate={setSelectedGroup} />
         </Suspense>
       )}
 
       {selectedGroup === APP_VIEWS.downloads && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<CatalogPageSkeleton />}>
           <DownloadsView app={app} />
         </Suspense>
       )}

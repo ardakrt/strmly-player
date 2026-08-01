@@ -16,7 +16,7 @@ export function isSloganLikeBlurb(text: string): boolean {
  * Max/HBO-style billboard blurb: 1–2 complete sentences, meaningful plot teaser.
  * Avoids mid-sentence "…" cuts when a full sentence fits under maxLen.
  */
-export function summarizeHeroOverview(text: string, maxLen = 190): string {
+function summarizeHeroOverview(text: string, maxLen = 190): string {
   try {
     const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
     if (!cleaned) return '';
@@ -97,10 +97,55 @@ export function pickHeroSynopsis(options: {
   }
 }
 
+/**
+ * Fix Turkish character encoding issues (Mojibake) caused by double UTF-8 decoding
+ * or ISO-8859-9 / Windows-1254 misdecodings (e.g., "SeÃ§izle" -> "Seçizle").
+ */
+export function fixTurkishEncoding(str: string): string {
+  if (!str || typeof str !== 'string') return str || '';
+
+  if (!/[ÃÄÅâ]/.test(str)) return str;
+
+  let s = str;
+
+  s = s
+    .replace(/Ã§/g, 'ç')
+    .replace(/Ã‡/g, 'Ç')
+    .replace(/ÄŸ/g, 'ğ')
+    .replace(/ÄĞ/g, 'Ğ')
+    .replace(/Ä\u011E/g, 'Ğ')
+    .replace(/Ä±/g, 'ı')
+    .replace(/Ä°/g, 'İ')
+    .replace(/Ã¶/g, 'ö')
+    .replace(/Ã–/g, 'Ö')
+    .replace(/ÅŸ/g, 'ş')
+    .replace(/ÅŞ/g, 'Ş')
+    .replace(/Å\u015E/g, 'Ş')
+    .replace(/Ã¼/g, 'ü')
+    .replace(/ÃÜ/g, 'Ü')
+    .replace(/Ã\u00DC/g, 'Ü')
+    .replace(/Ã¢/g, 'â')
+    .replace(/Ã®/g, 'î')
+    .replace(/Ã»/g, 'û')
+    .replace(/Ã½/g, 'ı')
+    .replace(/Ã°/g, 'ğ')
+    .replace(/Ã¾/g, 'ş')
+    .replace(/Ã‘/g, 'Ğ')
+    .replace(/Ãž/g, 'Ş')
+    .replace(/â€™/g, "'")
+    .replace(/â€“/g, '–')
+    .replace(/â€”/g, '—')
+    .replace(/â€œ/g, '“')
+    .replace(/â€ /g, '”')
+    .replace(/â€/g, '”');
+
+  return s;
+}
+
 /** Strip playlist noise: [TR], quality tags, slash spam → "HBO Max · Paramount+". */
 export function cleanPlaylistLabel(group: string, maxLen = 36): string {
   if (!group) return '';
-  let s = String(group)
+  let s = fixTurkishEncoding(String(group))
     .replace(/\[[^\]]*]/g, ' ')
     .replace(/\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|hdr|dv|atmos)\b/gi, ' ')
     .replace(/[|/\\]+/g, ' · ')
@@ -117,7 +162,7 @@ export const getFallbackGradient = (name: string) => {
     'from-rose-950 via-neutral-900 to-neutral-950',
     'from-neutral-900 via-neutral-900 to-violet-950',
     'from-neutral-900 via-neutral-900 to-emerald-950',
-    'from-teal-950 via-neutral-900 to-neutral-900',
+    'from-teal-950 via-neutral-900 to-neutral-950',
     'from-amber-950 via-neutral-900 to-rose-950',
     'from-fuchsia-950 via-neutral-900 to-neutral-950',
     'from-violet-950 via-neutral-900 to-stone-900',
@@ -126,23 +171,7 @@ export const getFallbackGradient = (name: string) => {
   return gradients[hash % gradients.length];
 };
 
-// Mock TMDB Data generator (Fallback when no TMDB key is present)
-export const getMockDetails = (title: string, group: string) => {
-  const seed = (title + group).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const match = (seed % 8) + 92;
-  const ratingDecimal = ((seed * 7 + 13) % 18) / 10;
-  const rating = (7.8 + ratingDecimal).toFixed(1);
-  return {
-    match: `%${match} Eşleşme`,
-    rating: `★ ${rating}`,
-    year: '2026',
-    desc: `"${title}" yayını yüksek çözünürlüklü akış, 4K Ultra HD video kalitesi ve kristal netliğinde Dolby Atmos 5.1 çevreleyen ses kodlamasıyla evinizde sinema kalitesinde bir deneyim sunmaktadır. Bu yayın, ${group} kategorisindeki en prestijli içerikler arasından özenle seçilmiştir.`
-  };
-};
-
-
-
-export const hexToRgbStr = (hex: string) => {
+const hexToRgbStr = (hex: string) => {
   const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
   const fullHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);

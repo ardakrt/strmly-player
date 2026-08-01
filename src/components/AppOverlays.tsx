@@ -1,4 +1,3 @@
-import { SpotlightSearch } from './SpotlightSearch';
 import { AppModals } from './AppModals';
 import { DynamicIslandToast } from './DynamicIslandToast';
 import type { AppProviderValue } from '../hooks/useAppProvider';
@@ -8,7 +7,7 @@ interface AppOverlaysProps {
 }
 
 export function AppOverlays({ app }: AppOverlaysProps) {
-  const { ui, spotlight, modals, catalog, playback, navigation } = app;
+  const { ui, modals, catalog, playback, navigation } = app;
 
   return (
     <>
@@ -19,25 +18,6 @@ export function AppOverlays({ app }: AppOverlaysProps) {
         scrolled={ui.scrolled}
         onMouseEnter={ui.dynamicIslandToast.handleToastMouseEnter}
         onMouseLeave={ui.dynamicIslandToast.handleToastMouseLeave}
-      />
-
-      <SpotlightSearch
-        showSpotlight={spotlight.showSpotlight}
-        setShowSpotlight={spotlight.setShowSpotlight}
-        spotlightActiveStep={spotlight.spotlightActiveStep}
-        setSpotlightActiveStep={spotlight.setSpotlightActiveStep}
-        focusedButtonIndex={spotlight.focusedButtonIndex}
-        setFocusedButtonIndex={spotlight.setFocusedButtonIndex}
-        spotlightScope={spotlight.spotlightScope}
-        setSpotlightScope={spotlight.setSpotlightScope}
-        spotlightSearchInput={spotlight.spotlightSearchInput}
-        setSpotlightSearchInput={spotlight.setSpotlightSearchInput}
-        spotlightInputRef={spotlight.spotlightInputRef}
-        spotlightSearchResults={spotlight.spotlightSearchResults}
-        isSearchingWorker={spotlight.isSearchingWorker}
-        handlePlayStream={playback.handlePlayStream}
-        handleOpenDetails={catalog.handleOpenDetails}
-        handleOpenSeriesModalDirect={catalog.handleOpenSeriesModalDirect}
       />
 
       <AppModals

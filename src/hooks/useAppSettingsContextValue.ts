@@ -38,6 +38,8 @@ export function useAppSettingsContextValue({
     setDefaultPlayer,
     transcodeMode,
     setTranscodeMode,
+    iptvUpdateMode,
+    setIptvUpdateMode,
     tmdbApiKey,
     setTmdbApiKey,
     activeTheme,
@@ -59,6 +61,9 @@ export function useAppSettingsContextValue({
   const {
     playlists,
     activePlaylistId,
+    pendingPlaylistUpdate,
+    applyPendingUpdate,
+    dismissPendingUpdate,
     showAddPlaylistForm,
     setShowAddPlaylistForm,
     playlistMode,
@@ -104,6 +109,8 @@ export function useAppSettingsContextValue({
       setDefaultPlayer,
       transcodeMode,
       setTranscodeMode,
+      iptvUpdateMode,
+      setIptvUpdateMode,
       tmdbApiKey,
       setTmdbApiKey,
       activeTheme,
@@ -118,6 +125,9 @@ export function useAppSettingsContextValue({
       setCardLayoutSize,
       playlists,
       activePlaylistId,
+      pendingPlaylistUpdate,
+      applyPendingUpdate,
+      dismissPendingUpdate,
       showAddPlaylistForm,
       setShowAddPlaylistForm,
       playlistMode,
@@ -158,15 +168,15 @@ export function useAppSettingsContextValue({
       onClearRecentlyWatched: () => {
         setRecentlyWatched([]);
         localStorage.removeItem("cinema_recently_watched");
-        showToast("İzleme geçmişi temizlendi.");
+        showToast(language === 'tr' ? "İzleme geçmişi temizlendi." : "Watch history cleared.");
       },
       onClearFavorites: () => {
         setGlobalFavorites([]);
         saveAppSetting("cinema_global_favorites", []);
-        showToast("Favoriler temizlendi.");
+        showToast(language === 'tr' ? "Favoriler temizlendi." : "Favorites cleared.");
       },
       onRefreshPlaylist: (playlist: SavedPlaylist) => {
-        autoUpdatePlaylist(playlist, activePlaylistId, true);
+        return autoUpdatePlaylist(playlist, activePlaylistId, true);
       },
       onUpdatePlaylistAutoUpdateInterval: (
         id: string,
@@ -232,6 +242,11 @@ export function useAppSettingsContextValue({
       setDefaultPlayer,
       transcodeMode,
       setTranscodeMode,
+      iptvUpdateMode,
+      setIptvUpdateMode,
+      pendingPlaylistUpdate,
+      applyPendingUpdate,
+      dismissPendingUpdate,
       setTmdbApiKey,
       setActiveTheme,
       setActiveAccent,

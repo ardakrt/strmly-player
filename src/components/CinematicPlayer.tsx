@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { AlertCircle, ArrowLeft, LoaderCircle, Play, Pause, Volume, Volume1, Volume2, VolumeX, Maximize2, Minimize2, PictureInPicture, Plus, Settings, ChevronRight, ChevronLeft, X, Gauge, Subtitles, SkipForward, SkipBack, Scan } from 'lucide-react';
+import { AlertCircle, ArrowLeft, LoaderCircle, Play, Pause, Volume2, Maximize2, Minimize2, PictureInPicture, Plus, Settings, ChevronRight, ChevronLeft, X, Gauge, Subtitles, SkipForward, SkipBack, Scan } from 'lucide-react';
 import { SPEED_OPTIONS } from '../constants';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 import { useSettings } from '../context/SettingsContext';
 import { AUTOPLAY_NEXT_KEY, getPlaybackSettings } from '../utils/playbackSettings';
+import { IconMorph } from './IconMorph';
 import type { PlayerQualityLevel } from '../hooks/useCinematicPlayer';
 
 interface CinematicPlayerProps {
@@ -842,10 +843,10 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
               </div>
             )}
             <button type="button"
-              className="w-10 h-10 shrink-0 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
+              className="w-10 h-10 shrink-0 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer"
               onClick={onTogglePlay}
-             aria-label="Play">
-              {isPlaying ? <Pause size={18} fill="#000" /> : <Play size={18} fill="#000" className="ml-0.5" />}
+              aria-label="Play">
+              <IconMorph type="play-pause" active={isPlaying} size={18} />
             </button>
             {channel.type === 'series' && (
               <div className="group/episode-nav relative shrink-0">
@@ -862,7 +863,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 </button>
                 {nextEpisode && (
                   <div className="pointer-events-none absolute bottom-full left-1/2 mb-3 w-max max-w-[220px] -translate-x-1/2 -translate-y-1 rounded-xl border border-white/10 bg-black/85 px-3 py-2 opacity-0 shadow-xl backdrop-blur-xl transition-all duration-150 group-hover/episode-nav:translate-y-0 group-hover/episode-nav:opacity-100">
-                    <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-white/40">{language === 'tr' ? 'Sonraki Bölüm' : 'Next Episode'}</div>
+                    <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-white/40">{language === 'tr' ? 'Sonraki Bölüm' : 'Previous Episode'}</div>
                     <div className="mt-1 truncate text-[11px] font-semibold text-white">{parseSeriesEpisodeInfo(nextEpisode.name).cleanTitle}</div>
                     <div className="text-[9px] font-medium text-white/50">{formatEpisodeMeta(nextEpisode)}</div>
                   </div>
@@ -875,15 +876,7 @@ export const CinematicPlayer = (props: CinematicPlayerProps) => {
                 onClick={onToggleMute}
                 title={language === 'tr' ? 'Sessiz (M)' : 'Mute (M)'}
                aria-label={language === 'tr' ? 'Sessiz (M)' : 'Mute (M)'}>
-                {playerMuted || playerVolume === 0 ? (
-                  <VolumeX size={17} className="text-neutral-400 hover:text-red-400 transition-colors duration-300" />
-                ) : playerVolume < 0.35 ? (
-                  <Volume size={17} className="transition-all duration-300" />
-                ) : playerVolume < 0.7 ? (
-                  <Volume1 size={17} className="transition-all duration-300" />
-                ) : (
-                  <Volume2 size={17} className="transition-all duration-300" />
-                )}
+                <IconMorph type="volume" active={playerMuted || playerVolume === 0} size={17} />
               </button>
 
               <div className="relative flex items-center h-6 w-0 opacity-0 pointer-events-none group-hover/vol:w-16 group-hover/vol:ml-2 group-hover/vol:opacity-100 group-hover/vol:pointer-events-auto transition-all duration-300 ease-out overflow-hidden">

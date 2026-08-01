@@ -58,34 +58,34 @@ import type { TmdbMetadata } from '../utils/vodHelpers';
 
 const globalVodMetadataMap = new Map<string, TmdbMetadata>();
 
-const TMDB_GENRES: Record<number, string> = {
-  28: 'AKSİYON',
-  12: 'MACERA',
-  16: 'ANİMASYON',
-  35: 'KOMEDİ',
-  80: 'POLİSİYE',
-  99: 'BELGESEL',
-  18: 'DRAM',
-  10751: 'AİLE',
-  14: 'FANTASTİK',
-  36: 'TARİH',
-  27: 'KORKU',
-  10402: 'MÜZİK',
-  9648: 'GİZEM',
-  10749: 'ROMANTİK',
-  878: 'BİLİM-KURGU',
-  10770: 'TV FİLMİ',
-  53: 'GERİLİM',
-  10752: 'SAVAŞ',
-  37: 'VAHŞİ BATI',
-  10759: 'AKSİYON & MACERA',
-  10762: 'ÇOCUK',
-  10763: 'HABER',
-  10764: 'REALITY',
-  10765: 'BİLİM-KURGU & FANTASTİK',
-  10766: 'PEMBE DİZİ',
-  10767: 'TALK SHOW',
-  10768: 'SAVAŞ & POLİTİKA'
+const TMDB_GENRES: Record<number, { tr: string; en: string }> = {
+  28: { tr: 'AKSİYON', en: 'ACTION' },
+  12: { tr: 'MACERA', en: 'ADVENTURE' },
+  16: { tr: 'ANİMASYON', en: 'ANIMATION' },
+  35: { tr: 'KOMEDİ', en: 'COMEDY' },
+  80: { tr: 'POLİSİYE', en: 'CRIME' },
+  99: { tr: 'BELGESEL', en: 'DOCUMENTARY' },
+  18: { tr: 'DRAM', en: 'DRAMA' },
+  10751: { tr: 'AİLE', en: 'FAMILY' },
+  14: { tr: 'FANTASTİK', en: 'FANTASY' },
+  36: { tr: 'TARİH', en: 'HISTORY' },
+  27: { tr: 'KORKU', en: 'HORROR' },
+  10402: { tr: 'MÜZİK', en: 'MUSIC' },
+  9648: { tr: 'GİZEM', en: 'MYSTERY' },
+  10749: { tr: 'ROMANTİK', en: 'ROMANCE' },
+  878: { tr: 'BİLİM-KURGU', en: 'SCI-FI' },
+  10770: { tr: 'TV FİLMİ', en: 'TV MOVIE' },
+  53: { tr: 'GERİLİM', en: 'THRILLER' },
+  10752: { tr: 'SAVAŞ', en: 'WAR' },
+  37: { tr: 'VAHŞİ BATI', en: 'WESTERN' },
+  10759: { tr: 'AKSİYON & MACERA', en: 'ACTION & ADVENTURE' },
+  10762: { tr: 'ÇOCUK', en: 'KIDS' },
+  10763: { tr: 'HABER', en: 'NEWS' },
+  10764: { tr: 'REALITY', en: 'REALITY' },
+  10765: { tr: 'BİLİM-KURGU & FANTASTİK', en: 'SCI-FI & FANTASY' },
+  10766: { tr: 'PEMBE DİZİ', en: 'SOAP' },
+  10767: { tr: 'TALK SHOW', en: 'TALK SHOW' },
+  10768: { tr: 'SAVAŞ & POLİTİKA', en: 'WAR & POLITICS' }
 };
 
 const getFlatItem = (item: any): PlaylistItem => {
@@ -214,7 +214,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
           console.warn("Failed to fetch TMDB details, falling back to basic result:", err);
           if (result.genre_ids) {
             genres = result.genre_ids
-              .map((id: number) => TMDB_GENRES[id])
+              .map((id: number) => TMDB_GENRES[id]?.[language === 'tr' ? 'tr' : 'en'])
               .filter(Boolean);
           }
         }
@@ -271,7 +271,7 @@ function VodPosterCard({ channel, globalFavorites, toggleFavorite, handleOpenDet
     return () => {
       cancelled = true;
     };
-  }, [channel.type, cleanTitle, isVisible]);
+  }, [channel.type, cleanTitle, isVisible, language]);
 
   if (!isVisible) {
     return <div ref={cardRef} data-card-state="idle" className="flex-shrink-0 w-[176px] md:w-[208px] aspect-[2/3] snap-start" />;
@@ -606,21 +606,21 @@ export const HomeView = memo(function HomeView({
     if (contextMenu.fromHistory) {
       actions.push({
         id: 'continue',
-        label: 'İzlemeye devam et',
+        label: language === 'tr' ? 'İzlemeye devam et' : 'Continue watching',
         icon: <Play size={14} fill="currentColor" />,
         onSelect: () => handlePlayStream(flatItem)
       });
     } else if (isSeries) {
       actions.push({
         id: 'open-series',
-        label: 'Dizi detayına git',
+        label: language === 'tr' ? 'Dizi detayına git' : 'Open series details',
         icon: <Info size={15} />,
         onSelect: () => handleOpenDetails(flatItem)
       });
     } else {
       actions.push({
         id: 'play',
-        label: item.type === 'live' ? 'Kanalı oynat' : 'Şimdi oynat',
+        label: item.type === 'live' ? (language === 'tr' ? 'Kanalı oynat' : 'Play channel') : (language === 'tr' ? 'Şimdi oynat' : 'Play now'),
         icon: <Play size={14} fill="currentColor" />,
         onSelect: () => handlePlayStream(flatItem)
       });
@@ -629,7 +629,7 @@ export const HomeView = memo(function HomeView({
     if (contextMenu.fromHistory || (!isSeries && item.type !== 'live')) {
       actions.push({
         id: 'details',
-        label: isSeries ? 'Dizi detayına git' : 'Detayları aç',
+        label: isSeries ? (language === 'tr' ? 'Dizi detayına git' : 'Open series details') : (language === 'tr' ? 'Detayları aç' : 'Open details'),
         icon: <Info size={15} />,
         onSelect: () => handleOpenDetails(flatItem)
       });
@@ -637,7 +637,7 @@ export const HomeView = memo(function HomeView({
 
     actions.push({
       id: 'favorite',
-      label: isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle',
+      label: isFavorite ? (language === 'tr' ? 'Favorilerden çıkar' : 'Remove from favorites') : (language === 'tr' ? 'Favorilere ekle' : 'Add to favorites'),
       icon: <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} />,
       onSelect: () => toggleFavorite(favoriteId)
     });
@@ -645,7 +645,7 @@ export const HomeView = memo(function HomeView({
     if (contextMenu.fromHistory) {
       actions.push({
         id: 'remove-history',
-        label: 'İzleme geçmişinden kaldır',
+        label: language === 'tr' ? 'İzleme geçmişinden kaldır' : 'Remove from history',
         icon: <Trash2 size={14} />,
         danger: true,
         separatorBefore: true,
@@ -681,12 +681,14 @@ export const HomeView = memo(function HomeView({
                 <UploadCloud size={24} />
               </div>
               <div className="flex flex-col gap-3">
-                <span className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-neutral-500">IPTV kurulumu gerekli</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-neutral-500">{language === 'tr' ? 'IPTV kurulumu gerekli' : 'IPTV setup required'}</span>
                 <h1 className="max-w-3xl text-3xl md:text-4xl lg:text-5xl font-black tracking-tight text-white leading-[1.04]">
-                  IPTV listenizi ekleyerek başlayın
+                  {language === 'tr' ? 'IPTV listenizi ekleyerek başlayın' : 'Get started by adding your IPTV playlist'}
                 </h1>
                 <p className="max-w-2xl text-sm text-neutral-400 leading-relaxed">
-                  M3U veya Xtream Codes listenizi bağlayın; kanallar, filmler, diziler ve favoriler kendi listenize göre oluşsun.
+                  {language === 'tr'
+                    ? 'M3U veya Xtream Codes listenizi bağlayın; kanallar, filmler, diziler ve favoriler kendi listenize göre oluşsun.'
+                    : 'Connect your M3U or Xtream Codes list, and channels, movies, series, and favorites will be built around your own list.'}
                 </p>
               </div>
             </div>
@@ -695,13 +697,15 @@ export const HomeView = memo(function HomeView({
                 onClick={onOpenPlaylistSetup}
                 className="h-12 px-6 rounded-full bg-white text-black hover:bg-neutral-200 transition-all font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95"
               >
-                <UploadCloud size={15} /> IPTV Listesi Ekle
+                <UploadCloud size={15} /> {language === 'tr' ? 'IPTV Listesi Ekle' : 'Add IPTV List'}
               </button>
               <button type="button"
-                onClick={() => showToast('M3U URL, M3U dosyası veya Xtream Codes bilgileriyle liste ekleyebilirsiniz.')}
+                onClick={() => showToast(language === 'tr'
+                  ? 'M3U URL, M3U dosyası veya Xtream Codes bilgileriyle liste ekleyebilirsiniz.'
+                  : 'You can add a list with an M3U URL, an M3U file, or Xtream Codes details.')}
                 className="h-12 px-6 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 transition-all font-bold text-xs text-white active:scale-95"
               >
-                Hangi bilgiler gerekli?
+                {language === 'tr' ? 'Hangi bilgiler gerekli?' : 'What details are needed?'}
               </button>
             </div>
           </div>
@@ -784,9 +788,12 @@ export const HomeView = memo(function HomeView({
     : (heroIsSeries ? 'Start Watching' : 'Watch Now');
   const heroInfoLabel = language === 'tr' ? 'Daha Fazla Bilgi' : 'More Info';
   // Display stored billboard blurb; only re-cut if a legacy long string slipped through.
+  const fallbackHeroDesc = language === 'tr'
+    ? 'Favori canlı TV kanallarınızı, dizilerinizi ve filmlerinizi izlemek için bir M3U veya Xtream oynatma listesi ekleyin.'
+    : 'Add an M3U or Xtream playlist to watch your favorite live TV channels, series, and movies.';
   const heroDescRaw = isPlaylistHero
     ? (featuredTmdbData?.desc || '')
-    : (fallbackHeroItem?.desc || '');
+    : (fallbackHeroItem?.desc || fallbackHeroDesc);
   const heroDesc = heroDescRaw.length > 220
     ? pickHeroSynopsis({ overview: heroDescRaw, maxLen: 190 })
     : heroDescRaw;
@@ -1138,11 +1145,11 @@ export const HomeView = memo(function HomeView({
         <div className="flex flex-col gap-2.5 select-none animate-fade-in" style={{ order: getSectionPosition('discovery') }}>
           <HomeRailHeader
             title={language === 'tr' ? 'Sana Özel' : 'For You'}
-            mutedLabel={uniqueRecentlyWatched.length > 0
-              ? (language === 'tr' ? 'İzleme geçmişine göre' : 'Based on watch history')
+            mutedLabel={uniqueRecentlyWatched.length > 0 || globalFavorites.length > 0
+              ? (language === 'tr' ? 'Her gün yenilenen kişiselleştirilmiş öneriler' : 'Daily refreshed personalized recommendations')
               : contentPreferences.length
-                ? (language === 'tr' ? 'Tercihlerine göre' : 'Based on preferences')
-                : (language === 'tr' ? 'Keşfetmen için' : 'Picked for discovery')}
+                ? (language === 'tr' ? 'Her gün yenilenen tercihlerine özel öneriler' : 'Daily refreshed preference picks')
+                : (language === 'tr' ? 'Günün öne çıkan keşifleri' : 'Today\'s top discovery picks')}
           />
 
           <div className="relative group/row">

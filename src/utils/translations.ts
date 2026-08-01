@@ -1,6 +1,6 @@
 export type Language = 'tr' | 'en';
 
-export const translations = {
+const translations = {
   tr: {
     common: {
       back: "Geri",
@@ -18,14 +18,15 @@ export const translations = {
       yes: "Evet",
       no: "Hayır",
       close: "Kapat",
-      matchScore: "%{{score}} Eşleşme"
     },
     splash: {
-      loadingSettings: "Kullanıcı ayarları yükleniyor...",
-      loadingProfiles: "Profiller yükleniyor...",
-      checkingUpdates: "Güncelleştirmeler denetleniyor...",
-      updateDownloaded: "Güncelleme indirildi, kuruluyor...",
-      loadingContents: "İçerikler Yükleniyor..."
+      loadingSettings: "Kullanıcı ayarları yükleniyor…",
+      loadingProfiles: "Profiller yükleniyor…",
+      checkingUpdates: "Güncelleştirmeler denetleniyor…",
+      updateDownloaded: "Güncelleme indirildi, kuruluyor…",
+      loadingContents: "İçerikler yükleniyor…",
+      preparingExperience: "Deneyimin hazırlanıyor…",
+      openingApp: "Her şey hazır, açılıyor…"
     },
     navbar: {
       home: "Ana Sayfa",
@@ -54,7 +55,7 @@ export const translations = {
       newProfile: "Yeni İzleme Alanı",
       profileSettings: "Profil Ayarları",
       profileName: "Profil Adı",
-      profileNamePlaceholder: "Örn. Salon, Arda...",
+      profileNamePlaceholder: "Profil Adı...",
       selectAvatar: "Avatar Seçin",
       avatarSearchPlaceholder: "Görsel ara veya URL yapıştır...",
       deleteProfileTitle: "Profili Sil",
@@ -148,7 +149,7 @@ export const translations = {
         desc: "Mevcut M3U ve Xtream çalma listelerinizi ekleyin, düzenleyin veya yenileyin.",
         addPlaylist: "Yeni Playlist Ekle",
         playlistName: "Çalma Listesi Adı",
-        playlistNamePlaceholder: "Örn. IPTV Listem, Ücretsiz Liste...",
+        playlistNamePlaceholder: "Çalma Listesi Adı...",
         urlOrPath: "M3U Bağlantısı veya Dosya Yolu",
         updateInterval: "Otomatik Güncelleme",
         lastUpdated: "Son Güncelleme: {{time}}",
@@ -297,14 +298,15 @@ export const translations = {
       yes: "Yes",
       no: "No",
       close: "Close",
-      matchScore: "{{score}}% Match"
     },
     splash: {
-      loadingSettings: "Loading user settings...",
-      loadingProfiles: "Loading profiles...",
-      checkingUpdates: "Checking for updates...",
-      updateDownloaded: "Update downloaded, installing...",
-      loadingContents: "Loading Contents..."
+      loadingSettings: "Loading user settings…",
+      loadingProfiles: "Loading profiles…",
+      checkingUpdates: "Checking for updates…",
+      updateDownloaded: "Update downloaded, installing…",
+      loadingContents: "Loading contents…",
+      preparingExperience: "Preparing your experience…",
+      openingApp: "Everything is ready, opening…"
     },
     navbar: {
       home: "Home",
@@ -333,7 +335,7 @@ export const translations = {
       newProfile: "New Profile",
       profileSettings: "Profile Settings",
       profileName: "Profile Name",
-      profileNamePlaceholder: "e.g., Living Room, Arda...",
+      profileNamePlaceholder: "Profile Name...",
       selectAvatar: "Select Avatar",
       avatarSearchPlaceholder: "Search image or paste URL...",
       deleteProfileTitle: "Delete Profile",
@@ -427,7 +429,7 @@ export const translations = {
         desc: "Add, edit, or refresh your current M3U and Xtream playlists.",
         addPlaylist: "Add New Playlist",
         playlistName: "Playlist Name",
-        playlistNamePlaceholder: "e.g., My IPTV, Free List...",
+        playlistNamePlaceholder: "Playlist Name...",
         urlOrPath: "M3U Link or File Path",
         updateInterval: "Auto Update",
         lastUpdated: "Last Updated: {{time}}",

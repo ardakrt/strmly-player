@@ -26,6 +26,10 @@ declare global {
       deleteProfileData?: (
         profileId: string,
       ) => Promise<{ success: boolean; deletedKeys?: number; error?: string }>;
+      recoverPlaylistCredentials?: (
+        profileId: string,
+        playlistId: string,
+      ) => Promise<{ success: boolean; playlist?: SavedPlaylist; error?: string }>;
       loadConfig: (key: string) => Promise<any>;
       savePlaylistItems: (
         id: string,
@@ -72,6 +76,12 @@ declare global {
         error?: string;
       }>;
       checkForUpdates?: () => Promise<{ success: boolean; error?: string }>;
+      getUpdateState?: () => Promise<{
+        status: 'idle' | 'checking' | 'available' | 'downloading' | 'not-available' | 'downloaded' | 'error';
+        message: string;
+        version?: string;
+        error?: string;
+      }>;
       downloadUpdate?: () => Promise<{ success: boolean; error?: string }>;
       installUpdate?: () => Promise<{ success: boolean; error?: string }>;
       relaunchApp?: () => Promise<void>;
@@ -197,6 +207,8 @@ export interface SavedPlaylist {
   xtreamPass?: string;
   autoUpdateIntervalHours?: 6 | 12 | 24 | 168;
   lastAutoUpdatedAt?: number;
+  /** Stable fingerprint of the locally cached catalog; source URLs remain local. */
+  contentRevision?: string;
 }
 
 export interface Profile {
@@ -215,12 +227,6 @@ export interface AvatarSearchResult {
   name: string;
   posterUrl: string;
   mediaType: "movie" | "tv";
-}
-
-export interface EPGProgram {
-  title: string;
-  nextTitle: string;
-  progress: number; // 0 to 100
 }
 
 export type TmdbEndpoint = "movie" | "tv";
@@ -247,6 +253,17 @@ export interface TmdbSearchResponse {
   error?: string;
 }
 
+export interface TmdbMetadata {
+  posterUrl: string | null;
+  backdropUrl?: string | null;
+  title?: string | null;
+  rating: string;
+  year: string;
+  overview: string;
+  genres: string[];
+  duration: string;
+}
+
 export interface TmdbTitleOverride {
   endpoint: TmdbEndpoint;
   id: number;
@@ -263,8 +280,12 @@ export interface ImageWithFallbackProps {
   aspect?: "portrait" | "landscape";
   cover?: boolean;
   lazy?: boolean;
+  /** Prefer valid playlist artwork, then fall back to TMDB artwork. */
+  preferPlaylistArtwork?: boolean;
   /** Use playlist artwork as a last resort when TMDB has no usable image. */
   fallbackToPlaylist?: boolean;
+  /** Overlay the official TMDB series wordmark when one exists. */
+  showOfficialTitleLogo?: boolean;
 }
 
 export interface EpisodeThumbProps {

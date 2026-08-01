@@ -6,13 +6,48 @@ import {
   tmdbCache,
   globalSyncPosterMap,
   getResolvedTmdbResult,
+  getTmdbPosterCacheKey,
   resolveTmdbImageSrc,
 } from '../utils/tmdb';
-import { TMDB_CACHE_VERSION } from '../constants';
 import type { ImageWithFallbackProps } from '../types';
 import { TitleLogoPlate } from './TitleLogoPlate';
+import { useSettings } from '../context/SettingsContext';
 
 const TMDB_TIMEOUT_MS = 3200;
+
+const lazyVisibilityCallbacks = new Map<Element, () => void>();
+let lazyVisibilityObserver: IntersectionObserver | null = null;
+
+const observeLazyVisibility = (element: Element, onVisible: () => void) => {
+  if (typeof IntersectionObserver === 'undefined') {
+    onVisible();
+    return () => {};
+  }
+
+  if (!lazyVisibilityObserver) {
+    lazyVisibilityObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const callback = lazyVisibilityCallbacks.get(entry.target);
+        if (!callback) continue;
+        lazyVisibilityCallbacks.delete(entry.target);
+        lazyVisibilityObserver?.unobserve(entry.target);
+        callback();
+      }
+    }, { rootMargin: '320px' });
+  }
+
+  lazyVisibilityCallbacks.set(element, onVisible);
+  lazyVisibilityObserver.observe(element);
+  return () => {
+    lazyVisibilityCallbacks.delete(element);
+    lazyVisibilityObserver?.unobserve(element);
+    if (lazyVisibilityCallbacks.size === 0) {
+      lazyVisibilityObserver?.disconnect();
+      lazyVisibilityObserver = null;
+    }
+  };
+};
 
 /**
  * Poster for movie/series:
@@ -33,6 +68,7 @@ export const ImageWithFallback = memo(
     lazy = true,
     fallbackToPlaylist = false,
   }: ImageWithFallbackProps) => {
+    const { language } = useSettings();
     const rootRef = useRef<HTMLDivElement>(null);
     const [isVisible, setIsVisible] = useState(!lazy);
 
@@ -46,26 +82,7 @@ export const ImageWithFallback = memo(
         setIsVisible(true);
         return;
       }
-      if (typeof IntersectionObserver === 'undefined') {
-        setIsVisible(true);
-        return;
-      }
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((e) => e.isIntersecting)) {
-            setIsVisible(true);
-            observer.disconnect();
-          }
-        },
-        { rootMargin: '400px' },
-      );
-      observer.observe(el);
-      const failsafe = window.setTimeout(() => setIsVisible(true), 500);
-      return () => {
-        observer.disconnect();
-        window.clearTimeout(failsafe);
-      };
+      return observeLazyVisibility(el, () => setIsVisible(true));
     }, [lazy]);
 
     const cleanTitle = useMemo(() => {
@@ -80,14 +97,14 @@ export const ImageWithFallback = memo(
 
     const playlistName = (cleanTitle || name || '').trim() || 'İsimsiz';
     const resolvedAspect = aspect || 'portrait';
-    const usesTmdbCover = itemType === 'movie' || itemType === 'series';
+    const isPerformanceBenchmark =
+      typeof window !== 'undefined' && window.strmlyPerfBench === true;
+    const usesTmdbCover =
+      !isPerformanceBenchmark && (itemType === 'movie' || itemType === 'series');
 
     const cacheKey = useMemo(() => {
-      if (!usesTmdbCover) return '';
-      const cacheVersion = resolvedAspect === 'landscape'
-        ? `${TMDB_CACHE_VERSION}-backdrop-v2`
-        : TMDB_CACHE_VERSION;
-      return `${cacheVersion}-${itemType}-${playlistName.toLowerCase()}-${resolvedAspect}`;
+      if (!usesTmdbCover || (itemType !== 'movie' && itemType !== 'series')) return '';
+      return getTmdbPosterCacheKey(itemType, playlistName, resolvedAspect);
     }, [playlistName, itemType, resolvedAspect, usesTmdbCover]);
 
     const cachedPoster = useMemo(() => {
@@ -255,6 +272,7 @@ export const ImageWithFallback = memo(
       : usablePlaylistSrc || null;
 
     const logoTitle = (tmdbOfficialTitle || playlistName).trim() || 'İsimsiz';
+    const logoTitleLabel = logoTitle === 'İsimsiz' ? (language === 'tr' ? 'İsimsiz' : 'Untitled') : logoTitle;
 
     // ── Has poster image ──────────────────────────────────────
     if (displaySrc) {
@@ -263,9 +281,10 @@ export const ImageWithFallback = memo(
           ref={rootRef}
           className="absolute inset-0 z-[1] overflow-hidden bg-[#16161a]"
         >
-          {!imgLoaded && (
+          {/* Transparent live-channel PNGs must not reveal a duplicate title plate. */}
+          {usesTmdbCover && !imgLoaded && (
             <TitleLogoPlate
-              title={logoTitle}
+              title={logoTitleLabel}
               kind={itemType}
               size={size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : 'md'}
               aspect={resolvedAspect}
@@ -274,9 +293,11 @@ export const ImageWithFallback = memo(
           <img
             src={displaySrc}
             alt=""
+            loading="lazy"
+            decoding="async"
             onLoad={() => setImgLoaded(true)}
-            className={`absolute inset-0 z-10 h-full w-full transition-opacity duration-300 ${
-              imgLoaded ? 'opacity-100' : 'opacity-0'
+            className={`absolute inset-0 z-10 h-full w-full transition-all duration-500 ease-out transform-gpu ${
+              imgLoaded ? 'opacity-100 blur-0 scale-100' : 'opacity-60 blur-md scale-105'
             } ${
               usesPlaylistFallback
                 ? 'object-cover'
@@ -299,7 +320,7 @@ export const ImageWithFallback = memo(
     return (
       <div ref={rootRef} className="absolute inset-0 z-[1]">
         <TitleLogoPlate
-          title={logoTitle}
+          title={logoTitleLabel}
           kind={itemType}
           size={size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : 'md'}
           aspect={resolvedAspect}

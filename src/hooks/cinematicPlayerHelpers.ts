@@ -131,7 +131,7 @@ export function translateReason(reason: string, language: 'tr' | 'en'): string {
   return dictionary[reason]?.[language] || dictionary[reason]?.tr || reason;
 }
 
-export function getPlaybackLabel(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
+function getPlaybackLabel(item: PlaylistItem | null, language: 'tr' | 'en' = 'tr'): string {
   if (language === 'en') {
     if (item?.type === 'live') return 'Live stream';
     if (item?.type === 'movie') return 'Movie';
@@ -191,7 +191,7 @@ export function getSavedQualityLevel(): number {
   return Number.isFinite(saved) ? saved : -1;
 }
 
-export function getSavedAudioPreference(): { name?: string; lang?: string } | null {
+function getSavedAudioPreference(): { name?: string; lang?: string } | null {
   try {
     const saved = localStorage.getItem(PLAYER_AUDIO_PREF_KEY);
     return saved ? JSON.parse(saved) : null;

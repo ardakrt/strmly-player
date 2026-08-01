@@ -96,45 +96,48 @@ export function useSpotlightSearch({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle Spotlight Modal on Ctrl+K / Cmd+K
+      // Open the in-page search on Ctrl+K / Cmd+K.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setShowSpotlight(prev => !prev);
+        setShowSpotlight(true);
+        setSpotlightScope('all');
+        window.setTimeout(() => {
+          spotlightInputRef.current?.focus();
+          spotlightInputRef.current?.select();
+        }, 30);
+        return;
       }
 
-      // Close Spotlight Modal on Escape
+      // Close the in-page search on Escape.
       if (e.key === 'Escape' && showSpotlight) {
         e.preventDefault();
         setShowSpotlight(false);
+        return;
       }
 
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
-        if (showSpotlight) {
-          spotlightInputRef.current?.focus();
-        } else {
-          searchInputRef.current?.focus();
-        }
+        setShowSpotlight(true);
+        window.setTimeout(() => spotlightInputRef.current?.focus(), 30);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showSpotlight, searchInputRef]);
 
-  // Autofocus spotlight input when search is opened
+  // The navbar owns the search field; keep its first typed character intact.
   useEffect(() => {
     if (showSpotlight) {
-      setSpotlightScope('all');
       setSpotlightActiveStep('searching');
-      setSpotlightSearchInput('');
-      (document.activeElement as HTMLElement)?.blur();
-      
       const timer = setTimeout(() => {
         spotlightInputRef.current?.focus();
-      }, 50);
+      }, 30);
       return () => clearTimeout(timer);
     } else {
       setSpotlightSearchInput('');
+      setSpotlightSearchResults([]);
+      setIsSearchingWorker(false);
+      setSpotlightScope('all');
     }
   }, [showSpotlight]);
 

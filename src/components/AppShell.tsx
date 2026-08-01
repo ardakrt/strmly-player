@@ -20,13 +20,19 @@ export function AppShell({ app }: AppShellProps) {
     currentProfile,
   } = profilesHook;
 
-  const isHomeActive = navigation.selectedGroup === APP_VIEWS.home && !navigation.deferredSearchQuery.trim();
+  const isSearchActive = spotlight.showSpotlight;
+  const isHomeActive =
+    !isSearchActive &&
+    navigation.selectedGroup === APP_VIEWS.home &&
+    !navigation.deferredSearchQuery.trim();
   // Series / Movies / Live: fill the shell under the floating navbar (no dead gap, no outer scroll).
   const isCatalogView =
-    navigation.selectedGroup === APP_VIEWS.series ||
-    navigation.selectedGroup === APP_VIEWS.movies ||
-    navigation.selectedGroup === APP_VIEWS.downloads ||
-    isLiveTvView(navigation.selectedGroup);
+    !isSearchActive && (
+      navigation.selectedGroup === APP_VIEWS.series ||
+      navigation.selectedGroup === APP_VIEWS.movies ||
+      navigation.selectedGroup === APP_VIEWS.downloads ||
+      isLiveTvView(navigation.selectedGroup)
+    );
 
   return (
     <div
@@ -61,6 +67,10 @@ export function AppShell({ app }: AppShellProps) {
         setSearchQuery={navigation.setSearchQuery}
         setShowSpotlight={spotlight.setShowSpotlight}
         setSpotlightScope={spotlight.setSpotlightScope}
+        spotlightSearchInput={spotlight.spotlightSearchInput}
+        setSpotlightSearchInput={spotlight.setSpotlightSearchInput}
+        spotlightInputRef={spotlight.spotlightInputRef}
+        showSpotlight={spotlight.showSpotlight}
         profileDropdownOpen={profileDropdownOpen}
         setProfileDropdownOpen={setProfileDropdownOpen}
         currentProfile={currentProfile}
@@ -77,14 +87,16 @@ export function AppShell({ app }: AppShellProps) {
       <div
         ref={playback.mainContentRef}
         className={
-          isHomeActive
+          isSearchActive
+            ? `flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 md:px-10 pb-10 pt-16 relative z-30 select-none hide-scrollbar`
+            : isHomeActive
             ? 'flex-1 min-h-0 overflow-y-auto px-6 md:px-10 pb-10 pt-0 relative z-30 select-none hide-scrollbar'
             : isCatalogView
               ? // Follow the floating navbar height so a stale scrolled state cannot leave a dead strip above catalogs.
-                `flex-1 min-h-0 overflow-hidden px-5 md:px-8 ${ui.scrolled ? 'pt-14' : 'pt-[4.125rem]'} pb-3 relative z-30 select-none flex flex-col`
+                `flex-1 min-h-0 overflow-hidden px-5 md:px-8 ${ui.scrolled ? 'pt-14' : 'pt-[4.125rem]'} pb-3 relative z-30 select-none flex flex-col transition-[padding] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]`
               : 'flex-1 min-h-0 overflow-y-auto px-6 md:px-10 pb-10 pt-24 relative z-30 select-none hide-scrollbar'
         }
-        onScroll={isCatalogView ? undefined : catalog.handleMainScroll}
+        onScroll={isCatalogView || isSearchActive ? undefined : catalog.handleMainScroll}
       >
         <MainViewRouter app={app} />
       </div>

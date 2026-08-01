@@ -1,5 +1,17 @@
 import type { TmdbEndpoint, TmdbSearchResult, TmdbSearchResponse, TmdbTitleOverride } from '../types';
+import { TMDB_CACHE_VERSION } from '../constants';
 import { cleanMediaTitle } from './seriesGroupers';
+
+export const getTmdbPosterCacheKey = (
+  itemType: 'movie' | 'series',
+  title: string,
+  aspect: 'portrait' | 'landscape',
+) => {
+  const cacheVersion = aspect === 'landscape'
+    ? `${TMDB_CACHE_VERSION}-backdrop-v2`
+    : TMDB_CACHE_VERSION;
+  return `${cacheVersion}-${itemType}-${title.trim().toLowerCase()}-${aspect}`;
+};
 
 // Global cache for TMDB poster lookups
 export const globalSyncPosterMap = new Map<string, string>();
@@ -167,7 +179,7 @@ export const getTmdbApiKey = () => {
   if (isValidTmdbKey(bundledKey)) return bundledKey;
   if (isValidTmdbKey(storedKey)) return storedKey;
   
-  return '';
+  return 'c7e12a2b1d8e1851399f4b92dc124332';
 };
 
 export const getTmdbLanguage = () => {
@@ -429,11 +441,57 @@ export const getResolvedTmdbResult = async (endpoint: TmdbEndpoint, apiKey: stri
   return selectBestTmdbResult(data.results, cleanTitle);
 };
 
+export const resolveTmdbLogo = async (
+  endpoint: TmdbEndpoint,
+  apiKey: string,
+  id: number,
+  signal?: AbortSignal
+): Promise<string | null> => {
+  const cacheKey = `tmdb-logo-${endpoint}-${id}`;
+  const syncCached = globalSyncPosterMap.get(cacheKey);
+  if (syncCached) return syncCached;
+
+  try {
+    const cached = await tmdbCache.get(cacheKey);
+    if (cached && !String(cached).startsWith('app-file://')) {
+      globalSyncPosterMap.set(cacheKey, cached);
+      return cached;
+    }
+  } catch {
+    // Continue with the network lookup when the logo cache is unavailable.
+  }
+
+  try {
+    const path = `/3/${endpoint}/${id}/images?api_key=${apiKey}&include_image_language=tr,en,null`;
+    const data = await fetchTmdbPath<any>(path, signal);
+
+    if (data?.logos && data.logos.length > 0) {
+      const bestLogo = data.logos.find((l: any) => l.iso_639_1 === 'tr') ||
+                       data.logos.find((l: any) => l.iso_639_1 === 'en') ||
+                       data.logos[0];
+
+      if (bestLogo?.file_path) {
+        const logoSrc = await resolveTmdbImageSrc(bestLogo.file_path, 'w500', signal);
+        if (logoSrc) {
+          globalSyncPosterMap.set(cacheKey, logoSrc);
+          if (!logoSrc.startsWith('app-file://')) {
+            tmdbCache.set(cacheKey, logoSrc).catch(() => {});
+          }
+          return logoSrc;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("TMDB logo fetch error:", err);
+  }
+  return null;
+};
+
 export const getTmdbImageUrl = (path?: string | null, size = 'w500') => (
   path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined
 );
 
-export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', signal?: AbortSignal) => {
+export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', signal?: AbortSignal): Promise<string | undefined> => {
   if (!path) return undefined;
 
   const cacheKey = `img-${size}-${path}`;
@@ -442,32 +500,20 @@ export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', s
     return syncCached;
   }
 
-  try {
-    const cached = await tmdbCache.get(cacheKey);
-    if (cached && !String(cached).startsWith('app-file://')) {
-      // Cache in memory for subsequent synchronous renders of this image
-      globalSyncPosterMap.set(cacheKey, cached);
-      return cached;
-    }
-  } catch (e) {
-    console.error("Cache read error:", e);
-  }
+  const remoteUrl = getTmdbImageUrl(path, size);
 
   if (signal?.aborted) {
     throw new DOMException('The user aborted a request.', 'AbortError');
   }
 
-  const remoteUrl = getTmdbImageUrl(path, size);
-
-  // Download to local disk (await it so we return local path directly)
+  // Prefer Electron's main-process downloader in both packaged and Vite dev modes.
+  // The renderer/worker can be unable to reach TMDB's CDN even while the main
+  // process succeeds through its DoH-backed transport.
   if (typeof window !== 'undefined' && window.electronAPI?.fetchTmdbImage) {
     try {
       const image = await window.electronAPI.fetchTmdbImage(path, size);
       const resultUrl = image.localUrl || image.dataUrl;
-      if (resultUrl) {
-        // Only cache in session memory — app-file:// paths are install-specific
-        // and become stale when the app is reinstalled or cache is cleared.
-        // The IPC handler has its own disk-level cache (fs.existsSync) so this is fast.
+      if (resultUrl && !resultUrl.includes('error')) {
         globalSyncPosterMap.set(cacheKey, resultUrl);
         return resultUrl;
       }
@@ -476,34 +522,13 @@ export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', s
     }
   }
 
+  // Browser-only fallback when the Electron bridge is unavailable.
   if (remoteUrl) {
     globalSyncPosterMap.set(cacheKey, remoteUrl);
-    
-    // Browser fallback: fetch blob in background and cache as base64
-    fetch(remoteUrl)
-      .then((response) => {
-        if (response.ok) return response.blob();
-        throw new Error("Fetch failed");
-      })
-      .then((blob) => {
-        return new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      })
-      .then((base64) => {
-        tmdbCache.set(cacheKey, base64).catch((err) => {
-          console.error("Cache write error in background browser fetch:", err);
-        });
-      })
-      .catch((err) => {
-        console.warn("Background browser image download failed:", err);
-      });
+    return remoteUrl;
   }
 
-  return remoteUrl;
+  return undefined;
 };
 
 export const getCachedTmdbResult = async (endpoint: 'tv' | 'movie', title: string): Promise<any> => {

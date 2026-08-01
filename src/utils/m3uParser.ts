@@ -1,4 +1,5 @@
 import { preprocessPlaylistItems } from './searchHelpers';
+import { fixTurkishEncoding } from './helpers';
 
 export interface PlaylistItem {
   id: string;
@@ -24,21 +25,33 @@ export interface PlaylistItem {
 export interface ParsedPlaylist {
   items: PlaylistItem[];
   groups: string[];
+  revision?: string;
+}
+
+export function getPlaylistContentRevision(items: PlaylistItem[]): string {
+  if (!items || items.length === 0) return '0';
+  const sample = items.length > 500
+    ? (items[0]?.id || '') + (items[250]?.id || '') + (items[items.length - 1]?.id || '') + items.length
+    : items.map(i => i.id).join('-');
+  let hash = 0;
+  for (let i = 0; i < sample.length; i++) {
+    hash = ((hash << 5) - hash) + sample.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash.toString(36);
 }
 
 function isSeriesName(name: string): boolean {
   const nameLower = name.toLowerCase();
-  // Season / Episode patterns: S01E02, 1x02, Sezon 1, Season 1, Bölüm 2, Episode 2, S01, E02, etc.
-  // We allow space, dot, underscore or hyphen as separators before the pattern
   const seriesPatterns = [
-    /[\s._-]s\s*\d+\s*e\s*\d+/i, // S01E02, .S01E02, _S01E02
-    /[\s._-]\d+x\d+/i, // 1x02
-    /[\s._-]se(?:zon|ason)[\s._-]*\d+/i, // Sezon 1 / Season 1
-    /[\s._-]\d+[\s._-]*se(?:zon|ason)/i, // 1. Sezon / 1.Season
-    /[\s._-]bölüm[\s._-]*\d+/i, // Bölüm 2
-    /[\s._-]ep(?:isode)?[\s._-]*\d+/i, // Episode 2
-    /[\s._-]\d+[\s._-]*(?:bölüm|ep(?:isode)?)/i, // 2. Bölüm
-    /[\s._-]s(?:ezon|eason)?\s*\d+/i // S01
+    /[\s._-]s\s*\d+\s*e\s*\d+/i,
+    /[\s._-]\d+x\d+/i,
+    /[\s._-]se(?:zon|ason)[\s._-]*\d+/i,
+    /[\s._-]\d+[\s._-]*se(?:zon|ason)/i,
+    /[\s._-]bölüm[\s._-]*\d+/i,
+    /[\s._-]ep(?:isode)?[\s._-]*\d+/i,
+    /[\s._-]\d+[\s._-]*(?:bölüm|ep(?:isode)?)/i,
+    /[\s._-]s(?:ezon|eason)?\s*\d+/i
   ];
   return seriesPatterns.some(regex => regex.test(nameLower));
 }
@@ -73,30 +86,28 @@ export function parseM3U(content: string): ParsedPlaylist {
       currentLogo = '';
       currentGroup = 'Diğer';
       currentName = '';
-      // Extract tvg-logo or logo or tvg-icon or icon using regex
+
       const logoMatch = line.match(/\b(?:tvg-logo|logo|tvg-icon|icon)\s*=\s*["']([^"']+)["']/i);
       if (logoMatch) {
         currentLogo = logoMatch[1];
       }
 
-      // Extract group-title using regex
       const groupMatch = line.match(/\bgroup-title\s*=\s*["']([^"']+)["']/i);
       if (groupMatch) {
-        currentGroup = groupMatch[1];
+        currentGroup = fixTurkishEncoding(groupMatch[1]);
       }
       groupsSet.add(currentGroup);
 
-      // Fast extraction of channel/stream name
       const commaIdx = line.lastIndexOf(',');
       if (commaIdx !== -1) {
-        currentName = line.substring(commaIdx + 1).trim();
+        currentName = fixTurkishEncoding(line.substring(commaIdx + 1).trim());
       } else {
         const nameIdx = line.indexOf('tvg-name="');
         if (nameIdx !== -1) {
           const start = line.indexOf('"', nameIdx) + 1;
           const end = line.indexOf('"', start);
           if (start > 0 && end > start) {
-            currentName = line.substring(start, end);
+            currentName = fixTurkishEncoding(line.substring(start, end));
           }
         }
         if (!currentName) {
@@ -104,7 +115,6 @@ export function parseM3U(content: string): ParsedPlaylist {
         }
       }
 
-      // Deduce type based on group name
       const groupLower = currentGroup.toLowerCase();
       if (groupLower.includes('movie') || groupLower.includes('sinema') || groupLower.includes('film')) {
         currentType = 'movie';
@@ -117,7 +127,6 @@ export function parseM3U(content: string): ParsedPlaylist {
       let finalType = currentType;
       const urlLower = line.toLowerCase();
 
-      // Detect explicit VOD file extensions (which indicate this is a movie or series episode)
       const vodExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.mpeg', '.mpg', '.m4v', '.webm', '.wmv'];
       const hasVodExtension = vodExtensions.some(ext => 
         urlLower.endsWith(ext) || 
@@ -134,18 +143,16 @@ export function parseM3U(content: string): ParsedPlaylist {
       } else if (urlLower.includes('/series/')) {
         finalType = 'series';
       } else if (isVod) {
-        // If it's VOD, default to series if the group is series OR name indicates series, otherwise movie
         finalType = (currentType === 'series' || isSeriesName(currentName)) ? 'series' : 'movie';
       } else if (urlLower.includes('/live/') || urlLower.includes('/live.php') || 
                  urlLower.includes('/hls/') || urlLower.includes('.m3u8')) {
         finalType = 'live';
       } else if (urlLower.includes('/play/') || urlLower.includes('/stream/')) {
-        // Only classify generic play/stream endpoints as live if they do NOT have a VOD extension
         finalType = 'live';
       }
 
       items.push({
-        id: `item-${items.length}`, // Fast unique ID
+        id: `item-${items.length}`,
         name: currentName || 'Bilinmeyen Kanal',
         logo: currentLogo,
         group: currentGroup,
@@ -203,15 +210,10 @@ export function parseM3UAsync(content: string | ArrayBuffer): Promise<ParsedPlay
       worker.terminate();
     };
 
-    try {
-      if (content instanceof ArrayBuffer) {
-        worker.postMessage(content, [content]);
-      } else {
-        worker.postMessage(content);
-      }
-    } catch {
-      worker.terminate();
-      resolve(parseOnMainThread());
+    if (content instanceof ArrayBuffer) {
+      worker.postMessage(content, [content]);
+    } else {
+      worker.postMessage(content);
     }
   });
 }

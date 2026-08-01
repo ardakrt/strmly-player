@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useSettings } from '../context/SettingsContext';
 
 const getColumnsCount = (width: number, size: string, compactLargeCards = false) => {
@@ -37,14 +37,14 @@ const getColumnsCount = (width: number, size: string, compactLargeCards = false)
 interface VirtualizedGridProps<T> {
   items: T[];
   renderItem: (item: T, index: number) => React.ReactNode;
-  buffer?: number;
+  overscanRows?: number;
   compactLargeCards?: boolean;
 }
 
 export function VirtualizedGrid<T>({
   items,
   renderItem,
-  buffer = 300,
+  overscanRows = 1,
   compactLargeCards = false,
 }: VirtualizedGridProps<T>) {
   const { cardLayoutSize } = useSettings();
@@ -52,6 +52,16 @@ export function VirtualizedGrid<T>({
   const [scrollTop, setScrollTop] = useState(0);
   const [clientHeight, setClientHeight] = useState(600);
   const [containerWidth, setContainerWidth] = useState(1000);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0) {
+        setContainerWidth(rect.width);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -97,10 +107,15 @@ export function VirtualizedGrid<T>({
     setScrollTop(readScrollTop());
 
     let ticking = false;
+    let lastScrollTop = readScrollTop();
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          setScrollTop(readScrollTop());
+          const current = readScrollTop();
+          if (Math.abs(current - lastScrollTop) >= 10) {
+            setScrollTop(current);
+            lastScrollTop = current;
+          }
           ticking = false;
         });
         ticking = true;
@@ -126,8 +141,6 @@ export function VirtualizedGrid<T>({
       scrollTarget.removeEventListener('scroll', handleScroll);
     };
   }, []);
-
-
 
   const columns = useMemo(
     () => getColumnsCount(containerWidth, cardLayoutSize, compactLargeCards),
@@ -156,10 +169,12 @@ export function VirtualizedGrid<T>({
     if (rowHeight <= 0 || totalRows === 0) {
       return { startRow: 0, endRow: 0 };
     }
-    const start = Math.max(0, Math.floor((scrollTop - buffer) / rowHeight));
-    const end = Math.min(totalRows, Math.ceil((scrollTop + clientHeight + buffer) / rowHeight));
+    const firstVisibleRow = Math.floor(scrollTop / rowHeight);
+    const lastVisibleRow = Math.ceil((scrollTop + clientHeight) / rowHeight);
+    const start = Math.max(0, firstVisibleRow - overscanRows);
+    const end = Math.min(totalRows, lastVisibleRow + overscanRows);
     return { startRow: start, endRow: end };
-  }, [totalRows, scrollTop, clientHeight, rowHeight, buffer]);
+  }, [totalRows, scrollTop, clientHeight, rowHeight, overscanRows]);
 
   const paddingTop = startRow * rowHeight;
   const paddingBottom = Math.max(0, (totalRows - endRow) * rowHeight);
@@ -194,8 +209,12 @@ export function VirtualizedGrid<T>({
     const rowEnd = Math.min(items.length, rowStart + columns);
     const cells: React.ReactNode[] = [];
     for (let flatIndex = rowStart; flatIndex < rowEnd; flatIndex++) {
+      const currentItem = items[flatIndex] as Record<string, any> | undefined;
+      const itemKey = currentItem?.id || currentItem?.url || currentItem?.name || flatIndex;
       cells.push(
-        <React.Fragment key={flatIndex}>{renderItem(items[flatIndex], flatIndex)}</React.Fragment>,
+        <React.Fragment key={String(itemKey)}>
+          {renderItem(items[flatIndex], flatIndex)}
+        </React.Fragment>,
       );
     }
     rows.push(

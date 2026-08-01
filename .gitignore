@@ -21,6 +21,7 @@ profiles
 scratch
 .claude
 .agents/
+.hallmark/
 test_poster.jpg
 
 # Editor directories and files

@@ -16,7 +16,7 @@ export function getMediaCardLabels(
   /** Best string to search TMDB with */
   searchTitle: string;
 } {
-  const raw = String(item?.name || '').trim() || 'İsimsiz';
+  const raw = String(item?.name || '').trim() || (language === 'tr' ? 'İsimsiz' : 'Untitled');
   const type = item?.type;
 
   if (type === 'series') {

@@ -1,5 +1,6 @@
 import type { PlaylistItem } from './m3uParser';
 import { cleanMediaTitle } from './seriesGroupers';
+import { fixTurkishEncoding } from './helpers';
 
 export interface SearchableMediaItem {
   name: string;
@@ -194,6 +195,9 @@ export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[
 
   for (let i = 0; i < rawItems.length; i++) {
     const item = rawItems[i];
+    if (item.name) item.name = fixTurkishEncoding(item.name);
+    if (item.group) item.group = fixTurkishEncoding(item.group);
+
     if (!item.nameLower) {
       item.nameLower = item.name.toLocaleLowerCase('tr-TR');
     }

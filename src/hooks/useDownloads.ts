@@ -264,6 +264,8 @@ async function startNextDownload() {
     ),
   );
 
+  const currentLang = typeof localStorage !== 'undefined' && localStorage.getItem('cinema_language') === 'en' ? 'en' : 'tr';
+
   if (!window.electronAPI?.downloadStream) {
     setDownloads((downloads) =>
       downloads.map((download) =>
@@ -272,7 +274,9 @@ async function startNextDownload() {
               ...download,
               status: "failed",
               error:
-                "Electron API bulunamadı. Uygulamayı Electron modunda çalıştırın.",
+                currentLang === "tr"
+                  ? "Electron API bulunamadı. Uygulamayı Electron modunda çalıştırın."
+                  : "Electron API not found. Run the app in Electron mode.",
             }
           : download,
       ),
@@ -305,8 +309,10 @@ async function startNextDownload() {
         }
         const errMsg =
           result?.error === "DISK_FULL"
-            ? "Disk alanı yetersiz! / Disk space is full!"
-            : result?.error || "İndirme başarısız oldu.";
+            ? currentLang === "tr"
+              ? "Disk alanı yetersiz! / Disk space is full!"
+              : "Disk space is full!"
+            : result?.error || (currentLang === "tr" ? "İndirme başarısız oldu." : "Download failed.");
         setDownloads(
           (downloads) =>
             downloads.map((download) =>
@@ -377,7 +383,9 @@ async function startNextDownload() {
                   error:
                     error instanceof Error
                       ? error.message
-                      : "Bilinmeyen indirme hatası.",
+                      : currentLang === "tr"
+                        ? "Bilinmeyen indirme hatası."
+                        : "Unknown download error.",
                 }
               : download,
           ),

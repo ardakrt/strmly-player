@@ -3,6 +3,8 @@ import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 import {
   applyCatalogPostFilters,
+  dedupeMovieCatalogItems,
+  dedupeSeriesCatalogItems,
   seriesMatchesQuality,
   seriesMatchesQuery,
   sortByNameAzZa,
@@ -48,12 +50,30 @@ export function useFilteredCatalog({
   qualityFilter
 }: UseFilteredCatalogProps) {
 
+  const movieCatalogItems = useMemo(() => {
+    const hiddenSet = new Set(hiddenMovieCategories || []);
+    const movieItems = playlistIndex.displayMovie as PlaylistItem[];
+    const base = activeMovieCategory !== 'Tümü'
+      ? (playlistIndex.movieGroupMap.get(activeMovieCategory) || []) as PlaylistItem[]
+      : movieItems.filter((item) => !hiddenSet.has(item.group || 'Genel'));
+    const filtered = applyCatalogPostFilters(base, deferredSearchQuery, qualityFilter);
+    return sortByNameAzZa(dedupeMovieCatalogItems(filtered), sortOption);
+  }, [playlistIndex, activeMovieCategory, hiddenMovieCategories, deferredSearchQuery, qualityFilter, sortOption]);
+
+  const favoriteCatalogItems = useMemo(() => {
+    const favoriteSet = new Set(globalFavorites || []);
+    const base = items.filter((item) => favoriteSet.has(item.id));
+    return sortByNameAzZa(
+      applyCatalogPostFilters(base, deferredSearchQuery, qualityFilter),
+      sortOption,
+    );
+  }, [items, globalFavorites, deferredSearchQuery, qualityFilter, sortOption]);
+
   // 1. filteredDisplayItems — select base once, then single-pass post-filters
   const filteredDisplayItems = useMemo(() => {
     let base: PlaylistItem[] = items;
     if (selectedGroup === 'Favorilerim') {
-      const favSet = new Set(globalFavorites || []);
-      base = items.filter((ch: PlaylistItem) => favSet.has(ch.id));
+      return favoriteCatalogItems;
     } else if (selectedGroup === 'Canlı TV') {
       const hiddenSet = new Set(hiddenCategories || []);
       const liveItems = itemBuckets.live;
@@ -63,13 +83,7 @@ export function useFilteredCatalog({
         base = liveItems.filter((ch: PlaylistItem) => !hiddenSet.has(ch.group || 'Genel'));
       }
     } else if (selectedGroup === 'Sinema') {
-      const hiddenSet = new Set(hiddenMovieCategories || []);
-      const movieItems = playlistIndex.displayMovie;
-      if (activeMovieCategory !== 'Tümü') {
-        base = playlistIndex.movieGroupMap.get(activeMovieCategory) || [];
-      } else {
-        base = (movieItems as PlaylistItem[]).filter((ch: PlaylistItem) => !hiddenSet.has(ch.group || 'Genel'));
-      }
+      return movieCatalogItems;
     } else if (selectedGroup === 'Diziler') {
       return [];
     } else if (selectedGroup !== 'Ana Sayfa' && selectedGroup !== 'İstatistikler' && selectedGroup !== 'Ayarlar') {
@@ -78,12 +92,10 @@ export function useFilteredCatalog({
 
     base = applyCatalogPostFilters(base as PlaylistItem[], deferredSearchQuery, qualityFilter);
     return sortByNameAzZa(base, sortOption);
-  }, [items, itemBuckets.live, playlistIndex, selectedGroup, globalFavorites, activeLiveCategory, hiddenCategories, activeMovieCategory, hiddenMovieCategories, deferredSearchQuery, sortOption, qualityFilter]);
+  }, [items, itemBuckets.live, playlistIndex, selectedGroup, activeLiveCategory, hiddenCategories, deferredSearchQuery, sortOption, qualityFilter, favoriteCatalogItems, movieCatalogItems]);
 
   // 2. groupedSeriesList — single-pass category + search + quality
   const groupedSeriesList = useMemo(() => {
-    if (selectedGroup !== 'Diziler') return [];
-
     const hiddenSet = new Set(hiddenSeriesCategories || []);
     const query = deferredSearchQuery.trim();
     const hasSearch = query.length > 0;
@@ -103,8 +115,8 @@ export function useFilteredCatalog({
       out.push(series);
     }
 
-    return sortByNameAzZa(out, sortOption);
-  }, [allGroupedSeries, selectedGroup, activeSeriesCategory, hiddenSeriesCategories, deferredSearchQuery, sortOption, qualityFilter]);
+    return sortByNameAzZa(dedupeSeriesCatalogItems(out), sortOption);
+  }, [allGroupedSeries, activeSeriesCategory, hiddenSeriesCategories, deferredSearchQuery, sortOption, qualityFilter]);
 
   // 3. favoriteSeriesList
   const favoriteSeriesList = useMemo(() => {

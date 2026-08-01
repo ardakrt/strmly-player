@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import type { SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
 import { preprocessPlaylistItems } from '../utils/searchHelpers';
@@ -26,6 +26,21 @@ const getCacheBustedUrl = (url: string): string => {
   return url.includes('?') ? `${url}&_cb=${cb}` : `${url}?_cb=${cb}`;
 };
 
+const hasXtreamCredentials = (playlist: SavedPlaylist | undefined): playlist is SavedPlaylist & {
+  xtreamUrl: string;
+  xtreamUser: string;
+  xtreamPass: string;
+} => Boolean(playlist?.xtreamUrl?.trim() && playlist.xtreamUser?.trim() && playlist.xtreamPass?.trim());
+
+export type IptvUpdateMode = 'prompt' | 'silent' | 'manual';
+
+export interface PendingPlaylistUpdate {
+  playlistId: string;
+  playlistName: string;
+  channelCount: number;
+  items: PlaylistItem[];
+}
+
 interface UsePlaylistsProps {
   saveAppSetting: (key: string, value: any, profileIdOverride?: string | null) => Promise<void>;
   loadAppSetting: (key: string, isJson?: boolean, profileIdOverride?: string | null) => Promise<any>;
@@ -34,6 +49,8 @@ interface UsePlaylistsProps {
   isParsing: boolean;
   setIsParsing: (val: boolean) => void;
   language: Language;
+  iptvUpdateMode?: IptvUpdateMode;
+  isPlaying?: boolean;
 }
 
 export function usePlaylists({
@@ -43,12 +60,47 @@ export function usePlaylists({
   setSelectedGroup,
   isParsing,
   setIsParsing,
-  language
+  language,
+  iptvUpdateMode = 'silent',
+  isPlaying = false
 }: UsePlaylistsProps) {
   const [playlists, setPlaylists] = useState<SavedPlaylist[]>([]);
+  const playlistsRef = useRef<SavedPlaylist[]>([]);
   const [activePlaylistId, setActivePlaylistId] = useState<string>('');
   const activePlaylistIdRef = useRef('');
   const [items, setItems] = useState<PlaylistItem[]>([]);
+  const [pendingPlaylistUpdate, setPendingPlaylistUpdate] = useState<PendingPlaylistUpdate | null>(null);
+
+  const iptvUpdateModeRef = useRef<IptvUpdateMode>(iptvUpdateMode);
+  const isPlayingRef = useRef<boolean>(isPlaying);
+  const updateInFlightRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    playlistsRef.current = playlists;
+  }, [playlists]);
+
+  useEffect(() => {
+    iptvUpdateModeRef.current = iptvUpdateMode;
+  }, [iptvUpdateMode]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const applyPendingUpdate = () => {
+    if (!pendingPlaylistUpdate) return;
+    startTransition(() => setItems(pendingPlaylistUpdate.items));
+    showToast(
+      language === 'tr'
+        ? `"${pendingPlaylistUpdate.playlistName}" yenilendi (${pendingPlaylistUpdate.channelCount} kanal).`
+        : `"${pendingPlaylistUpdate.playlistName}" updated (${pendingPlaylistUpdate.channelCount} channels).`
+    );
+    setPendingPlaylistUpdate(null);
+  };
+
+  const dismissPendingUpdate = () => {
+    setPendingPlaylistUpdate(null);
+  };
   
   const [playlistFormName, setPlaylistFormName] = useState('');
   const [m3uUrl, setM3uUrl] = useState('');
@@ -101,17 +153,27 @@ export function usePlaylists({
     delayOverrideMs?: number,
   ) => {
     clearAutoUpdateTimer();
+    if (iptvUpdateModeRef.current === 'manual') return;
+
     const mode = playlist.playlistMode || (playlist.xtreamUrl ? 'xtream' : (playlist.url ? 'm3u' : undefined));
     if (!mode) return;
 
     const intervalHours = normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours);
     const lastUpdatedAt = Number(playlist.lastAutoUpdatedAt || Date.now());
     const dueAt = lastUpdatedAt + intervalHours * 60 * 60 * 1000;
+
+    // Boot deferral: Wait at least 30 seconds after app startup before checking background updates
+    const BOOT_DEFERRAL_MS = 30000;
     const delayMs = delayOverrideMs !== undefined
-      ? Math.max(1500, delayOverrideMs)
-      : Math.max(1500, dueAt - Date.now());
+      ? Math.max(BOOT_DEFERRAL_MS, delayOverrideMs)
+      : Math.max(BOOT_DEFERRAL_MS, dueAt - Date.now());
 
     autoUpdateTimerRef.current = window.setTimeout(() => {
+      if (isPlayingRef.current) {
+        // Defer by 5 minutes if user is currently watching video
+        scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
+        return;
+      }
       autoUpdatePlaylist({ ...playlist, autoUpdateIntervalHours: intervalHours }, currentActiveId);
     }, delayMs);
   };
@@ -122,15 +184,39 @@ export function usePlaylists({
 
     if (!mode || (mode === 'm3u' && !url)) {
       if (isManual) {
-        showToast('Yerel M3U dosyaları otomatik güncellenemez.');
+        showToast(language === 'tr'
+          ? 'Yerel M3U dosyaları otomatik güncellenemez.'
+          : 'Local M3U files cannot be auto-updated.');
       }
       return;
     }
-    if (mode === 'xtream' && (!playlist.xtreamUrl || !playlist.xtreamUser || !playlist.xtreamPass)) return;
+    if (mode === 'xtream' && !hasXtreamCredentials(playlist)) {
+      if (isManual) {
+        showToast(language === 'tr'
+          ? 'Kayıtlı Xtream bağlantı bilgileri okunamadı.'
+          : 'The saved Xtream connection details could not be read.');
+      }
+      return;
+    }
+
+    if (!isManual && iptvUpdateModeRef.current === 'manual') return;
+    if (!isManual && isPlayingRef.current) {
+      scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
+      return;
+    }
+    if (updateInFlightRef.current.has(playlist.id)) {
+      if (isManual) {
+        showToast(language === 'tr' ? 'Bu liste zaten güncelleniyor.' : 'This playlist is already updating.');
+      }
+      return;
+    }
+    updateInFlightRef.current.add(playlist.id);
 
     if (isManual) {
       setIsParsing(true);
-      showToast(`"${playlist.name}" listesi güncelleniyor...`);
+      showToast(language === 'tr'
+        ? `"${playlist.name}" listesi güncelleniyor...`
+        : `Updating playlist "${playlist.name}"...`);
     }
 
     try {
@@ -138,7 +224,10 @@ export function usePlaylists({
       if (mode === 'm3u') {
         fetchUrl = url!;
       } else {
-        fetchUrl = `${playlist.xtreamUrl}/get.php?username=${playlist.xtreamUser}&password=${playlist.xtreamPass}&type=m3u_plus&output=m3u8`;
+        const baseUrl = playlist.xtreamUrl!.replace(/\/$/, '');
+        const username = encodeURIComponent(playlist.xtreamUser!);
+        const password = encodeURIComponent(playlist.xtreamPass!);
+        fetchUrl = `${baseUrl}/get.php?username=${username}&password=${password}&type=m3u_plus&output=m3u8`;
       }
 
       const res = await fetch(getCacheBustedUrl(fetchUrl), {
@@ -147,47 +236,79 @@ export function usePlaylists({
           'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
         }
       });
-      if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
+      if (!res.ok) throw new Error(language === 'tr' ? "HTTP Hatası: " + res.status : "HTTP Error: " + res.status);
       const data = await res.arrayBuffer();
       const parsedPlaylist = await parseM3UAsync(data);
       const parsedItems = parsedPlaylist.items;
       const updatedAt = Date.now();
-      if (parsedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
+      if (parsedItems.length === 0) throw new Error(language === 'tr' ? "Çözümlenebilir kanal bulunamadı!" : "No playable channels found!");
 
-      // Save updated items to local file / localStorage
+      const unchanged = Boolean(
+        playlist.contentRevision
+        && playlist.contentRevision === parsedPlaylist.revision,
+      );
+      const updatedPlaylist: SavedPlaylist = {
+        ...playlist,
+        channelCount: parsedItems.length,
+        groupCount: parsedPlaylist.groups.length,
+        groups: parsedPlaylist.groups,
+        playlistMode: mode,
+        autoUpdateIntervalHours: normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours),
+        lastAutoUpdatedAt: updatedAt,
+        contentRevision: parsedPlaylist.revision,
+      };
+      const updatedPlaylists = playlistsRef.current.map((current) => (
+        current.id === playlist.id ? { ...current, ...updatedPlaylist } : current
+      ));
+      playlistsRef.current = updatedPlaylists;
+      setPlaylists(updatedPlaylists);
+      await saveAppSetting('cinema_playlists', updatedPlaylists);
+
+      if (unchanged) {
+        if (isManual) {
+          showToast(language === 'tr'
+            ? `"${playlist.name}" zaten güncel.`
+            : `"${playlist.name}" is already up to date.`);
+        }
+        if (activePlaylistIdRef.current === playlist.id) {
+          scheduleAutoUpdate(updatedPlaylist, currentActiveId);
+        }
+        return;
+      }
+
+      // Persist first, then swap the active catalog as a non-urgent render.
       await savePlaylistData(playlist.id, parsedItems);
 
-      // Update metadata in playlists array
-      setPlaylists((currentPlaylists) => {
-        const updated = currentPlaylists.map((p) => {
-          if (p.id === playlist.id) {
-            return {
-              ...p,
-              channelCount: parsedItems.length,
-              groupCount: parsedPlaylist.groups.length,
-              groups: parsedPlaylist.groups,
-              playlistMode: mode,
-              autoUpdateIntervalHours: normalizeAutoUpdateInterval(p.autoUpdateIntervalHours),
-              lastAutoUpdatedAt: updatedAt
-            };
-          }
-          return p;
-        });
-        saveAppSetting('cinema_playlists', updated);
-        return updated;
-      });
-
-      // If this is currently the active playlist, update items in state
+      // If this is currently the active playlist, handle state according to update mode
       if (activePlaylistIdRef.current === playlist.id) {
-        setItems(parsedItems);
-        scheduleAutoUpdate({
-          ...playlist,
-          autoUpdateIntervalHours: normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours),
-          lastAutoUpdatedAt: updatedAt
-        }, currentActiveId);
-        showToast(`"${playlist.name}" güncellendi (${parsedItems.length} kanal).`);
+        if (isManual) {
+          startTransition(() => setItems(parsedItems));
+          setPendingPlaylistUpdate(null);
+          showToast(language === 'tr'
+            ? `"${playlist.name}" güncellendi (${parsedItems.length} kanal).`
+            : `"${playlist.name}" updated (${parsedItems.length} channels).`);
+        } else if (iptvUpdateModeRef.current === 'prompt' || isPlayingRef.current) {
+          setPendingPlaylistUpdate({
+            playlistId: playlist.id,
+            playlistName: playlist.name,
+            channelCount: parsedItems.length,
+            items: parsedItems
+          });
+        } else if (iptvUpdateModeRef.current === 'silent') {
+          const applySilently = () => startTransition(() => setItems(parsedItems));
+          if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(applySilently, { timeout: 1500 });
+          } else {
+            window.setTimeout(applySilently, 0);
+          }
+        }
+        scheduleAutoUpdate(updatedPlaylist, currentActiveId);
       } else {
-        showToast(`"${playlist.name}" güncellendi.`);
+        if (isManual) {
+          showToast(language === 'tr'
+            ? `"${playlist.name}" güncellendi.`
+            : `"${playlist.name}" updated.`);
+        }
       }
     } catch (err: any) {
       console.warn(`[Auto-Update] Failed to update playlist ${playlist.name}:`, err.message);
@@ -195,9 +316,12 @@ export function usePlaylists({
         scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
       }
       if (isManual) {
-        showToast(`Güncelleme başarısız: ${err.message}`);
+        showToast(language === 'tr'
+          ? `Güncelleme başarısız: ${err.message}`
+          : `Update failed: ${err.message}`);
       }
     } finally {
+      updateInFlightRef.current.delete(playlist.id);
       if (isManual) {
         setIsParsing(false);
       }
@@ -207,6 +331,7 @@ export function usePlaylists({
   const load = async (profileId: string) => {
     const savedPlaylists = await loadAppSetting('cinema_playlists', true, profileId);
     let nextPlaylists: SavedPlaylist[] = [];
+    let restoredCredentials = false;
     let nextActivePlaylistId = '';
     let nextItems: PlaylistItem[] = [];
 
@@ -226,6 +351,48 @@ export function usePlaylists({
           autoUpdateIntervalHours: normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours)
         };
       });
+
+      const browserStorageKey = `profile_${profileId}_cinema_playlists`;
+      try {
+        const browserPlaylists = JSON.parse(localStorage.getItem(browserStorageKey) || '[]') as SavedPlaylist[];
+        if (Array.isArray(browserPlaylists)) {
+          const browserById = new Map(browserPlaylists.map((playlist) => [playlist.id, playlist]));
+          nextPlaylists = nextPlaylists.map((playlist) => {
+            if (playlist.playlistMode !== 'xtream' || hasXtreamCredentials(playlist)) return playlist;
+            const localPlaylist = browserById.get(playlist.id);
+            if (!hasXtreamCredentials(localPlaylist)) return playlist;
+            restoredCredentials = true;
+            return {
+              ...playlist,
+              xtreamUrl: localPlaylist.xtreamUrl.trim(),
+              xtreamUser: localPlaylist.xtreamUser.trim(),
+              xtreamPass: localPlaylist.xtreamPass.trim()
+            };
+          });
+        }
+      } catch {
+        // A malformed browser fallback must not prevent the durable playlist from loading.
+      }
+
+      if (window.electronAPI?.recoverPlaylistCredentials) {
+        nextPlaylists = await Promise.all(nextPlaylists.map(async (playlist) => {
+          if (playlist.playlistMode !== 'xtream' || hasXtreamCredentials(playlist)) return playlist;
+          try {
+            const result = await window.electronAPI!.recoverPlaylistCredentials!(profileId, playlist.id);
+            if (!result.success || !hasXtreamCredentials(result.playlist)) return playlist;
+            restoredCredentials = true;
+            return result.playlist;
+          } catch {
+            // Renderer hot reloads can temporarily outlive an older Electron main process.
+            // Credential recovery is optional and must never block profile loading.
+            return playlist;
+          }
+        }));
+      }
+
+      if (restoredCredentials) {
+        await saveAppSetting('cinema_playlists', nextPlaylists, profileId);
+      }
       if (nextPlaylists.length > 0) {
         const savedActiveId = await loadAppSetting('cinema_active_playlist', false, profileId);
         const activeId = nextPlaylists.some((playlist) => playlist.id === savedActiveId)
@@ -269,7 +436,9 @@ export function usePlaylists({
   const handlePlaylistLoadFromUrl = async () => {
     if (!m3uUrl.trim() || !playlistFormName.trim()) return;
     setIsParsing(true);
-    showToast("M3U Listesi indiriliyor ve çözümleniyor...");
+    showToast(language === 'tr'
+      ? "M3U Listesi indiriliyor ve çözümleniyor..."
+      : "Downloading and parsing M3U list...");
     try {
       const res = await fetch(getCacheBustedUrl(m3uUrl), {
         cache: 'no-store',
@@ -277,12 +446,12 @@ export function usePlaylists({
           'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
         }
       });
-      if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
+      if (!res.ok) throw new Error(language === 'tr' ? "HTTP Hatası: " + res.status : "HTTP Error: " + res.status);
       const data = await res.arrayBuffer();
       const parsedPlaylist = await parseM3UAsync(data);
       const parsedItems = parsedPlaylist.items;
 
-      if (parsedItems.length === 0) throw new Error("Çözümlenebilir kanal bulunamadı!");
+      if (parsedItems.length === 0) throw new Error(language === 'tr' ? "Çözümlenebilir kanal bulunamadı!" : "No playable channels found!");
 
       const distinctGroups = parsedPlaylist.groups;
 
@@ -295,7 +464,8 @@ export function usePlaylists({
         playlistMode: 'm3u',
         url: m3uUrl,
         autoUpdateIntervalHours: DEFAULT_AUTO_UPDATE_INTERVAL_HOURS,
-        lastAutoUpdatedAt: Date.now()
+        lastAutoUpdatedAt: Date.now(),
+        contentRevision: parsedPlaylist.revision,
       };
 
       await savePlaylistData(newList.id, parsedItems);
@@ -312,9 +482,11 @@ export function usePlaylists({
       setM3uUrl('');
       setPlaylistFormName('');
       setShowAddPlaylistForm(false);
-      showToast(`${parsedItems.length} kanal başarıyla yüklendi!`);
+      showToast(language === 'tr'
+        ? `${parsedItems.length} kanal başarıyla yüklendi!`
+        : `${parsedItems.length} channels loaded successfully!`);
     } catch (err: any) {
-      showToast("Hata: " + err.message);
+      showToast(language === 'tr' ? "Hata: " + err.message : "Error: " + err.message);
     } finally {
       setIsParsing(false);
     }
@@ -322,14 +494,18 @@ export function usePlaylists({
 
   const handleXtreamLoad = async () => {
     if (!xtreamUrl.trim() || !xtreamUser.trim() || !xtreamPass.trim() || !playlistFormName.trim()) {
-      showToast("Tüm Xtream Codes alanlarını doldurmalısınız.");
+      showToast(language === 'tr'
+        ? "Tüm Xtream Codes alanlarını doldurmalısınız."
+        : "Please fill in all Xtream Codes fields.");
       return;
     }
     const cleanUrl = xtreamUrl.trim().replace(/\/$/, "");
     const finalUrl = `${cleanUrl}/get.php?username=${xtreamUser.trim()}&password=${xtreamPass.trim()}&type=m3u_plus&output=m3u8`;
 
     setIsParsing(true);
-    showToast("Xtream API'ye bağlanılıyor, listeler çekiliyor...");
+    showToast(language === 'tr'
+      ? "Xtream API'ye bağlanılıyor, listeler çekiliyor..."
+      : "Connecting to Xtream API, fetching lists...");
     try {
       const res = await fetch(getCacheBustedUrl(finalUrl), {
         cache: 'no-store',
@@ -337,11 +513,13 @@ export function usePlaylists({
           'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
         }
       });
-      if (!res.ok) throw new Error("HTTP Hatası: " + res.status);
+      if (!res.ok) throw new Error(language === 'tr' ? "HTTP Hatası: " + res.status : "HTTP Error: " + res.status);
       const data = await res.arrayBuffer();
       const parsedPlaylist = await parseM3UAsync(data);
       const parsedItems = parsedPlaylist.items;
-      if (parsedItems.length === 0) throw new Error("Çözümlenebilir kanal veya VOD bulunamadı! Bilgilerinizi kontrol edin.");
+      if (parsedItems.length === 0) throw new Error(language === 'tr'
+        ? "Çözümlenebilir kanal veya VOD bulunamadı! Bilgilerinizi kontrol edin."
+        : "No playable channels or VOD found! Please check your credentials.");
 
       const distinctGroups = parsedPlaylist.groups;
       const newList: SavedPlaylist = {
@@ -355,7 +533,8 @@ export function usePlaylists({
         xtreamUser: xtreamUser.trim(),
         xtreamPass: xtreamPass.trim(),
         autoUpdateIntervalHours: DEFAULT_AUTO_UPDATE_INTERVAL_HOURS,
-        lastAutoUpdatedAt: Date.now()
+        lastAutoUpdatedAt: Date.now(),
+        contentRevision: parsedPlaylist.revision,
       };
 
       await savePlaylistData(newList.id, parsedItems);
@@ -374,9 +553,11 @@ export function usePlaylists({
       setXtreamPass('');
       setPlaylistFormName('');
       setShowAddPlaylistForm(false);
-      showToast(`Xtream Bağlantısı Başarılı! ${parsedItems.length} içerik yüklendi.`);
+      showToast(language === 'tr'
+        ? `Xtream Bağlantısı Başarılı! ${parsedItems.length} içerik yüklendi.`
+        : `Xtream connection successful! ${parsedItems.length} items loaded.`);
     } catch (err) {
-      showToast("Hata: " + (err instanceof Error ? err.message : err));
+      showToast(language === 'tr' ? "Hata: " + (err instanceof Error ? err.message : err) : "Error: " + (err instanceof Error ? err.message : err));
     } finally {
       setIsParsing(false);
     }
@@ -387,12 +568,12 @@ export function usePlaylists({
     if (!file) return;
 
     setIsParsing(true);
-    showToast("Yerel M3U dosyası yükleniyor...");
+    showToast(language === 'tr' ? "Yerel M3U dosyası yükleniyor..." : "Loading local M3U file...");
     try {
         const data = await file.arrayBuffer();
         const parsedPlaylist = await parseM3UAsync(data);
         const parsedItems = parsedPlaylist.items;
-        if (parsedItems.length === 0) throw new Error("M3U dosyası geçersiz veya boş!");
+        if (parsedItems.length === 0) throw new Error(language === 'tr' ? "M3U dosyası geçersiz veya boş!" : "M3U file is invalid or empty!");
 
         const distinctGroups = parsedPlaylist.groups;
 
@@ -403,7 +584,8 @@ export function usePlaylists({
           groupCount: distinctGroups.length,
           groups: distinctGroups,
           autoUpdateIntervalHours: DEFAULT_AUTO_UPDATE_INTERVAL_HOURS,
-          lastAutoUpdatedAt: Date.now()
+          lastAutoUpdatedAt: Date.now(),
+          contentRevision: parsedPlaylist.revision,
         };
 
         await savePlaylistData(newList.id, parsedItems);
@@ -417,9 +599,11 @@ export function usePlaylists({
         setItems(parsedItems);
 
         setShowAddPlaylistForm(false);
-        showToast(`${parsedItems.length} kanal yerel dosyadan yüklendi!`);
+        showToast(language === 'tr'
+          ? `${parsedItems.length} kanal yerel dosyadan yüklendi!`
+          : `${parsedItems.length} channels loaded from local file!`);
       } catch (err: any) {
-        showToast("Hata: " + err.message);
+        showToast(language === 'tr' ? "Hata: " + err.message : "Error: " + err.message);
       } finally {
         setIsParsing(false);
       }
@@ -430,7 +614,7 @@ export function usePlaylists({
     setPlaylists(updated);
     await saveAppSetting('cinema_playlists', updated);
     await deletePlaylistData(id);
-    showToast("Çalma listesi silindi");
+    showToast(language === 'tr' ? "Çalma listesi silindi" : "Playlist deleted");
     if (activePlaylistId === id) {
       if (updated.length > 0) {
         setActivePlaylistId(updated[0].id);
@@ -467,12 +651,14 @@ export function usePlaylists({
     const found = playlists.find(p => p.id === id);
     if (found) {
       setIsParsing(true);
-      showToast(`Liste yükleniyor: ${found.name}`);
+      showToast(language === 'tr' ? `Liste yükleniyor: ${found.name}` : `Loading playlist: ${found.name}`);
       try {
         const loadedItems = await loadPlaylistData(id);
         setItems(preprocessPlaylistItems(loadedItems));
         setSelectedGroup('Ana Sayfa');
-        showToast(`Aktif liste: ${found.name} (${loadedItems.length} kanal)`);
+        showToast(language === 'tr'
+          ? `Aktif liste: ${found.name} (${loadedItems.length} kanal)`
+          : `Active playlist: ${found.name} (${loadedItems.length} channels)`);
 
         const intervalHours = normalizeAutoUpdateInterval(found.autoUpdateIntervalHours);
         const lastUpdatedAt = Number(found.lastAutoUpdatedAt || 0);
@@ -487,7 +673,7 @@ export function usePlaylists({
           scheduleAutoUpdate({ ...found, autoUpdateIntervalHours: intervalHours }, id);
         }
       } catch {
-        showToast("Liste yüklenirken hata oluştu.");
+        showToast(language === 'tr' ? "Liste yüklenirken hata oluştu." : "An error occurred while loading the playlist.");
       } finally {
         setIsParsing(false);
       }
@@ -626,6 +812,8 @@ export function usePlaylists({
     playlists, setPlaylists,
     activePlaylistId, setActivePlaylistId,
     items, setItems,
+    pendingPlaylistUpdate, setPendingPlaylistUpdate,
+    applyPendingUpdate, dismissPendingUpdate,
     playlistFormName, setPlaylistFormName,
     m3uUrl, setM3uUrl,
     xtreamUrl, setXtreamUrl,

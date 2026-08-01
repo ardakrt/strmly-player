@@ -21,6 +21,7 @@ import type { DownloadItem, DownloadStatus } from "../hooks/useDownloads";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { parseSeriesEpisodeInfo } from "../utils/seriesGroupers";
+import { TiltHoverCard } from "./TiltHoverCard";
 
 interface DownloadsViewProps {
   app: AppProviderValue;
@@ -775,7 +776,7 @@ export function DownloadsView({ app }: DownloadsViewProps) {
                 </div>
               )}
 
-              <div className="grid justify-start gap-x-4 gap-y-7 [grid-template-columns:repeat(auto-fill,minmax(148px,178px))]">
+              <div className="downloads-library-grid grid justify-start gap-x-4 gap-y-7 [grid-template-columns:repeat(auto-fill,minmax(220px,300px))]">
                 {libraryDownloadCards.map((group) => (
                   <LibraryPosterCard
                     key={group.id}
@@ -881,7 +882,7 @@ const ActiveDownloadPanel = memo(function ActiveDownloadPanel({
             }
             group={download.group || "MOVIE"}
             itemType={download.type}
-            aspect="portrait"
+            aspect="landscape"
             size="sm"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/40" />
@@ -1116,63 +1117,65 @@ const LibraryPosterCard = memo(function LibraryPosterCard({
         onContextMenu(e.clientX, e.clientY);
       }}
     >
-      <button
-        type="button"
-        onClick={onActivate}
-        className="relative aspect-[2/3] w-full overflow-hidden rounded-[18px] bg-neutral-900 text-left cursor-pointer outline-none transition-all duration-300 focus-visible:ring-2 focus-visible:ring-white/30 ring-1 ring-white/[0.07] shadow-[0_12px_32px_rgba(0,0,0,0.32)] hover:ring-white/20 hover:scale-[1.03] hover:shadow-[0_18px_44px_rgba(0,0,0,0.45)]"
-        aria-label={
-          isSeries
-            ? language === "tr"
-              ? `${displayTitle} detay`
-              : `${displayTitle} details`
-            : language === "tr"
-              ? `${displayTitle} oynat`
-              : `Play ${displayTitle}`
-        }
-        aria-haspopup={isSeries ? "dialog" : undefined}
-      >
-        <ImageWithFallback
-          src={download.logo}
-          name={
+      <TiltHoverCard className="w-full">
+        <button
+          type="button"
+          onClick={onActivate}
+          className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-neutral-900 text-left cursor-pointer outline-none transition-all duration-300 focus-visible:ring-2 focus-visible:ring-white/30 ring-1 ring-white/[0.07] shadow-[0_12px_32px_rgba(0,0,0,0.32)] hover:ring-white/20 hover:scale-[1.03] hover:shadow-[0_18px_44px_rgba(0,0,0,0.45)]"
+          aria-label={
             isSeries
-              ? download.seriesTitle ||
-                parseSeriesEpisodeInfo(download.name).cleanTitle ||
-                download.name
-              : download.name
-          }
-          group={download.group || "MOVIE"}
-          itemType={download.type}
-          aspect="portrait"
-          size="md"
-        />
-
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80" />
-
-        <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100">
-          <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-black shadow-[0_8px_28px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover/card:scale-105">
-            <Play size={18} fill="currentColor" className="ml-0.5" />
-          </div>
-        </div>
-
-        <div className="absolute left-2.5 top-2.5 flex items-center gap-1">
-          <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/85 backdrop-blur-md border border-white/10">
-            {isSeries
               ? language === "tr"
-                ? "Dizi"
-                : "Series"
+                ? `${displayTitle} detay`
+                : `${displayTitle} details`
               : language === "tr"
-                ? "Film"
-                : "Movie"}
-          </span>
-        </div>
+                ? `${displayTitle} oynat`
+                : `Play ${displayTitle}`
+          }
+          aria-haspopup={isSeries ? "dialog" : undefined}
+        >
+          <ImageWithFallback
+            src={download.logo}
+            name={
+              isSeries
+                ? download.seriesTitle ||
+                  parseSeriesEpisodeInfo(download.name).cleanTitle ||
+                  download.name
+                : download.name
+            }
+            group={download.group || "MOVIE"}
+            itemType={download.type}
+            aspect="landscape"
+            size="md"
+          />
 
-        <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-end justify-between gap-2 pointer-events-none">
-          <span className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[9px] font-semibold text-white/75 backdrop-blur-md border border-white/10">
-            <span className="h-1 w-1 rounded-full bg-emerald-400" />
-            {language === "tr" ? "Hazır" : "Ready"}
-          </span>
-        </div>
-      </button>
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80" />
+
+          <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-black shadow-[0_8px_28px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover/card:scale-105">
+              <Play size={18} fill="currentColor" className="ml-0.5" />
+            </div>
+          </div>
+
+          <div className="absolute left-2.5 top-2.5 flex items-center gap-1">
+            <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/85 backdrop-blur-md border border-white/10">
+              {isSeries
+                ? language === "tr"
+                  ? "Dizi"
+                  : "Series"
+                : language === "tr"
+                  ? "Film"
+                  : "Movie"}
+            </span>
+          </div>
+
+          <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-end justify-between gap-2 pointer-events-none">
+            <span className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[9px] font-semibold text-white/75 backdrop-blur-md border border-white/10">
+              <span className="h-1 w-1 rounded-full bg-emerald-400" />
+              {language === "tr" ? "Hazır" : "Ready"}
+            </span>
+          </div>
+        </button>
+      </TiltHoverCard>
 
       <div className="px-0.5 space-y-1">
         <div className="flex items-start justify-between gap-2">

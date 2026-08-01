@@ -512,7 +512,7 @@ export const LiveTvView = React.memo(function LiveTvView({
 
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <div
-            className="hide-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5"
+            className="custom-catalog-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-4 lg:px-5 lg:pt-5"
             onScroll={handleMainScroll}
           >
           {filteredDisplayItems.length === 0 ? (

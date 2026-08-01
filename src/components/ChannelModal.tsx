@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Play, Heart } from 'lucide-react';
+import { Play } from 'lucide-react';
+import { LikeBurstButton } from './LikeBurstButton';
 import { ImageWithFallback } from './ImageWithFallback';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, getTmdbLanguage } from '../utils/tmdb';
@@ -38,7 +39,7 @@ export const ChannelModal = ({
   isFavorite,
   onToggleFavorite
 }: ChannelModalProps) => {
-  const { t, language } = useSettings();
+  const { language } = useSettings();
   const [cast, setCast] = useState<CastMember[]>([]);
   const [showCastModal, setShowCastModal] = useState(false);
 
@@ -115,14 +116,14 @@ export const ChannelModal = ({
          aria-label={language === 'tr' ? 'Kapat' : 'Close'}>
           ✕
         </button>
-        <button type="button"
-          onClick={onToggleFavorite}
-          className="absolute top-5 right-17 z-30 w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-red-500 backdrop-blur-md transition-all duration-300 active:scale-95 shadow-lg cursor-pointer hover:scale-105"
-          title={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-          aria-label={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
-        >
-          <Heart size={18} fill={isFavorite ? "currentColor" : "none"} className={isFavorite ? "text-red-500" : ""} />
-        </button>
+        <div className="absolute top-5 right-17 z-30 flex items-center justify-center">
+          <LikeBurstButton
+            isLiked={isFavorite}
+            size={18}
+            onToggle={(_, e) => onToggleFavorite(e)}
+            ariaLabel={isFavorite ? (language === 'tr' ? 'Favorilerden Çıkar' : 'Remove from Favorites') : (language === 'tr' ? 'Favorilere Ekle' : 'Add to Favorites')}
+          />
+        </div>
         <div className="w-full md:w-[40%] aspect-video md:aspect-[2/3] bg-black/30 relative flex items-center justify-center border-r border-white/[0.05] shrink-0 overflow-hidden">
           {tmdbData?.poster ? (
             <img src={tmdbData.poster} alt={channel.name} className="w-full h-full object-cover" />
@@ -153,11 +154,8 @@ export const ChannelModal = ({
             </div>
             {tmdbData && (
               <div className="flex flex-wrap items-center gap-3.5 text-xs font-semibold">
-                <span className="text-emerald-400">{t('common.matchScore').replace('{{score}}', (tmdbData.match || '95').replace(/[^0-9]/g, ''))}</span>
-                <span className="text-neutral-400">{tmdbData.year}</span>
-                <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-neutral-300 rounded text-[10px] font-bold">4K ULTRA HD</span>
-                <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-neutral-300 rounded text-[10px] font-bold">DOLBY ATMOS 5.1</span>
-                <span className="text-yellow-500 font-bold">{tmdbData.rating}</span>
+                {tmdbData.year ? <span className="text-neutral-400">{tmdbData.year}</span> : null}
+                {tmdbData.rating ? <span className="text-yellow-500 font-bold">{tmdbData.rating}</span> : null}
               </div>
             )}
             <div className="flex flex-col gap-2">

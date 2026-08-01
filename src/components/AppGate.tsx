@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useLayoutEffect } from 'react';
 import { SettingsProvider } from '../context/SettingsContext';
 import { SplashScreen } from './SplashScreen';
 import { AppShell } from './AppShell';
@@ -12,6 +12,10 @@ interface AppGateProps {
 }
 
 export function AppGate({ app }: AppGateProps) {
+  useLayoutEffect(() => {
+    document.getElementById('boot-splash')?.remove();
+  }, []);
+
   const {
     profilesHook,
     playerState,
@@ -49,10 +53,21 @@ export function AppGate({ app }: AppGateProps) {
     typeof window !== 'undefined' &&
     (window as Window & { strmlyPerfBench?: boolean }).strmlyPerfBench === true;
 
-  if (!boot.hasInitialBooted && !isPerfBench) {
+  if (!boot.loaded && !isPerfBench) {
     return (
       <SplashScreen
-        activeAccent={ui.activeAccent}
+        splashStatus={boot.splashStatus}
+      />
+    );
+  }
+
+  // Keep automatic startup on the single branded splash until the active
+  // profile's catalog and home data have completed their first preparation.
+  // The profile screen's loading overlay is reserved for an explicit profile
+  // selection, otherwise startup visibly presents two consecutive loaders.
+  if (!isPerfBench && activeProfileId !== null && !boot.hasInitialBooted) {
+    return (
+      <SplashScreen
         splashStatus={boot.splashStatus}
       />
     );
@@ -60,15 +75,12 @@ export function AppGate({ app }: AppGateProps) {
 
   // Performance bench mode must reach the main shell (navbar) without a live
   // profile/playlist so scripts/test-performance.ps1 can measure real nav cost.
-  if (!isPerfBench && boot.loaded && (activeProfileId === null || !boot.isAppReady)) {
+  if (!isPerfBench && activeProfileId === null) {
     return (
       <SettingsProvider value={settingsContextValue}>
         <ProfileScreenWrapper
-          profilesHook={{
-            ...profilesHook,
-            profileEntryReady: profilesHook.profileEntryReady || (activeProfileId !== null && boot.isAppReady),
-          }}
-          isParsing={isParsing || (activeProfileId !== null && !boot.isAppReady)}
+          profilesHook={profilesHook}
+          isParsing={isParsing}
           toast={ui.toast}
           activeTheme={ui.activeTheme}
           accentStyles={ui.getAccentStyles()}

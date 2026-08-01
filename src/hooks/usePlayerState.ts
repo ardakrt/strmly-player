@@ -40,10 +40,10 @@ export function usePlayerState({
     let newFavs: string[];
     if (currentFavs.includes(itemId)) {
       newFavs = currentFavs.filter(id => id !== itemId);
-      showToast("Favorilerden kaldırıldı");
+      showToast(language === 'tr' ? "Favorilerden kaldırıldı" : "Removed from favorites");
     } else {
       newFavs = [...currentFavs, itemId];
-      showToast("Favorilere eklendi!");
+      showToast(language === 'tr' ? "Favorilere eklendi!" : "Added to favorites!");
     }
 
     setGlobalFavorites(newFavs);

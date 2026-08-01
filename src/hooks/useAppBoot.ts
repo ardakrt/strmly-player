@@ -47,9 +47,9 @@ export function useAppBoot({
   const [splashStatus, setSplashStatus] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('cinema_language');
-      return stored === 'en' ? 'Starting Strmly...' : 'Strmly başlatılıyor...';
+      return stored === 'en' ? 'Starting Strmly…' : 'Strmly başlatılıyor…';
     } catch {
-      return 'Strmly başlatılıyor...';
+      return 'Strmly başlatılıyor…';
     }
   });
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
@@ -57,14 +57,20 @@ export function useAppBoot({
 
   // Listen to update status from main process
   useEffect(() => {
-    if (!window.electronAPI || !window.electronAPI.onUpdateStatus) return;
+    const api = window.electronAPI;
+    if (!api?.onUpdateStatus) return;
 
-    const unsubStatus = window.electronAPI.onUpdateStatus((data: any) => {
+    const applyUpdateState = (data: { status: string }) => {
       if (data.status === 'available' || data.status === 'downloaded') {
         setUpdateAvailable(true);
       } else if (data.status === 'not-available' || data.status === 'error') {
         setUpdateAvailable(false);
       }
+    };
+
+    const unsubStatus = api.onUpdateStatus(applyUpdateState);
+    api.getUpdateState?.().then(applyUpdateState).catch(() => {
+      // The main process will publish the next lifecycle event.
     });
 
     return () => {
@@ -83,35 +89,6 @@ export function useAppBoot({
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [loaded]);
-
-  // Handle auto-updater download states post-boot
-  useEffect(() => {
-    if (!loaded) return;
-
-    let unsubscribe: (() => void) | undefined;
-    const timer = window.setTimeout(() => {
-      const api = window.electronAPI;
-      if (!api?.checkForUpdates || !api.onUpdateStatus || !api.installUpdate) return;
-
-      unsubscribe = api.onUpdateStatus((data) => {
-        if (data.status === 'downloaded') {
-          window.setTimeout(() => {
-            api.installUpdate?.();
-          }, 1200);
-        }
-      });
-
-      api.checkForUpdates().catch(() => {
-        unsubscribe?.();
-        unsubscribe = undefined;
-      });
-    }, 1800);
-
-    return () => {
-      window.clearTimeout(timer);
-      unsubscribe?.();
-    };
   }, [loaded]);
 
   // Initialize Spatial Navigation for keyboard controls
@@ -134,183 +111,121 @@ export function useAppBoot({
   useEffect(() => {
     if (bootStartedRef.current) return;
     bootStartedRef.current = true;
-    const bootTimers: any[] = [];
-
     const loadAppConfig = async () => {
-      const isReload = sessionStorage.getItem('strmly_session_active') === 'true';
-      sessionStorage.setItem('strmly_session_active', 'true');
+      try {
+        sessionStorage.setItem('strmly_session_active', 'true');
 
-      const ensureMinDelay = async (delayMs: number) => {
-        void delayMs;
-        return Promise.resolve();
-      };
-      const shouldCheckUpdatesDuringBoot = () => false;
-      const shouldWarmTmdbDuringBoot = () => false;
-
-      // Stage 1: Check updates (Simulated or actual)
-      setSplashStatus(getTranslation('splash.checkingUpdates', language));
-      if (shouldCheckUpdatesDuringBoot() && !isReload) {
-        await new Promise<void>((resolve) => {
-          const api = window.electronAPI;
-          if (!api || !api.checkForUpdates || !api.onUpdateStatus || !api.installUpdate) {
-            bootTimers.push(setTimeout(resolve, 800));
-            return;
-          }
-
-          const checkForUpdates = api.checkForUpdates;
-          const onUpdateStatus = api.onUpdateStatus;
-          const installUpdate = api.installUpdate;
-
-          const safetyTimeout = setTimeout(() => {
-            unsub();
-            resolve();
-          }, 3500);
-          bootTimers.push(safetyTimeout);
-
-          const unsub = onUpdateStatus((data: any) => {
-            if (data.status === 'checking') {
-              setSplashStatus(getTranslation('splash.checkingUpdates', language));
-            } else if (data.status === 'available') {
-              setSplashStatus(getTranslation('settings.about.updateFound', language).replace('{{version}}', ''));
-              clearTimeout(safetyTimeout);
-            } else if (data.status === 'downloaded') {
-              setSplashStatus(getTranslation('splash.updateDownloaded', language));
-              bootTimers.push(setTimeout(() => {
-                installUpdate();
-              }, 1200));
-            } else if (data.status === 'not-available' || data.status === 'error') {
-              clearTimeout(safetyTimeout);
-              unsub();
-              resolve();
-            }
-          });
-
-          checkForUpdates().catch(() => {
-            clearTimeout(safetyTimeout);
-            unsub();
-            resolve();
-          });
+        const holdBootMessage = (delayMs: number) => new Promise<void>((resolve) => {
+          window.setTimeout(resolve, delayMs);
         });
-      } else {
-        await ensureMinDelay(100);
-      }
 
-      // Stage 2: Load app settings
-      setSplashStatus(getTranslation('splash.loadingSettings', language));
-      const [
-        savedProfiles,
-        configPlayer,
-        configAccent,
-        configTheme,
-        configGlass,
-        configGlow,
-        configCardSize,
-        configLanguage,
-        configTranscodeMode
-      ] = await Promise.all([
-        loadAppSetting('cinema_profiles', true),
-        loadAppSetting('cinema_default_player'),
-        loadAppSetting('cinema_accent'),
-        loadAppSetting('cinema_theme'),
-        loadAppSetting('cinema_glass_intensity'),
-        loadAppSetting('cinema_neon_glow'),
-        loadAppSetting('cinema_card_layout_size'),
-        loadAppSetting('cinema_language'),
-        loadAppSetting('cinema_transcode_mode')
-      ]);
+        setSplashStatus(getTranslation('splash.loadingSettings', language));
+        const [
+          savedProfiles,
+          configPlayer,
+          configAccent,
+          configTheme,
+          configGlass,
+          configGlow,
+          configCardSize,
+          configLanguage,
+          configTranscodeMode
+        ] = await Promise.all([
+          loadAppSetting('cinema_profiles', true).catch(() => null),
+          loadAppSetting('cinema_default_player').catch(() => null),
+          loadAppSetting('cinema_accent').catch(() => null),
+          loadAppSetting('cinema_theme').catch(() => null),
+          loadAppSetting('cinema_glass_intensity').catch(() => null),
+          loadAppSetting('cinema_neon_glow').catch(() => null),
+          loadAppSetting('cinema_card_layout_size').catch(() => null),
+          loadAppSetting('cinema_language').catch(() => null),
+          loadAppSetting('cinema_transcode_mode').catch(() => null)
+        ]);
 
-      let loadedProfiles = Array.isArray(savedProfiles) ? savedProfiles : [];
-      setDefaultPlayer(configPlayer || 'internal');
+        let loadedProfiles = Array.isArray(savedProfiles) ? savedProfiles : [];
+        setDefaultPlayer(configPlayer || 'internal');
 
-      setTmdbApiKey(getTmdbApiKey());
+        setTmdbApiKey(getTmdbApiKey());
 
-      setActiveAccent(configAccent || '#FFFFFF');
-      setActiveTheme(configTheme || 'space-black');
-      setGlassIntensity(configGlass || 'medium');
-      setNeonGlowEnabled(configGlow !== null ? configGlow === 'true' || configGlow === true : true);
-      setCardLayoutSize(configCardSize || 'medium');
-      if (configLanguage === 'en' || configLanguage === 'tr') {
-        setLanguageState(configLanguage);
-      }
-      if (setTranscodeMode && (configTranscodeMode === 'auto' || configTranscodeMode === 'copy' || configTranscodeMode === 'full')) {
-        setTranscodeMode(configTranscodeMode);
-      }
+        setActiveAccent(configAccent || '#FFFFFF');
+        setActiveTheme(configTheme || 'space-black');
+        setGlassIntensity(configGlass || 'medium');
+        setNeonGlowEnabled(configGlow !== null ? configGlow === 'true' || configGlow === true : true);
+        setCardLayoutSize(configCardSize || 'medium');
+        if (configLanguage === 'en' || configLanguage === 'tr') {
+          setLanguageState(configLanguage);
+        }
+        if (setTranscodeMode && (configTranscodeMode === 'auto' || configTranscodeMode === 'copy' || configTranscodeMode === 'full')) {
+          setTranscodeMode(configTranscodeMode);
+        }
 
-      // Legacy profile migration
-      const hasOldPlaylists = localStorage.getItem('cinema_playlists');
-      if (loadedProfiles.length === 0 && hasOldPlaylists) {
-        const defaultProfile: Profile = {
-          id: 'main_profile',
-          name: 'Arda',
-          avatarUrl: DEFAULT_AVATARS[0]
-        };
-        loadedProfiles = [defaultProfile];
+        // Legacy profile migration
+        const hasOldPlaylists = localStorage.getItem('cinema_playlists');
+        if (loadedProfiles.length === 0 && hasOldPlaylists) {
+          const defaultProfile: Profile = {
+            id: 'main_profile',
+            name: 'Arda',
+            avatarUrl: DEFAULT_AVATARS[0]
+          };
+          loadedProfiles = [defaultProfile];
 
-        await saveAppSetting('cinema_profiles', loadedProfiles);
+          await saveAppSetting('cinema_profiles', loadedProfiles).catch(() => {});
 
-        const keysToMigrate = [
-          'favorite_categories', 'custom_category_order', 'hidden_categories',
-          'favorite_series_categories', 'custom_series_category_order', 'hidden_series_categories',
-          'favorite_movie_categories', 'custom_movie_category_order', 'hidden_movie_categories',
-          'cinema_global_favorites', 'cinema_recently_watched', 'cinema_playlists', 'cinema_active_playlist'
-        ];
+          const keysToMigrate = [
+            'favorite_categories', 'custom_category_order', 'hidden_categories',
+            'favorite_series_categories', 'custom_series_category_order', 'hidden_series_categories',
+            'favorite_movie_categories', 'custom_movie_category_order', 'hidden_movie_categories',
+            'cinema_global_favorites', 'cinema_recently_watched', 'cinema_playlists', 'cinema_active_playlist'
+          ];
 
-        for (const k of keysToMigrate) {
-          const val = localStorage.getItem(k);
-          if (val !== null) {
-            const finalKey = `profile_main_profile_${k}`;
-            if (window.electronAPI && window.electronAPI.saveConfig) {
-              try {
-                const parsedVal = JSON.parse(val);
-                await window.electronAPI.saveConfig(finalKey, parsedVal);
-              } catch {
-                await window.electronAPI.saveConfig(finalKey, val);
+          for (const k of keysToMigrate) {
+            const val = localStorage.getItem(k);
+            if (val !== null) {
+              const finalKey = `profile_main_profile_${k}`;
+              if (window.electronAPI && window.electronAPI.saveConfig) {
+                try {
+                  const parsedVal = JSON.parse(val);
+                  await window.electronAPI.saveConfig(finalKey, parsedVal);
+                } catch {
+                  await window.electronAPI.saveConfig(finalKey, val);
+                }
               }
+              localStorage.setItem(finalKey, val);
+              localStorage.removeItem(k);
             }
-            localStorage.setItem(finalKey, val);
-            localStorage.removeItem(k);
           }
+
+          await saveAppSetting('cinema_active_profile_id', 'main_profile').catch(() => {});
         }
 
-        await saveAppSetting('cinema_active_profile_id', 'main_profile');
-      }
+        setProfiles(loadedProfiles);
 
-      setProfiles(loadedProfiles);
-      await ensureMinDelay(1800);
-
-      // Stage 3: Preheat/warm TMDB cache
-      setSplashStatus(getTranslation('splash.loadingContents', language));
-      if (shouldWarmTmdbDuringBoot()) {
-        try {
-          await tmdbCache.loadAllToMemory();
-        } catch (err) {
-          console.error("Failed to preload TMDB cache during boot:", err);
+        // Stage 4: Load active profile data
+        setSplashStatus(getTranslation('splash.loadingProfiles', language));
+        const activeProfId = await loadAppSetting('cinema_active_profile_id').catch(() => null);
+        if (activeProfId && loadedProfiles.some(p => p.id === activeProfId)) {
+          try {
+            await loadProfileData(activeProfId);
+          } catch (error) {
+            console.error("Error loading active profile during boot:", error);
+            showToast(getTranslation('profiles.loadingProfilesError', language));
+          }
+        } else {
+          setActiveProfileId(null);
         }
-      }
-      await ensureMinDelay(2600);
 
-      // Stage 4: Load active profile data
-      setSplashStatus(getTranslation('splash.loadingProfiles', language));
-      const activeProfId = await loadAppSetting('cinema_active_profile_id');
-      if (activeProfId && loadedProfiles.some(p => p.id === activeProfId)) {
-        try {
-          await loadProfileData(activeProfId);
-        } catch (error) {
-          console.error("Error loading active profile during boot:", error);
-          showToast(getTranslation('profiles.loadingProfilesError', language));
-        }
-      } else {
-        setActiveProfileId(null);
+        setSplashStatus(getTranslation('splash.preparingExperience', language));
+        await holdBootMessage(80);
+        setSplashStatus(getTranslation('splash.openingApp', language));
+        await holdBootMessage(200);
+      } catch (err) {
+        console.error("Boot configuration error:", err);
+      } finally {
+        setLoaded(true);
       }
-
-      await ensureMinDelay(3200);
-      setLoaded(true);
     };
 
     loadAppConfig();
-    return () => {
-      bootTimers.forEach(clearTimeout);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

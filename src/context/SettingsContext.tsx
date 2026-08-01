@@ -12,6 +12,8 @@ export interface SettingsContextType {
   setDefaultPlayer: (player: string) => void;
   transcodeMode: "auto" | "copy" | "full";
   setTranscodeMode: (mode: "auto" | "copy" | "full") => void;
+  iptvUpdateMode: "prompt" | "silent" | "manual";
+  setIptvUpdateMode: (mode: "prompt" | "silent" | "manual") => void;
 
   tmdbApiKey: string;
   setTmdbApiKey: (key: string) => void;
@@ -27,6 +29,9 @@ export interface SettingsContextType {
   setCardLayoutSize: (size: string) => void;
   playlists: SavedPlaylist[];
   activePlaylistId: string;
+  pendingPlaylistUpdate: { playlistId: string; playlistName: string; channelCount: number; items: PlaylistItem[] } | null;
+  applyPendingUpdate: () => void;
+  dismissPendingUpdate: () => void;
   showAddPlaylistForm: boolean;
   setShowAddPlaylistForm: (show: boolean) => void;
   playlistMode: "m3u" | "xtream";
@@ -66,14 +71,14 @@ export interface SettingsContextType {
   onShowToast: (message: string) => void;
   onClearRecentlyWatched: () => void;
   onClearFavorites: () => void;
-  onRefreshPlaylist: (playlist: SavedPlaylist) => void;
+  onRefreshPlaylist: (playlist: SavedPlaylist) => Promise<void>;
   onUpdatePlaylistAutoUpdateInterval: (
     id: string,
     hours: 6 | 12 | 24 | 168,
   ) => void;
 }
 
-export const SettingsContext = createContext<SettingsContextType | null>(null);
+const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export const useSettings = () => {
   const context = useContext(SettingsContext);
@@ -88,10 +93,10 @@ interface SettingsProviderProps {
   children: React.ReactNode;
 }
 
-export const SettingsProvider = ({
+export const SettingsProvider: React.FC<SettingsProviderProps> = ({
   value,
   children,
-}: SettingsProviderProps) => {
+}) => {
   return (
     <SettingsContext.Provider value={value}>
       {children}

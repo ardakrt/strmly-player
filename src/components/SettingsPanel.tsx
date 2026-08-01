@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
   Check,
+  ChevronDown,
   Database,
   Eye,
   EyeOff,
@@ -10,22 +11,16 @@ import {
   Palette,
   Plus,
   RefreshCw,
-  Trash2,
   UploadCloud,
   X,
   Search,
-  Tv,
-  Film,
-  Video,
   Globe,
   FileText,
-  Tag,
-  Cpu,
-  Code,
   ExternalLink,
   Download
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import { HoldToConfirmButton } from './HoldToConfirmButton';
 import {
   AUTOPLAY_NEXT_KEY,
   BUFFER_ENABLED_KEY,
@@ -38,7 +33,7 @@ import { prepareSettingsImport } from '../utils/settingsBackup';
 import type { SavedPlaylist } from '../types';
 import { useDownloads } from '../hooks/useDownloads';
 
-import { ACCENT_COLORS, CustomSelect, dangerButton, EMPTY_ARRAY, EmptyState, fieldStyle, labelStyle, PageHeader, primaryButton, secondaryButton, SettingRow, StatBox, THEMES, UPDATE_OPTIONS } from './SettingsControls';
+import { CustomSelect, dangerButton, EMPTY_ARRAY, EmptyState, fieldStyle, labelStyle, PageHeader, primaryButton, secondaryButton, SettingRow, StatBox, UPDATE_OPTIONS } from './SettingsControls';
 
 const handleInstallUpdateHelper = () => {
   if (window.electronAPI && window.electronAPI.installUpdate) {
@@ -59,10 +54,8 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     language, setLanguage, t,
     activeSettingsTab, setActiveSettingsTab,
     defaultPlayer, setDefaultPlayer,
-    activeTheme, setActiveTheme,
-    activeAccent, setActiveAccent,
-    glassIntensity, setGlassIntensity,
-    neonGlowEnabled, setNeonGlowEnabled,
+    iptvUpdateMode, setIptvUpdateMode,
+    activeAccent,
     cardLayoutSize, setCardLayoutSize,
     playlists, activePlaylistId,
     showAddPlaylistForm, setShowAddPlaylistForm,
@@ -97,6 +90,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
   const [categorySearch, setCategorySearch] = useState('');
   const [categorySubTab, setCategorySubTab] = useState<'all' | 'live' | 'series' | 'movie'>('all');
+  const [refreshingPlaylistId, setRefreshingPlaylistId] = useState<string | null>(null);
 
   const [updateState, setUpdateState] = useState<{
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'not-available' | 'downloaded' | 'error';
@@ -202,25 +196,6 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     }
   }, [language]);
 
-  const handleDownloadUpdate = async () => {
-    if (window.electronAPI && window.electronAPI.downloadUpdate) {
-      setUpdateState(prev => ({
-        ...prev,
-        status: 'downloading',
-        message: language === 'tr' ? 'Güncelleme indiriliyor...' : 'Downloading update...',
-        progress: 0
-      }));
-      const res = await window.electronAPI.downloadUpdate();
-      if (res && !res.success) {
-        setUpdateState({ status: 'error', message: language === 'tr' ? `Güncelleme indirilemedi: ${res.error}` : `Update download failed: ${res.error}` });
-      }
-    } else {
-      setUpdateState({ status: 'error', message: language === 'tr' ? 'Electron API bulunamadı.' : 'Electron API not found.' });
-    }
-  };
-
-
-
   const [autoPlayNext, setAutoPlayNext] = useState(() => getPlaybackSettings().autoPlayNext);
 
   const [bufferEnabled, setBufferEnabled] = useState(() => getPlaybackSettings().bufferEnabled);
@@ -239,11 +214,6 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
   const [uiScale, setUiScale] = useState(() => {
     try { return localStorage.getItem('strmly_ui_scale') || 'medium'; } catch { return 'medium'; }
   });
-  const [backgroundGrain, setBackgroundGrain] = useState(() => {
-    try { return localStorage.getItem('strmly_background_grain') === 'true'; } catch { return false; }
-  });
-
-
   const changeUiScale = (scale: 'small' | 'medium' | 'large') => {
     setUiScale(scale);
     try {
@@ -260,41 +230,22 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     }
   };
 
-  const toggleGrainOverlay = (enabled: boolean) => {
-    setBackgroundGrain(enabled);
-    try {
-      localStorage.setItem('strmly_background_grain', String(enabled));
-      const existing = document.getElementById('strmly-grain-overlay');
-      if (enabled) {
-        if (!existing) {
-          const el = document.createElement('div');
-          el.id = 'strmly-grain-overlay';
-          el.className = 'grain-overlay';
-          document.body.appendChild(el);
-        }
-      } else {
-        if (existing) {
-          existing.remove();
-        }
-      }
-    } catch (e) {
-      console.warn('localStorage grain save error:', e);
-    }
-  };
-
   const tabs = [
-    { id: 'players', label: t('settings.tabs.players'), icon: Activity },
     { id: 'playlists', label: t('settings.tabs.playlists'), icon: Database },
     { id: 'categories', label: t('settings.tabs.categories'), icon: EyeOff },
     { id: 'downloads', label: language === 'tr' ? 'Kaydedilenler' : 'Saved', icon: Download },
     { id: 'appearance', label: t('settings.tabs.appearance'), icon: Palette },
-    { id: 'playback', label: t('settings.tabs.playback'), icon: Check },
-    { id: 'network', label: t('settings.tabs.network'), icon: UploadCloud },
+    { id: 'playback', label: language === 'tr' ? 'Oynatma ve Bağlantı' : 'Playback & Connection', icon: Check },
     { id: 'data', label: t('settings.tabs.data'), icon: HardDrive },
     { id: 'about', label: t('settings.tabs.about'), icon: Info }
   ];
 
-  const activeTab = tabs.find(tab => tab.id === activeSettingsTab) || tabs[0];
+  const resolvedSettingsTab = activeSettingsTab === 'network'
+    ? 'playback'
+    : activeSettingsTab === 'players'
+      ? 'appearance'
+      : activeSettingsTab;
+  const activeTab = tabs.find(tab => tab.id === resolvedSettingsTab) || tabs[0];
 
   useEffect(() => {
     if (activeTab.id !== 'about' || hasAutoCheckedUpdatesRef.current) return;
@@ -303,6 +254,17 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
   }, [activeTab.id, handleCheckUpdates]);
 
   const categoryTotal = safeHiddenCategories.length + safeHiddenSeriesCategories.length + safeHiddenMovieCategories.length;
+  const categoryTabs: Array<{
+    id: 'all' | 'live' | 'series' | 'movie';
+    label: string;
+    count: number;
+  }> = [
+    { id: 'all', label: language === 'tr' ? 'Tümü' : 'All', count: categoryTotal },
+    { id: 'live', label: language === 'tr' ? 'Canlı TV' : 'Live TV', count: safeHiddenCategories.length },
+    { id: 'series', label: language === 'tr' ? 'Diziler' : 'Series', count: safeHiddenSeriesCategories.length },
+    { id: 'movie', label: language === 'tr' ? 'Filmler' : 'Movies', count: safeHiddenMovieCategories.length },
+  ];
+  const activeHiddenCount = categoryTabs.find(tab => tab.id === categorySubTab)?.count ?? 0;
 
 
 
@@ -376,8 +338,22 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
     reader.readAsText(file);
   };
 
+  const handleManualPlaylistRefresh = async (playlist: SavedPlaylist) => {
+    if (refreshingPlaylistId || isParsing) return;
+    setRefreshingPlaylistId(playlist.id);
+    try {
+      await onRefreshPlaylist(playlist);
+    } finally {
+      setRefreshingPlaylistId(null);
+    }
+  };
+
   const renderPlaylistCard = (playlist: SavedPlaylist) => {
     const isActive = playlist.id === activePlaylistId;
+    const isRefreshing = refreshingPlaylistId === playlist.id;
+    const canAutoUpdate = Boolean(
+      playlist.url || (playlist.xtreamUrl && playlist.xtreamUser && playlist.xtreamPass),
+    );
     return (
       <div
         key={playlist.id}
@@ -401,27 +377,32 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               {playlist.channelCount || 0} {language === 'tr' ? 'içerik' : 'items'} • {playlist.groupCount || playlist.groups?.length || 0} {language === 'tr' ? 'grup' : 'groups'}
             </div>
           </button>
-          <div className="flex shrink-0 gap-1.5">
-            <button type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.02] text-neutral-300 hover:bg-white/[0.08] hover:text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-              disabled={isParsing}
-              onClick={() => onRefreshPlaylist(playlist)}
-              title={language === 'tr' ? 'Listeyi Güncelle' : 'Update Playlist'}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-white/8 bg-white/[0.02] px-3 text-[11px] font-semibold text-neutral-300 outline-none transition-colors duration-150 hover:bg-white/[0.08] hover:text-white active:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+              disabled={isParsing || refreshingPlaylistId !== null}
+              aria-busy={isRefreshing}
+              onClick={() => void handleManualPlaylistRefresh(playlist)}
             >
-              <RefreshCw size={12} className={isParsing && isActive ? 'animate-spin text-[var(--accent-color)]' : ''} />
+              <RefreshCw size={13} aria-hidden="true" className={isRefreshing ? 'animate-spin text-[var(--accent-color)]' : ''} />
+              <span>{isRefreshing
+                ? (language === 'tr' ? 'Kontrol ediliyor' : 'Checking')
+                : (language === 'tr' ? 'Güncellemeyi kontrol et' : 'Check for updates')}</span>
             </button>
-            <button type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/15 bg-red-950/15 text-red-300 hover:bg-red-900/20 transition-all active:scale-95 cursor-pointer"
-              onClick={() => onDeletePlaylist(playlist.id)}
-              title={language === 'tr' ? 'Listeyi Sil' : 'Delete Playlist'}
-            >
-              <Trash2 size={12} />
-            </button>
+            <HoldToConfirmButton
+              onConfirm={() => onDeletePlaylist(playlist.id)}
+              label={language === 'tr' ? 'Sil' : 'Delete'}
+              confirmedLabel={language === 'tr' ? 'Silindi' : 'Deleted'}
+              variant="danger"
+              ariaLabel={language === 'tr' ? 'Listeyi Sil' : 'Delete Playlist'}
+            />
           </div>
         </div>
 
         <div className="mt-4 border-t border-white/5 pt-3">
           <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Otomatik Güncelleme' : 'Auto Update'}</div>
+          {canAutoUpdate ? (
           <div className="grid grid-cols-4 gap-1.5">
             {UPDATE_OPTIONS.map(option => (
               <button type="button"
@@ -440,6 +421,13 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
               </button>
             ))}
           </div>
+          ) : (
+            <p className="text-[11px] leading-relaxed text-neutral-500">
+              {language === 'tr'
+                ? 'Yerel dosyalar yalnızca yeniden içe aktarılarak güncellenebilir.'
+                : 'Local files can only be updated by importing them again.'}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -447,70 +435,54 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
   const renderHiddenGroup = (
     title: string,
-    icon: React.ComponentType<{ size?: number; className?: string }>,
     groups: string[],
-    restore: (name: string) => void,
-    colorClass: string
+    restore: (name: string) => void
   ) => {
     const q = categorySearch.trim().toLocaleLowerCase('tr-TR');
-    const filtered = q 
+    const filtered = q
       ? groups.filter(g => g.toLocaleLowerCase('tr-TR').includes(q))
       : groups;
 
     return (
-      <div className="rounded-2xl border border-white/5 bg-neutral-900/10 backdrop-blur-md overflow-hidden transition-all duration-300 shadow-xl">
-        <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.005] px-5 py-4 select-none">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl bg-white/[0.03] border border-white/5 ${colorClass} flex items-center justify-center`}>
-              {React.createElement(icon, { size: 16 })}
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white tracking-wide">{title}</div>
-              <div className="text-[10px] text-neutral-500 mt-0.5">{groups.length} kategori gizli</div>
-            </div>
-          </div>
-          {q && (
-            <div className="text-[10px] px-2.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-neutral-400">
-              {filtered.length} {language === 'tr' ? 'eşleşti' : 'matched'}
-            </div>
-          )}
+      <section className="border-b border-white/[0.07] last:border-b-0" aria-label={title}>
+        <div className="flex items-baseline justify-between gap-4 py-4">
+          <h3 className="text-xs font-semibold text-white">{title}</h3>
+          <span className="text-[10px] tabular-nums text-white/45">
+            {q ? `${filtered.length} / ${groups.length}` : groups.length}
+          </span>
         </div>
-        <div className="p-5">
+        <div>
           {groups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center opacity-65">
-              <Eye className="text-neutral-500 mb-2.5" size={22} />
-              <div className="text-xs font-bold text-neutral-300">{language === 'tr' ? 'Gizli kategori bulunmuyor' : 'No hidden categories'}</div>
-              <div className="text-[10px] text-neutral-500 mt-0.5">{language === 'tr' ? 'Bu bölümdeki tüm kategoriler şu an görünür durumda.' : 'All categories in this section are currently visible.'}</div>
+            <div className="py-6 text-sm text-white/45">
+              {language === 'tr' ? 'Bu bölümde gizli kategori yok.' : 'There are no hidden categories in this section.'}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-xs text-neutral-500 italic text-center py-6">{language === 'tr' ? 'Arama kriterinize uygun gizli kategori bulunamadı.' : 'No hidden categories found matching your search criteria.'}</div>
+            <div className="py-6 text-sm text-white/45">
+              {language === 'tr' ? 'Aramanızla eşleşen kategori bulunamadı.' : 'No categories match your search.'}
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto pr-1 hide-scrollbar">
+            <div className="divide-y divide-white/[0.055]">
               {filtered.map(group => (
-                <div 
+                <div
                   key={`${title}-${group}`}
-                  className="flex items-center justify-between p-3.5 rounded-xl border border-white/5 bg-white/[0.015] hover:bg-white/[0.035] hover:border-white/10 transition-all duration-200 shadow-md group/card"
+                  className="group flex min-h-14 items-center justify-between gap-4 py-2.5"
                 >
-                  <div className="flex items-center gap-3 min-w-0 pr-2">
-                    <EyeOff size={14} className="text-neutral-500 group-hover/card:text-neutral-300 transition-colors shrink-0" />
-                    <span className="text-xs font-semibold text-neutral-300 group-hover/card:text-white transition-colors truncate" title={group}>
-                      {group}
-                    </span>
-                  </div>
-                  <button type="button"
+                  <span className="min-w-0 truncate text-sm text-white/72 transition-colors group-hover:text-white" title={group}>{group}</span>
+                  <button
+                    type="button"
                     onClick={() => restore(group)}
-                    className="inline-flex h-7.5 items-center justify-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400 hover:text-white hover:border-[var(--accent-color)]/30 hover:bg-[var(--accent-color)]/10 transition-all cursor-pointer shrink-0"
-                    title={language === 'tr' ? 'Kategoriyi Göster' : 'Show Category'}
+                    className="inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-xs font-semibold text-white/60 outline-none transition-colors duration-150 hover:bg-white/[0.05] hover:text-white active:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+                    aria-label={`${group} — ${language === 'tr' ? 'göster' : 'show'}`}
                   >
-                    <Eye size={11} className="shrink-0" />
-                    <span>{language === 'tr' ? 'Göster' : 'Show'}</span>
+                    <Eye size={13} aria-hidden="true" />
+                    {language === 'tr' ? 'Göster' : 'Show'}
                   </button>
                 </div>
               ))}
             </div>
           )}
         </div>
-      </div>
+      </section>
     );
   };
 
@@ -559,47 +531,6 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
           })}
         </aside>
         <section className="p-6 md:p-8 overflow-y-auto max-h-[72vh] bg-black/5">
-          {activeTab.id === 'players' && (
-            <>
-              <PageHeader 
-                title={language === 'tr' ? 'Genel Ayarlar' : 'General Settings'} 
-                description={language === 'tr' ? 'Varsayılan oynatma motorunu, dil ve medya API ayarlarını buradan yönetin.' : 'Manage default player, language, and media API settings here.'} 
-              />
-              <div>
-                <SettingRow title={t('settings.appearance.language')} description={t('settings.appearance.languageDesc')}>
-                  <CustomSelect
-                    value={language}
-                    onChange={(val) => {
-                      setLanguage(val as any);
-                      onShowToast(val === 'tr' ? 'Dil Türkçe olarak ayarlandı.' : 'Language set to English.');
-                    }}
-                    options={[
-                      { value: 'tr', label: 'Türkçe' },
-                      { value: 'en', label: 'English' }
-                    ]}
-                  />
-                </SettingRow>
-
-                <SettingRow title={t('settings.players.title')} description={t('settings.players.desc')}>
-                  <CustomSelect
-                    value={defaultPlayer}
-                    onChange={(val) => {
-                      setDefaultPlayer(val);
-                      onSaveSetting('cinema_default_player', val);
-                      onShowToast(`${t('settings.players.saveSuccess')} (${val.toUpperCase()})`);
-                    }}
-                    options={[
-                      { value: 'internal', label: t('settings.players.internal') },
-                      { value: 'vlc', label: `VLC Player (${language === 'tr' ? 'Harici' : 'External'})` },
-                      { value: 'mpv', label: `MPV Player (${language === 'tr' ? 'Harici' : 'External'})` }
-                    ]}
-                  />
-                </SettingRow>
-
- 
-              </div>
-            </>
-          )}
 
           {activeTab.id === 'downloads' && (
             <>
@@ -789,7 +720,7 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="md:col-span-2">
                       <div className={labelStyle}>{t('settings.playlists.playlistName')}</div>
-                      <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={playlistFormName} onChange={(e) => setPlaylistFormName(e.target.value)} placeholder={language === 'tr' ? 'Örn: Ev Sineması, Spor Listem' : 'e.g., Home Cinema, My Playlist'} />
+                      <input className={`${fieldStyle} mt-1.5 w-full md:w-full`} value={playlistFormName} onChange={(e) => setPlaylistFormName(e.target.value)} placeholder={t('settings.playlists.playlistNamePlaceholder')} />
                     </label>
 
                     {playlistMode === 'm3u' ? (
@@ -845,180 +776,80 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
           {activeTab.id === 'categories' && (
             <>
-              <PageHeader title={language === 'tr' ? "Gizli Kategoriler" : "Hidden Categories"} description={language === 'tr' ? "Daha önce ana ekranda veya listelerde gizlediğiniz tüm kategorileri buradan geri getirebilirsiniz." : "You can restore all categories that you previously hid on the main screen or lists from here."} />
-              
-              {/* Kategori İstatistik Kartları */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <button type="button"
-                  onClick={() => setCategorySubTab(categorySubTab === 'live' ? 'all' : 'live')}
-                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
-                    categorySubTab === 'live'
-                      ? 'border-indigo-500/30 bg-indigo-500/5 shadow-[0_8px_30px_rgba(99,102,241,0.1)]'
-                      : 'border-white/5 bg-white/[0.01] hover:border-indigo-500/20 hover:bg-indigo-500/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className={`p-2.5 rounded-xl border transition-all ${
-                      categorySubTab === 'live' ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400' : 'bg-white/[0.03] border-white/5 text-neutral-400 group-hover:text-indigo-400'
-                    }`}>
-                      <Tv size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-400/10 px-2.5 py-0.5 rounded-full select-none">{language === 'tr' ? 'Canlı TV' : 'Live TV'}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="block text-2xl font-black tracking-tight text-white leading-none">
-                      {safeHiddenCategories.length}
-                    </span>
-                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
-                  </div>
-                  <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-indigo-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
-                </button>
+              <PageHeader
+                title={language === 'tr' ? 'Gizli Kategoriler' : 'Hidden Categories'}
+                description={language === 'tr'
+                  ? 'Daha önce ana ekranda veya listelerde gizlediğiniz kategorileri buradan geri getirebilirsiniz.'
+                  : 'Restore categories that you previously hid on the home screen or in lists.'}
+              />
 
-                <button type="button"
-                  onClick={() => setCategorySubTab(categorySubTab === 'series' ? 'all' : 'series')}
-                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
-                    categorySubTab === 'series'
-                      ? 'border-pink-500/30 bg-pink-500/5 shadow-[0_8px_30px_rgba(244,63,94,0.1)]'
-                      : 'border-white/5 bg-white/[0.01] hover:border-pink-500/20 hover:bg-pink-500/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className={`p-2.5 rounded-xl border transition-all ${
-                      categorySubTab === 'series' ? 'bg-pink-500/20 border-pink-500/30 text-pink-400' : 'bg-white/[0.03] border-white/5 text-neutral-400 group-hover:text-pink-400'
-                    }`}>
-                      <Video size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-pink-400 bg-pink-400/10 px-2.5 py-0.5 rounded-full select-none">{language === 'tr' ? 'Dizi' : 'Series'}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="block text-2xl font-black tracking-tight text-white leading-none">
-                      {safeHiddenSeriesCategories.length}
-                    </span>
-                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
-                  </div>
-                  <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-pink-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
-                </button>
-
-                <button type="button"
-                  onClick={() => setCategorySubTab(categorySubTab === 'movie' ? 'all' : 'movie')}
-                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-150 hover:translate-y-[-2px] cursor-pointer ${
-                    categorySubTab === 'movie'
-                      ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_8px_30px_rgba(245,158,11,0.1)]'
-                      : 'border-white/5 bg-white/[0.01] hover:border-amber-500/20 hover:bg-amber-500/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className={`p-2.5 rounded-xl border transition-all ${
-                      categorySubTab === 'movie' ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'bg-white/[0.03] border-white/5 text-neutral-400 group-hover:text-amber-400'
-                    }`}>
-                      <Film size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-0.5 rounded-full select-none">{language === 'tr' ? 'Film' : 'Movie'}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="block text-2xl font-black tracking-tight text-white leading-none">
-                      {safeHiddenMovieCategories.length}
-                    </span>
-                    <span className="block mt-1 text-[11px] font-medium text-neutral-400">{language === 'tr' ? 'Gizli Kategori' : 'Hidden Category'}</span>
-                  </div>
-                  <div className="absolute -bottom-6 -right-6 w-16 h-16 rounded-full bg-amber-500/10 opacity-30 blur-xl group-hover:scale-150 transition-transform duration-500" />
-                </button>
-              </div>
-
-              {/* Filtre ve Arama Araç Çubuğu */}
-              <div className="mb-6 flex flex-col lg:flex-row gap-4 items-center justify-between bg-white/[0.01] border border-white/5 p-4 rounded-2xl select-none">
-                <div className="flex items-center gap-1.5 w-full lg:w-auto overflow-x-auto hide-scrollbar shrink-0">
-                  <button type="button"
-                    onClick={() => setCategorySubTab('all')}
-                    className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                      categorySubTab === 'all'
-                        ? 'bg-white/[0.06] text-[var(--accent-color)] border border-white/10 shadow-sm font-black'
-                        : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
-                    }`}
-                  >
-                    {language === 'tr' ? 'Tümü' : 'All'} ({categoryTotal})
-                  </button>
-                  <button type="button"
-                    onClick={() => setCategorySubTab('live')}
-                    className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                      categorySubTab === 'live'
-                        ? 'bg-white/[0.06] text-[var(--accent-color)] border border-white/10 shadow-sm font-black'
-                        : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
-                    }`}
-                  >
-                    {language === 'tr' ? 'Canlı TV' : 'Live TV'} ({safeHiddenCategories.length})
-                  </button>
-                  <button type="button"
-                    onClick={() => setCategorySubTab('series')}
-                    className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                      categorySubTab === 'series'
-                        ? 'bg-white/[0.06] text-[var(--accent-color)] border border-white/10 shadow-sm font-black'
-                        : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
-                    }`}
-                  >
-                    {language === 'tr' ? 'Diziler' : 'Series'} ({safeHiddenSeriesCategories.length})
-                  </button>
-                  <button type="button"
-                    onClick={() => setCategorySubTab('movie')}
-                    className={`h-9 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                      categorySubTab === 'movie'
-                        ? 'bg-white/[0.06] text-[var(--accent-color)] border border-white/10 shadow-sm font-black'
-                        : 'text-neutral-400 hover:text-white bg-transparent border border-transparent'
-                    }`}
-                  >
-                    {language === 'tr' ? 'Filmler' : 'Movies'} ({safeHiddenMovieCategories.length})
-                  </button>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3 items-center w-full lg:w-auto">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" size={14} />
-                    <input
-                      type="text"
-                      value={categorySearch}
-                      onChange={(e) => setCategorySearch(e.target.value)}
-                      placeholder={language === 'tr' ? 'Gizli kategori ara...' : 'Search hidden categories...'}
-                      className="w-full h-9 pl-9.5 pr-4 rounded-xl border border-white/5 bg-black/25 text-xs font-semibold text-white placeholder-neutral-500 focus:outline-none focus:border-white/12 focus:bg-black/35 transition-all"
-                    />
-                    {categorySearch && (
-                      <button type="button" 
-                        onClick={() => setCategorySearch('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
-                      >
-                        <X size={13} />
-                      </button>
-                    )}
+              <div className="mb-7 border-b border-white/[0.07]">
+                <div className="flex flex-col gap-4 pb-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div className="flex flex-wrap items-center gap-x-7" role="tablist" aria-label={language === 'tr' ? 'Gizli kategori türleri' : 'Hidden category types'}>
+                    {categoryTabs.map((tab) => {
+                      const isActive = categorySubTab === tab.id;
+                      return (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          key={tab.id}
+                          onClick={() => setCategorySubTab(tab.id)}
+                          className={`relative flex h-11 shrink-0 items-center gap-2 whitespace-nowrap text-xs font-semibold outline-none transition-colors duration-150 active:text-white disabled:cursor-not-allowed disabled:opacity-45 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)] ${isActive ? 'text-white' : 'text-white/60 hover:text-white/82'}`}
+                        >
+                          <span>{tab.label}</span>
+                          <span className={`text-[10px] tabular-nums ${isActive ? 'text-white/60' : 'text-white/50'}`}>{tab.count}</span>
+                          {isActive && <span className="absolute inset-x-0 bottom-[-17px] h-[2px] bg-[var(--accent-color)]" aria-hidden="true" />}
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  <button type="button"
-                    className={`${secondaryButton} h-9 w-full sm:w-auto flex items-center justify-center gap-2`}
-                    onClick={() => {
-                      if (categorySubTab === 'all' || categorySubTab === 'live') onResetHiddenCategories();
-                      if (categorySubTab === 'all' || categorySubTab === 'series') onResetHiddenSeriesCategories();
-                      if (categorySubTab === 'all' || categorySubTab === 'movie') onResetHiddenMovieCategories();
-                      setCategorySearch('');
-                    }}
-                    disabled={
-                      (categorySubTab === 'all' && categoryTotal === 0) ||
-                      (categorySubTab === 'live' && safeHiddenCategories.length === 0) ||
-                      (categorySubTab === 'series' && safeHiddenSeriesCategories.length === 0) ||
-                      (categorySubTab === 'movie' && safeHiddenMovieCategories.length === 0)
-                    }
-                  >
-                    <Eye size={13} /> {language === 'tr' ? 'Seçilileri Göster' : 'Show Selected'}
-                  </button>
+                  <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
+                    <label className="relative block w-full sm:w-64">
+                      <span className="sr-only">{language === 'tr' ? 'Gizli kategori ara' : 'Search hidden categories'}</span>
+                      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45" size={14} aria-hidden="true" />
+                      <input
+                        type="search"
+                        value={categorySearch}
+                        onChange={(event) => setCategorySearch(event.target.value)}
+                        placeholder={language === 'tr' ? 'Kategori ara' : 'Search categories'}
+                        className="h-11 w-full rounded-lg border border-white/[0.08] bg-white/[0.025] pl-9 pr-10 text-sm text-white outline-2 outline-transparent outline-offset-1 transition-colors duration-150 placeholder:text-white/45 hover:bg-white/[0.04] focus-visible:border-white/15 focus-visible:outline-[var(--accent-color)]"
+                      />
+                      {categorySearch && (
+                        <button type="button" onClick={() => setCategorySearch('')} className="absolute right-0 top-0 flex h-11 w-10 items-center justify-center rounded-md text-white/50 outline-none transition-colors duration-150 hover:text-white active:text-white/75 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-color)]" aria-label={language === 'tr' ? 'Aramayı temizle' : 'Clear search'}>
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                    </label>
+
+                    <button
+                      type="button"
+                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-white/[0.09] px-4 text-xs font-semibold text-white/72 outline-none transition-colors duration-150 hover:bg-white/[0.05] hover:text-white active:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+                      onClick={() => {
+                        if (categorySubTab === 'all' || categorySubTab === 'live') onResetHiddenCategories();
+                        if (categorySubTab === 'all' || categorySubTab === 'series') onResetHiddenSeriesCategories();
+                        if (categorySubTab === 'all' || categorySubTab === 'movie') onResetHiddenMovieCategories();
+                        setCategorySearch('');
+                      }}
+                      disabled={activeHiddenCount === 0}
+                    >
+                      <Eye size={13} aria-hidden="true" />
+                      {language === 'tr' ? 'Tümünü göster' : 'Show all'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid gap-5">
-                {(categorySubTab === 'all' || categorySubTab === 'live') && 
-                  renderHiddenGroup(language === 'tr' ? 'Canlı TV Kategorileri' : 'Live TV Categories', Tv, safeHiddenCategories, onRestoreCategory, 'text-indigo-400')
+              <div>
+                {(categorySubTab === 'all' || categorySubTab === 'live') &&
+                  renderHiddenGroup(language === 'tr' ? 'Canlı TV' : 'Live TV', safeHiddenCategories, onRestoreCategory)
                 }
-                {(categorySubTab === 'all' || categorySubTab === 'series') && 
-                  renderHiddenGroup(language === 'tr' ? 'Dizi Kategorileri' : 'Series Categories', Video, safeHiddenSeriesCategories, onRestoreSeriesCategory, 'text-pink-400')
+                {(categorySubTab === 'all' || categorySubTab === 'series') &&
+                  renderHiddenGroup(language === 'tr' ? 'Diziler' : 'Series', safeHiddenSeriesCategories, onRestoreSeriesCategory)
                 }
-                {(categorySubTab === 'all' || categorySubTab === 'movie') && 
-                  renderHiddenGroup(language === 'tr' ? 'Film Kategorileri' : 'Movie Categories', Film, safeHiddenMovieCategories, onRestoreMovieCategory, 'text-amber-400')
+                {(categorySubTab === 'all' || categorySubTab === 'movie') &&
+                  renderHiddenGroup(language === 'tr' ? 'Filmler' : 'Movies', safeHiddenMovieCategories, onRestoreMovieCategory)
                 }
               </div>
             </>
@@ -1026,178 +857,29 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
           {activeTab.id === 'appearance' && (
             <>
-              <PageHeader title={t('settings.appearance.title')} description={t('settings.appearance.desc')} />
+              <PageHeader
+                title={language === 'tr' ? 'Arayüz' : 'Interface'}
+                description={language === 'tr'
+                  ? 'Dil, kart boyutu ve genel arayüz ölçeğini yönetin.'
+                  : 'Manage language, card size, and the overall interface scale.'}
+              />
               <div>
-                <SettingRow title={t('settings.appearance.theme')} description={t('settings.appearance.themeDesc')} vertical={true}>
-                  <div className="grid max-w-4xl gap-4 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
-                    {THEMES.map(theme => {
-                      const isActive = activeTheme === theme.id;
-                      
-                      let bgGradientClass = '';
-                      let sidebarBgClass = '';
-                      let glowClass = '';
-
-                      if (theme.id === 'space-black') {
-                        bgGradientClass = 'from-black via-[#050508] to-[#12121c]';
-                        sidebarBgClass = 'bg-[#07070a]/70';
-                        glowClass = 'bg-white';
-                      } else if (theme.id === 'deep-space') {
-                        bgGradientClass = 'from-black via-[#03030d] to-[#0f113a]';
-                        sidebarBgClass = 'bg-[#060616]/70';
-                        glowClass = 'bg-purple-500';
-                      } else if (theme.id === 'slate-dark') {
-                        bgGradientClass = 'from-[#020306] via-[#070a12] to-[#161f2e]';
-                        sidebarBgClass = 'bg-[#0b1122]/70';
-                        glowClass = 'bg-teal-500';
-                      } else if (theme.id === 'forest-mint') {
-                        bgGradientClass = 'from-black via-[#022c22] to-[#064e3b]';
-                        sidebarBgClass = 'bg-[#022c22]/70';
-                        glowClass = 'bg-emerald-500';
-                      } else if (theme.id === 'sunset-orange') {
-                        bgGradientClass = 'from-black via-[#1c0c02] to-[#451a03]';
-                        sidebarBgClass = 'bg-[#140801]/70';
-                        glowClass = 'bg-orange-500';
-                      } else if (theme.id === 'midnight-purple') {
-                        bgGradientClass = 'from-black via-[#0f052d] to-[#2e1065]';
-                        sidebarBgClass = 'bg-[#0b0321]/70';
-                        glowClass = 'bg-pink-500';
-                      } else if (theme.id === 'nordic-frost') {
-                        bgGradientClass = 'from-black via-[#020617] to-[#0f172a]';
-                        sidebarBgClass = 'bg-[#0b0f19]/70';
-                        glowClass = 'bg-sky-400';
-                      } else if (theme.id === 'rose-gold') {
-                        bgGradientClass = 'from-black via-[#11050a] to-[#2d121c]';
-                        sidebarBgClass = 'bg-[#14050b]/70';
-                        glowClass = 'bg-rose-400';
-                      } else if (theme.id === 'crimson-tide') {
-                        bgGradientClass = 'from-black via-[#110104] to-[#3f0712]';
-                        sidebarBgClass = 'bg-[#140105]/70';
-                        glowClass = 'bg-rose-600';
-                      } else if (theme.id === 'ocean-abyss') {
-                        bgGradientClass = 'from-black via-[#021a1b] to-[#042f2e]';
-                        sidebarBgClass = 'bg-[#011819]/70';
-                        glowClass = 'bg-teal-600';
-                      }
-                      
-                      return (
-                        <button type="button"
-                          key={theme.id}
-                          onClick={() => {
-                            setActiveTheme(theme.id);
-                            onSaveSetting('cinema_theme', theme.id);
-                          }}
-                          className={`group/theme flex flex-col p-2.5 rounded-xl border text-left transition-all duration-300 hover:translate-y-[-2px] cursor-pointer ${
-                            isActive
-                              ? 'border-[var(--accent-color)] bg-white/[0.04] shadow-[0_0_20px_rgba(255,255,255,0.05)]'
-                              : 'border-white/5 bg-white/[0.005] hover:border-white/12 hover:bg-white/[0.02]'
-                          }`}
-                        >
-                          <div className={`w-full h-16 rounded-lg bg-gradient-to-tr ${bgGradientClass} border border-white/5 mb-2 relative overflow-hidden flex`}>
-                            <div className={`w-3.5 h-full border-r border-white/5 flex flex-col items-center py-1.5 gap-1 select-none shrink-0 ${sidebarBgClass}`}>
-                              <div className="w-1.5 h-1.5 rounded bg-white/40" />
-                              <div className="w-1.5 h-1 rounded-sm bg-white/20" />
-                              <div className="w-1.5 h-1 rounded-sm bg-white/20" />
-                              <div className="w-1.5 h-1 rounded-sm bg-white/20" />
-                            </div>
-                            <div className="flex-1 h-full p-1.5 flex flex-col gap-1.5 justify-between select-none">
-                              <div className="flex justify-between items-center">
-                                <div className="w-4 h-1 rounded bg-white/30" />
-                                <div className="w-2 h-1 rounded bg-white/30" />
-                              </div>
-                              <div className="w-full h-4 rounded bg-white/5 border border-white/[0.03] flex items-center px-1">
-                                <div className="w-3 h-0.5 rounded bg-white/20" />
-                              </div>
-                              <div className="grid grid-cols-3 gap-1">
-                                <div className="h-4 rounded-sm bg-white/10" />
-                                <div className="h-4 rounded-sm bg-white/10" />
-                                <div className="h-4 rounded-sm bg-white/10" />
-                              </div>
-                            </div>
-                            <div className={`absolute -top-6 -right-6 w-12 h-12 rounded-full opacity-40 blur-md pointer-events-none ${glowClass}`} />
-                            {isActive && (
-                              <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] flex items-center justify-center animate-fade-in">
-                                <div className="w-6 h-6 rounded-full bg-[var(--accent-color)] text-black flex items-center justify-center shadow-lg transform scale-110">
-                                  <Check size={12} strokeWidth={4} />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-[var(--accent-color)] font-black' : 'text-neutral-400 group-hover/theme:text-white'}`}>
-                            {theme.id === 'space-black' ? (language === 'tr' ? 'OLED Siyah' : 'OLED Space Black') :
-                             theme.id === 'deep-space' ? (language === 'tr' ? 'Gece Mavisi' : 'Deep Space Blue') :
-                             theme.id === 'slate-dark' ? (language === 'tr' ? 'Koyu Slate' : 'Slate Dark') :
-                             theme.id === 'forest-mint' ? (language === 'tr' ? 'Orman Yeşili' : 'Forest Mint') :
-                             theme.id === 'sunset-orange' ? (language === 'tr' ? 'Günbatımı Kızılı' : 'Sunset Orange') :
-                             theme.id === 'midnight-purple' ? (language === 'tr' ? 'Gece Yarısı Moru' : 'Midnight Purple') :
-                             theme.id === 'nordic-frost' ? (language === 'tr' ? 'Kutup Esintisi' : 'Nordic Frost') :
-                             theme.id === 'rose-gold' ? (language === 'tr' ? 'Sakura Pembesi' : 'Sakura Blossom') :
-                             theme.id === 'crimson-tide' ? (language === 'tr' ? 'Kozmik Kızıl' : 'Cyberpunk Crimson') :
-                             theme.id === 'ocean-abyss' ? (language === 'tr' ? 'Okyanus Derinliği' : 'Ocean Abyss') : theme.label}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </SettingRow>
-
-                <SettingRow title={t('settings.appearance.accentColor')} description={t('settings.appearance.accentDesc')} vertical={true}>
-                  <div className="flex flex-wrap gap-2">
-                    {ACCENT_COLORS.map(item => (
-                      <button type="button"
-                        key={item.color}
-                        className={`flex h-9 items-center gap-2 rounded-full border px-3 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                          activeAccent === item.color
-                            ? 'border-[var(--accent-color)] bg-white/[0.05] text-white font-bold'
-                            : 'border-white/5 bg-white/[0.01] text-neutral-400 hover:border-white/12 hover:bg-white/[0.03] hover:text-white'
-                        }`}
-                        onClick={() => {
-                          setActiveAccent(item.color);
-                          onSaveSetting('cinema_accent', item.color);
-                        }}
-                      >
-                        <span className="h-3 w-3 rounded-full border border-white/10" style={{ backgroundColor: item.color }} />
-                        {language === 'tr' ? item.name : (
-                          item.name === 'Beyaz' ? 'White' :
-                          item.name === 'Mavi' ? 'Blue' :
-                          item.name === 'Yeşil' ? 'Green' :
-                          item.name === 'Sarı' ? 'Yellow' :
-                          item.name === 'Mor' ? 'Purple' :
-                          item.name === 'Kırmızı' ? 'Red' :
-                          item.name === 'Pembe' ? 'Pink' : 'Cyan'
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </SettingRow>
-
-                <SettingRow title={t('settings.appearance.glass')} description={t('settings.appearance.glassDesc')}>
-                  <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-white/5 bg-black/30 select-none">
-                    {['low', 'medium', 'high'].map(level => {
-                      const isActive = glassIntensity === level;
-                      return (
-                        <button type="button"
-                          key={level}
-                          onClick={() => {
-                            setGlassIntensity(level);
-                            onSaveSetting('cinema_glass_intensity', level);
-                          }}
-                          className={`h-7 px-3.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                            isActive
-                              ? 'bg-white text-black shadow-sm font-black'
-                              : 'text-neutral-400 hover:text-white'
-                          }`}
-                        >
-                          {level === 'low' ? (language === 'tr' ? 'Az' : 'Low') : 
-                           level === 'medium' ? (language === 'tr' ? 'Orta' : 'Medium') : 
-                           (language === 'tr' ? 'Yüksek' : 'High')}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <SettingRow title={t('settings.appearance.language')} description={t('settings.appearance.languageDesc')}>
+                  <CustomSelect
+                    value={language}
+                    onChange={(val) => {
+                      setLanguage(val as 'tr' | 'en');
+                      onShowToast(val === 'tr' ? 'Dil Türkçe olarak ayarlandı.' : 'Language set to English.');
+                    }}
+                    options={[
+                      { value: 'tr', label: 'Türkçe' },
+                      { value: 'en', label: 'English' }
+                    ]}
+                  />
                 </SettingRow>
 
                 <SettingRow title={t('settings.appearance.cardSize')} description={t('settings.appearance.cardSizeDesc')}>
-                  <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-white/5 bg-black/30 select-none">
+                  <div className="inline-flex gap-0.5 rounded-lg border border-white/5 bg-black/30 p-0.5 select-none">
                     {[
                       { id: 'small', label: language === 'tr' ? 'Küçük' : 'Small' },
                       { id: 'medium', label: language === 'tr' ? 'Orta' : 'Medium' },
@@ -1205,16 +887,15 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     ].map(size => {
                       const isActive = cardLayoutSize === size.id;
                       return (
-                        <button type="button"
+                        <button
+                          type="button"
                           key={size.id}
                           onClick={() => {
                             setCardLayoutSize(size.id);
                             onSaveSetting('cinema_card_layout_size', size.id);
                           }}
-                          className={`h-7 px-3.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                            isActive
-                              ? 'bg-white text-black shadow-sm font-black'
-                              : 'text-neutral-400 hover:text-white'
+                          className={`h-7 rounded px-3.5 text-[10px] font-bold uppercase tracking-wider transition-colors duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)] ${
+                            isActive ? 'bg-white text-black shadow-sm font-black' : 'text-neutral-400 hover:text-white'
                           }`}
                         >
                           {size.label}
@@ -1224,8 +905,11 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                   </div>
                 </SettingRow>
 
-                <SettingRow title={language === 'tr' ? 'Arayüz Ölçeği' : 'UI Scale'} description={language === 'tr' ? 'Uygulamanın genel yazı boyutu ve arayüz elemanlarının ölçeğini ayarlayın.' : 'Adjust the overall font size and interface element scaling.'}>
-                  <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-white/5 bg-black/30 select-none">
+                <SettingRow
+                  title={language === 'tr' ? 'Arayüz Ölçeği' : 'UI Scale'}
+                  description={language === 'tr' ? 'Uygulamanın genel yazı boyutunu ve arayüz elemanlarının ölçeğini ayarlayın.' : 'Adjust the overall font size and interface element scaling.'}
+                >
+                  <div className="inline-flex gap-0.5 rounded-lg border border-white/5 bg-black/30 p-0.5 select-none">
                     {[
                       { id: 'small', label: language === 'tr' ? 'Küçük' : 'Small' },
                       { id: 'medium', label: language === 'tr' ? 'Orta' : 'Medium' },
@@ -1233,13 +917,12 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     ].map(size => {
                       const isActive = uiScale === size.id;
                       return (
-                        <button type="button"
+                        <button
+                          type="button"
                           key={size.id}
                           onClick={() => changeUiScale(size.id as 'small' | 'medium' | 'large')}
-                          className={`h-7 px-3.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                            isActive
-                              ? 'bg-white text-black shadow-sm font-black'
-                              : 'text-neutral-400 hover:text-white'
+                          className={`h-7 rounded px-3.5 text-[10px] font-bold uppercase tracking-wider transition-colors duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)] ${
+                            isActive ? 'bg-white text-black shadow-sm font-black' : 'text-neutral-400 hover:text-white'
                           }`}
                         >
                           {size.label}
@@ -1248,203 +931,219 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
                     })}
                   </div>
                 </SettingRow>
-
-                <SettingRow title={t('settings.appearance.neon')} description={t('settings.appearance.neonDesc')}>
-                  <button type="button"
-                    onClick={() => {
-                      const next = !neonGlowEnabled;
-                      setNeonGlowEnabled(next);
-                      onSaveSetting('cinema_neon_glow', next);
-                    }}
-                    className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
-                      neonGlowEnabled
-                        ? 'bg-[var(--accent-color)] border-[var(--accent-color)]'
-                        : 'bg-white/[0.03] border-white/8'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full transition-all duration-200 ${
-                        neonGlowEnabled
-                          ? 'left-5.5 bg-black'
-                          : 'left-0.5 bg-neutral-400'
-                      }`}
-                    />
-                  </button>
-                </SettingRow>
-
-                <SettingRow title={language === 'tr' ? 'Sinematik Film Greni' : 'Cinematic Film Grain'} description={language === 'tr' ? 'Arka plana hafif, hareketli hissettiren pürüzlü film dokusu katmanı ekler.' : 'Adds a subtle, moving textured film grain overlay to the background.'}>
-                  <button type="button"
-                    onClick={() => toggleGrainOverlay(!backgroundGrain)}
-                    className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
-                      backgroundGrain
-                        ? 'bg-[var(--accent-color)] border-[var(--accent-color)]'
-                        : 'bg-white/[0.03] border-white/8'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full transition-all duration-200 ${
-                        backgroundGrain
-                          ? 'left-5.5 bg-black'
-                          : 'left-0.5 bg-neutral-400'
-                      }`}
-                    />
-                  </button>
-                </SettingRow>
               </div>
             </>
           )}
 
           {activeTab.id === 'playback' && (
             <>
-              <PageHeader title="Oynatma Seçenekleri" description="Oynatıcı davranışları, ara bellek süreleri ve izleme akış ayarları." />
+              <PageHeader
+                title={language === 'tr' ? 'Oynatma ve Bağlantı' : 'Playback & Connection'}
+                description={language === 'tr'
+                  ? 'İzleme deneyiminizi etkileyen temel seçenekleri yönetin.'
+                  : 'Manage the essential options that affect your viewing experience.'}
+              />
               <div>
-                <SettingRow title="Sonraki Bölümü Otomatik Oynat" description="Dizi bölümü bittiğinde sıradaki bölüme otomatik geçmeyi dener.">
-                  <button type="button"
+                <SettingRow
+                  title={language === 'tr' ? 'Oynatıcı' : 'Player'}
+                  description={language === 'tr' ? 'İçeriklerin hangi oynatıcıyla açılacağını seçin.' : 'Choose which player opens your media.'}
+                >
+                  <CustomSelect
+                    value={defaultPlayer}
+                    onChange={(val) => {
+                      setDefaultPlayer(val);
+                      onSaveSetting('cinema_default_player', val);
+                      onShowToast(`${t('settings.players.saveSuccess')} (${val.toUpperCase()})`);
+                    }}
+                    options={[
+                      { value: 'internal', label: language === 'tr' ? 'Strmly Oynatıcı' : 'Strmly Player' },
+                      { value: 'vlc', label: `VLC Player (${language === 'tr' ? 'Harici' : 'External'})` },
+                      { value: 'mpv', label: `MPV Player (${language === 'tr' ? 'Harici' : 'External'})` }
+                    ]}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  title={language === 'tr' ? 'Sonraki Bölümü Otomatik Oynat' : 'Autoplay Next Episode'}
+                  description={language === 'tr' ? 'Bir bölüm bittiğinde sıradaki bölümü otomatik başlatır.' : 'Starts the next episode automatically when one ends.'}
+                >
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoPlayNext}
+                    aria-label={language === 'tr' ? 'Sonraki bölümü otomatik oynat' : 'Autoplay next episode'}
                     onClick={() => {
                       const next = !autoPlayNext;
                       setAutoPlayNext(next);
                       saveLocalSettingHelper(AUTOPLAY_NEXT_KEY, String(next));
                     }}
-                    className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
-                      autoPlayNext
-                        ? 'bg-[var(--accent-color)] border-[var(--accent-color)]'
-                        : 'bg-white/[0.03] border-white/8'
-                    }`}
+                    className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${autoPlayNext ? 'bg-[var(--accent-color)] border-[var(--accent-color)]' : 'bg-white/[0.03] border-white/8'}`}
                   >
-                    <span
-                      className={`absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full transition-all duration-200 ${
-                        autoPlayNext
-                          ? 'left-5.5 bg-black'
-                          : 'left-0.5 bg-neutral-400'
-                      }`}
-                    />
+                    <span aria-hidden="true" className={`absolute top-1/2 h-4.5 w-4.5 -translate-y-1/2 rounded-full transition-[left,background-color] duration-150 ${autoPlayNext ? 'left-5.5 bg-black' : 'left-0.5 bg-neutral-400'}`} />
                   </button>
-                </SettingRow>
-                
-                <SettingRow title="Ek Ön Bellek (Buffer)" description="Zayıf internet bağlantılarında takılmaları önlemek için daha uzun süre ara belleğe alma sağlar.">
-                  <div className="flex items-center gap-3.5">
-                    <button type="button"
-                      onClick={() => {
-                        const next = !bufferEnabled;
-                        setBufferEnabled(next);
-                        saveLocalSettingHelper(BUFFER_ENABLED_KEY, String(next));
-                      }}
-                      className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none shrink-0 cursor-pointer ${
-                        bufferEnabled
-                          ? 'bg-[var(--accent-color)] border-[var(--accent-color)]'
-                          : 'bg-white/[0.03] border-white/8'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full transition-all duration-200 ${
-                          bufferEnabled
-                            ? 'left-5.5 bg-black'
-                            : 'left-0.5 bg-neutral-400'
-                        }`}
-                      />
-                    </button>
-                    {bufferEnabled && (
-                      <div className="flex items-center gap-2 animate-fade-in">
-                        <input
-                          className={`${fieldStyle} max-w-[80px] text-center !w-20`}
-                          type="number"
-                          min="5"
-                          max="120"
-                          value={bufferSize}
-                          onChange={(e) => {
-                            setBufferSize(e.target.value);
-                            saveLocalSettingHelper(BUFFER_SIZE_KEY, e.target.value);
-                          }}
-                        />
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Saniye</span>
-                      </div>
-                    )}
-                  </div>
                 </SettingRow>
 
                 <SettingRow
-                  title={language === 'tr' ? "Donanım Hızlandırması (GPU)" : "Hardware Acceleration (GPU)"}
-                  description={language === 'tr' 
-                    ? "Menülerde akıcılığı ve video oynatma performansını artırır. Ekran kartınızla ilgili çökme, donma veya siyah ekran sorunları yaşıyorsanız kapatmayı deneyin."
-                    : "Improves UI smoothness and video playback performance. Try turning this off if you experience GPU driver crashes, freezes, or black screens."}
+                  title={language === 'tr' ? 'Kesintisiz Oynatma' : 'Smoother Playback'}
+                  description={language === 'tr' ? 'Yavaş bağlantılarda takılmaları azaltmak için videoyu önceden yükler.' : 'Preloads video to reduce interruptions on slower connections.'}
                 >
-                  <button type="button"
-                    onClick={async () => {
-                      const next = !hwAccelerationEnabled;
-                      setHwAccelerationEnabled(next);
-                      try {
-                        localStorage.setItem('strmly_hw_acceleration_enabled', String(next));
-                        if (window.electronAPI && window.electronAPI.saveConfig) {
-                          await window.electronAPI.saveConfig('disableHardwareAcceleration', !next);
-                        }
-                        const confirmText = language === 'tr'
-                          ? 'Donanım hızlandırması ayarının geçerli olması için uygulamanın yeniden başlatılması gerekir. Şimdi yeniden başlatılsın mı?'
-                          : 'The application needs to be restarted for hardware acceleration settings to take effect. Restart now?';
-                        if (window.confirm(confirmText)) {
-                          if (window.electronAPI && window.electronAPI.relaunchApp) {
-                            window.electronAPI.relaunchApp();
-                          }
-                        }
-                      } catch (e) {
-                        console.error(e);
-                      }
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={bufferEnabled}
+                    aria-label={language === 'tr' ? 'Kesintisiz oynatma' : 'Smoother playback'}
+                    onClick={() => {
+                      const next = !bufferEnabled;
+                      setBufferEnabled(next);
+                      saveLocalSettingHelper(BUFFER_ENABLED_KEY, String(next));
                     }}
-                    className={`relative w-11 h-6 rounded-full transition-all duration-200 border focus:outline-none cursor-pointer ${
-                      hwAccelerationEnabled
-                        ? 'bg-[var(--accent-color)] border-[var(--accent-color)]'
-                        : 'bg-white/[0.03] border-white/8'
-                    }`}
+                    className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${bufferEnabled ? 'bg-[var(--accent-color)] border-[var(--accent-color)]' : 'bg-white/[0.03] border-white/8'}`}
                   >
-                    <span
-                      className={`absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full transition-all duration-200 ${
-                        hwAccelerationEnabled
-                          ? 'left-5.5 bg-black'
-                          : 'left-0.5 bg-neutral-400'
-                      }`}
-                    />
+                    <span aria-hidden="true" className={`absolute top-1/2 h-4.5 w-4.5 -translate-y-1/2 rounded-full transition-[left,background-color] duration-150 ${bufferEnabled ? 'left-5.5 bg-black' : 'left-0.5 bg-neutral-400'}`} />
                   </button>
                 </SettingRow>
 
-              </div>
-            </>
-          )}
+                <SettingRow
+                  title={language === 'tr' ? 'Yeni içerikler nasıl eklensin?' : 'How should new content be applied?'}
+                  description={language === 'tr'
+                    ? 'Arka planda yenilenen IPTV listesinin ne zaman etkin kataloğa uygulanacağını seçin.'
+                    : 'Choose when a refreshed IPTV playlist should replace the active catalog.'}
+                  vertical
+                >
+                  <div role="radiogroup" aria-label={language === 'tr' ? 'IPTV liste güncelleme davranışı' : 'IPTV playlist update behavior'} className="grid gap-2 sm:grid-cols-3">
+                    {[
+                      { id: 'prompt', tr: 'Önce Sor', en: 'Ask First' },
+                      { id: 'silent', tr: 'Boştayken Uygula', en: 'Apply When Idle' },
+                      { id: 'manual', tr: 'Yalnızca Elle', en: 'Manual Only' },
+                    ].map((option) => {
+                      const selected = iptvUpdateMode === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => setIptvUpdateMode(option.id as 'prompt' | 'silent' | 'manual')}
+                          className={`min-h-10 rounded-xl border px-3 text-left text-[11px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)] ${
+                            selected
+                              ? 'border-[var(--accent-color)] bg-[var(--accent-color)]/12 text-white'
+                              : 'border-white/[0.07] bg-white/[0.025] text-neutral-400 hover:border-white/15 hover:text-white'
+                          }`}
+                        >
+                          {language === 'tr' ? option.tr : option.en}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SettingRow>
 
-          {activeTab.id === 'network' && (
-            <>
-              <PageHeader title="Ağ ve Bağlantı" description="Gelişmiş ağ bağlantısı zaman aşımı ve otomatik yeniden deneme limitleri." />
-              <div>
-                <SettingRow title="Bağlantı Zaman Aşımı" description="Yayın açılırken sunucuya bağlanmak için beklenecek maksimum süre.">
-                  <div className="flex items-center gap-2">
-                    <input
-                      className={`${fieldStyle} max-w-[100px] text-center !w-24`}
-                      type="number"
-                      min="3"
-                      max="60"
-                      value={connectionTimeout}
-                      onChange={(e) => {
-                        setConnectionTimeout(e.target.value);
-                        saveLocalSettingHelper(CONNECTION_TIMEOUT_KEY, e.target.value);
-                      }}
-                    />
-                    <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Saniye</span>
+                <details className="group mt-5 rounded-xl border border-white/[0.06] bg-white/[0.01]">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+                    <span>
+                      <span className="block text-xs font-bold text-neutral-200">{language === 'tr' ? 'Gelişmiş Ayarlar' : 'Advanced Settings'}</span>
+                      <span className="mt-1 block text-[11px] text-neutral-500">
+                        {language === 'tr' ? 'Yalnızca bağlantı veya görüntü sorunu yaşarsanız değiştirin.' : 'Change these only when troubleshooting connection or display issues.'}
+                      </span>
+                    </span>
+                    <ChevronDown size={15} aria-hidden="true" className="shrink-0 text-neutral-500 transition-transform duration-150 group-open:rotate-180" />
+                  </summary>
+
+                  <div className="border-t border-white/[0.05] px-4">
+                    <SettingRow
+                      title={language === 'tr' ? 'Ön Yükleme Süresi' : 'Preload Duration'}
+                      description={language === 'tr' ? 'Kesintisiz oynatma açıkken hazırlanacak video süresi.' : 'The amount of video prepared when smoother playback is enabled.'}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={`${fieldStyle} !w-20 text-center disabled:cursor-not-allowed disabled:opacity-50`}
+                          type="number"
+                          min="5"
+                          max="120"
+                          disabled={!bufferEnabled}
+                          value={bufferSize}
+                          onChange={(event) => {
+                            setBufferSize(event.target.value);
+                            saveLocalSettingHelper(BUFFER_SIZE_KEY, event.target.value);
+                          }}
+                        />
+                        <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Saniye' : 'Seconds'}</span>
+                      </div>
+                    </SettingRow>
+
+                    <SettingRow
+                      title={language === 'tr' ? 'Bağlantıyı Bekleme Süresi' : 'Connection Wait Time'}
+                      description={language === 'tr' ? 'Bir yayın açılırken bağlantı için beklenecek en uzun süre.' : 'The maximum time to wait while opening a stream.'}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={`${fieldStyle} !w-24 text-center`}
+                          type="number"
+                          min="3"
+                          max="60"
+                          value={connectionTimeout}
+                          onChange={(event) => {
+                            setConnectionTimeout(event.target.value);
+                            saveLocalSettingHelper(CONNECTION_TIMEOUT_KEY, event.target.value);
+                          }}
+                        />
+                        <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Saniye' : 'Seconds'}</span>
+                      </div>
+                    </SettingRow>
+
+                    <SettingRow
+                      title={language === 'tr' ? 'Yeniden Deneme Sayısı' : 'Retry Attempts'}
+                      description={language === 'tr' ? 'Bağlantı kesildiğinde kaç kez tekrar deneneceğini belirler.' : 'Sets how many times to retry after a connection is lost.'}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={`${fieldStyle} !w-24 text-center`}
+                          type="number"
+                          min="0"
+                          max="10"
+                          value={retryCount}
+                          onChange={(event) => {
+                            setRetryCount(event.target.value);
+                            saveLocalSettingHelper(RETRY_COUNT_KEY, event.target.value);
+                          }}
+                        />
+                        <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'Deneme' : 'Retries'}</span>
+                      </div>
+                    </SettingRow>
+
+                    <SettingRow
+                      title={language === 'tr' ? 'Ekran Kartını Kullan' : 'Use Graphics Card'}
+                      description={language === 'tr' ? 'Daha akıcı görüntü sağlar. Donma veya siyah ekran yaşarsanız kapatmayı deneyin.' : 'Improves visual performance. Try turning it off if you see freezes or a black screen.'}
+                    >
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hwAccelerationEnabled}
+                        aria-label={language === 'tr' ? 'Ekran kartını kullan' : 'Use graphics card'}
+                        onClick={async () => {
+                          const next = !hwAccelerationEnabled;
+                          setHwAccelerationEnabled(next);
+                          try {
+                            localStorage.setItem('strmly_hw_acceleration_enabled', String(next));
+                            if (window.electronAPI?.saveConfig) {
+                              await window.electronAPI.saveConfig('disableHardwareAcceleration', !next);
+                            }
+                            const confirmText = language === 'tr'
+                              ? 'Bu değişikliğin uygulanması için Strmly yeniden başlatılmalı. Şimdi yeniden başlatılsın mı?'
+                              : 'Strmly must restart to apply this change. Restart now?';
+                            if (window.confirm(confirmText) && window.electronAPI?.relaunchApp) {
+                              window.electronAPI.relaunchApp();
+                            }
+                          } catch (error) {
+                            console.error(error);
+                          }
+                        }}
+                        className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${hwAccelerationEnabled ? 'bg-[var(--accent-color)] border-[var(--accent-color)]' : 'bg-white/[0.03] border-white/8'}`}
+                      >
+                        <span aria-hidden="true" className={`absolute top-1/2 h-4.5 w-4.5 -translate-y-1/2 rounded-full transition-[left,background-color] duration-150 ${hwAccelerationEnabled ? 'left-5.5 bg-black' : 'left-0.5 bg-neutral-400'}`} />
+                      </button>
+                    </SettingRow>
                   </div>
-                </SettingRow>
-                <SettingRow title="Yeniden Bağlanma Sınırı" description="Bağlantı koptuğunda veya sunucu hata verdiğinde kaç kez deneme yapılacağı.">
-                  <div className="flex items-center gap-2">
-                    <input
-                      className={`${fieldStyle} max-w-[100px] text-center !w-24`}
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={retryCount}
-                      onChange={(e) => {
-                        setRetryCount(e.target.value);
-                        saveLocalSettingHelper(RETRY_COUNT_KEY, e.target.value);
-                      }}
-                    />
-                    <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Deneme</span>
-                  </div>
-                </SettingRow>
+                </details>
               </div>
             </>
           )}
@@ -1453,24 +1152,24 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
           {activeTab.id === 'data' && (
             <>
-              <PageHeader title="Veri Yönetimi" description="İzleme geçmişinizi, favorilerinizi ve yerel ayar yedeklerinizi yönetin." />
+              <PageHeader title={language === 'tr' ? 'Veri Yönetimi' : 'Data Management'} description={language === 'tr' ? 'İzleme geçmişinizi, favorilerinizi ve yerel ayar yedeklerinizi yönetin.' : 'Manage your watch history, favorites, and local settings backups.'} />
               <div className="mb-5 grid gap-3.5 sm:grid-cols-3">
-                <StatBox label="İzleme Geçmişi" value={safeRecentlyWatched.length} />
-                <StatBox label="Favorilerim" value={safeGlobalFavorites.length} />
-                <StatBox label="Toplam İçerik" value={itemStats.total} />
+                <StatBox label={language === 'tr' ? 'İzleme Geçmişi' : 'Watch History'} value={safeRecentlyWatched.length} />
+                <StatBox label={language === 'tr' ? 'Favorilerim' : 'Favorites'} value={safeGlobalFavorites.length} />
+                <StatBox label={language === 'tr' ? 'Toplam İçerik' : 'Total Content'} value={itemStats.total} />
               </div>
               <div>
-                <SettingRow title="İzleme Geçmişi" description="Daha önce izlediğiniz veya kaldığınız yer bilgisi kaydedilen tüm içerikleri siler.">
-                  <button type="button" className={dangerButton} onClick={onClearRecentlyWatched}>Geçmişi Temizle</button>
+                <SettingRow title={language === 'tr' ? 'İzleme Geçmişi' : 'Watch History'} description={language === 'tr' ? 'Daha önce izlediğiniz veya kaldığınız yer bilgisi kaydedilen tüm içerikleri siler.' : 'Deletes all content for which watch progress was saved.'}>
+                  <button type="button" className={dangerButton} onClick={onClearRecentlyWatched}>{language === 'tr' ? 'Geçmişi Temizle' : 'Clear History'}</button>
                 </SettingRow>
-                <SettingRow title="Favorilerim" description="Favoriler listenize eklediğiniz tüm kanal, dizi ve film kayıtlarını sıfırlar.">
-                  <button type="button" className={dangerButton} onClick={onClearFavorites}>Favorileri Temizle</button>
+                <SettingRow title={language === 'tr' ? 'Favorilerim' : 'Favorites'} description={language === 'tr' ? 'Favoriler listenize eklediğiniz tüm kanal, dizi ve film kayıtlarını sıfırlar.' : 'Resets every channel, series, and movie record in your favorites list.'}>
+                  <button type="button" className={dangerButton} onClick={onClearFavorites}>{language === 'tr' ? 'Favorileri Temizle' : 'Clear Favorites'}</button>
                 </SettingRow>
-                <SettingRow title="Yerel Ayar Yedekleme" description="Strmly ayarlarını JSON dosyası olarak dışarı aktarın veya geri yükleyin.">
+                <SettingRow title={language === 'tr' ? 'Yerel Ayar Yedekleme' : 'Local Settings Backup'} description={language === 'tr' ? 'Strmly ayarlarını JSON dosyası olarak dışarı aktarın veya geri yükleyin.' : 'Export Strmly settings as a JSON file or restore them from one.'}>
                   <div className="flex items-center gap-2">
-                    <button type="button" className={secondaryButton} onClick={exportSettings}>Yedeği Dışa Aktar</button>
+                    <button type="button" className={secondaryButton} onClick={exportSettings}>{language === 'tr' ? 'Yedeği Dışa Aktar' : 'Export Backup'}</button>
                     <label className={secondaryButton}>
-                      Yedeği İçe Aktar
+                      {language === 'tr' ? 'Yedeği İçe Aktar' : 'Import Backup'}
                       <input type="file" accept=".json" className="hidden" onChange={(e) => importSettings(e.target.files?.[0])} />
                     </label>
                   </div>
@@ -1481,132 +1180,127 @@ export const SettingsPanel = ({ onNavigate }: { onNavigate?: (view: string) => v
 
           {activeTab.id === 'about' && (
             <>
-              <PageHeader title="Strmly Hakkında" description="Uygulama sürümü, lisans ve platform bilgileri." />
-              <div className="relative overflow-hidden flex flex-col items-center text-center py-6">
-                
-                {/* Logo & Branding */}
-                <div className="relative w-20 h-20 rounded-[24px] bg-white text-black flex items-center justify-center shadow-[0_0_35px_rgba(255,255,255,0.08)] mb-5 border border-white/20 hover:scale-105 transition-all duration-300 group cursor-pointer">
-                  <img src="./icon.png" className="w-12 h-12 object-contain group-hover:rotate-6 transition-transform duration-300" alt="Strmly Logo" />
+              <PageHeader
+                title={language === 'tr' ? 'Strmly Hakkında' : 'About Strmly'}
+                description={language === 'tr' ? 'Sürüm bilgisi, güncellemeler ve proje bağlantıları.' : 'Version information, updates, and project links.'}
+              />
+              <div className="relative flex flex-col items-center overflow-hidden py-8 text-center">
+                <div className="group relative mb-4">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/25 bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.1)] transition-transform duration-150 group-hover:scale-[1.03]">
+                    <img src="./icon.png" className="h-14 w-14 object-contain" alt="Strmly" />
+                  </div>
+                  <span className="absolute -bottom-2.5 left-1/2 w-max -translate-x-1/2 rounded-full border border-white/15 bg-neutral-900 px-3 py-0.5 text-[10px] font-black tracking-wider text-white shadow-lg">
+                    v{appVersion}
+                  </span>
                 </div>
 
-                <h3 className="text-2xl font-black tracking-tight text-white leading-none">STRMLY</h3>
-                <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--accent-color)] mt-2">Premium IPTV Player</p>
-                
-                <p className="mt-4 max-w-md text-xs leading-relaxed text-neutral-400 font-medium">
-                  Strmly, en sevdiğiniz canlı yayınları, dizileri ve filmleri son derece akıcı cam arayüzü ve yüksek performanslı oynatma motoruyla izlemeniz için geliştirilmiş yeni nesil IPTV oynatıcıdır.
+                <h3 className="mt-3 text-3xl font-black not-italic leading-none tracking-tight text-white">STRMLY</h3>
+                <p className="mt-4 max-w-lg text-xs font-medium leading-relaxed text-neutral-400">
+                  {language === 'tr'
+                    ? 'Canlı yayınlarınızı, dizilerinizi ve filmlerinizi tek bir uygulamada düzenleyip izleyin.'
+                    : 'Organize and watch your live channels, series, and movies in one application.'}
                 </p>
 
-                {/* Grid Cards with Icons */}
-                <div className="mt-8 grid w-full gap-3.5 sm:grid-cols-2 lg:grid-cols-4 border-t border-white/5 pt-6">
-                  
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
-                    <Tag size={16} className="text-[var(--accent-color)] group-hover:scale-110 transition-transform mb-2.5" />
-                    <div className="text-sm font-black text-white">{appVersion}</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">{language === 'tr' ? 'Versiyon' : 'Version'}</div>
+                <div className="mt-8 flex w-full max-w-md flex-col items-center gap-5 rounded-2xl border border-white/[0.08] bg-white/[0.015] p-6 shadow-2xl">
+                  <div className="flex w-full flex-col items-stretch justify-center gap-3 sm:flex-row">
+                    <a
+                      href="https://github.com/ardakrt/strmly-player"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-white/10 bg-white/[0.04] px-4 text-xs font-bold text-neutral-200 outline-none transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.08] active:bg-white/[0.11] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+                    >
+                      <Globe size={14} aria-hidden="true" />
+                      <span>GitHub</span>
+                      <ExternalLink size={11} className="opacity-60" aria-hidden="true" />
+                    </a>
+                    <a
+                      href="https://github.com/ardakrt/strmly-player/blob/main/LICENSE"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-white/10 bg-white/[0.04] px-4 text-xs font-bold text-neutral-200 outline-none transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.08] active:bg-white/[0.11] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+                    >
+                      <FileText size={14} aria-hidden="true" />
+                      <span>{language === 'tr' ? 'Lisans' : 'License'}</span>
+                      <ExternalLink size={11} className="opacity-60" aria-hidden="true" />
+                    </a>
                   </div>
 
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
-                    <Cpu size={16} className="text-sky-400 group-hover:scale-110 transition-transform mb-2.5" />
-                    <div className="text-sm font-black text-white">Electron</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">Platform</div>
-                  </div>
+                  <div className="h-px w-full bg-white/5" aria-hidden="true" />
 
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
-                    <Code size={16} className="text-emerald-400 group-hover:scale-110 transition-transform mb-2.5" />
-                    <div className="text-sm font-black text-white">React 19</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">{language === 'tr' ? 'Teknoloji' : 'Technology'}</div>
-                  </div>
+                  <div className="flex w-full flex-col items-center gap-3" aria-live="polite">
+                    <div className="flex flex-col items-center gap-1 text-center">
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-neutral-500">
+                        {language === 'tr' ? 'Uygulama güncellemesi' : 'Application update'}
+                      </span>
+                      {updateState.status !== 'idle' && updateState.status !== 'available' && (
+                        <p className="mt-0.5 text-xs font-semibold text-neutral-300">{updateState.message}</p>
+                      )}
+                    </div>
 
-                  <div className="rounded-xl border border-white/5 bg-white/[0.005] hover:bg-white/[0.015] hover:border-white/10 p-3.5 flex flex-col items-center transition-all duration-200 group">
-                    <Database size={16} className="text-purple-400 group-hover:scale-110 transition-transform mb-2.5" />
-                    <div className="text-sm font-black text-white">TMDB v3</div>
-                    <div className="mt-1 text-[8px] font-bold uppercase tracking-wider text-neutral-500">{language === 'tr' ? 'Meta Veri' : 'Metadata'}</div>
-                  </div>
+                    {updateState.status === 'idle' && (
+                      <button
+                        type="button"
+                        onClick={handleCheckUpdates}
+                        className="h-11 w-full rounded-xl bg-white px-6 text-xs font-extrabold uppercase tracking-wider text-black outline-none transition-colors duration-150 hover:bg-neutral-200 active:bg-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+                      >
+                        {language === 'tr' ? 'Güncellemeleri denetle' : 'Check for updates'}
+                      </button>
+                    )}
 
-                </div>
+                    {updateState.status === 'checking' && (
+                      <div className="my-1 h-6 w-6 animate-spin rounded-full border-2 border-white/20 border-t-white" role="status" aria-label={language === 'tr' ? 'Güncellemeler denetleniyor' : 'Checking for updates'} />
+                    )}
 
-                {/* External Links */}
-                <div className="mt-6 flex items-center gap-3 justify-center w-full">
-                  <a
-                    href="https://github.com/ardakrt/strmly-player"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-neutral-400 hover:text-neutral-200 text-xs font-bold transition-all cursor-pointer"
-                  >
-                    <Globe size={13} />
-                    <span>GitHub</span>
-                    <ExternalLink size={10} className="opacity-55" />
-                  </a>
-                  <a
-                    href="https://github.com/ardakrt/strmly-player/blob/main/LICENSE"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-neutral-400 hover:text-neutral-200 text-xs font-bold transition-all cursor-pointer"
-                  >
-                    <FileText size={13} />
-                    <span>{language === 'tr' ? 'Lisans' : 'License'}</span>
-                    <ExternalLink size={10} className="opacity-55" />
-                  </a>
-                </div>
+                    {updateState.status === 'available' && (
+                      <div className="flex min-h-11 items-center gap-2 text-xs font-semibold text-neutral-300" role="status">
+                        <RefreshCw size={13} className="animate-spin" aria-hidden="true" />
+                        {language === 'tr' ? 'Güncelleme arka planda hazırlanıyor' : 'Preparing the update in the background'}
+                      </div>
+                    )}
 
-                {/* Updates Checker */}
-                <div className="w-full max-w-sm mt-8 border-t border-white/5 pt-6 flex flex-col items-center gap-4">
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-neutral-500">{language === 'tr' ? 'UYGULAMA GÜNCELLEMESİ' : 'APPLICATION UPDATE'}</span>
-                    {updateState.status !== 'idle' && (
-                      <p className="text-xs font-semibold text-neutral-300 mt-1">{updateState.message}</p>
+                    {updateState.status === 'downloading' && (
+                      <div className="mt-1 flex w-full flex-col gap-2">
+                        <div
+                          className="h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+                          role="progressbar"
+                          aria-label={language === 'tr' ? 'Güncelleme indirme ilerlemesi' : 'Update download progress'}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(updateState.progress ?? 0)}
+                        >
+                          <div className="h-full bg-[var(--accent-color)] transition-[width] duration-300" style={{ width: `${updateState.progress ?? 0}%` }} />
+                        </div>
+                        <span className="text-right text-[10px] font-extrabold text-neutral-500">
+                          %{Math.round(updateState.progress ?? 0)} {language === 'tr' ? 'indiriliyor' : 'downloading'}
+                        </span>
+                      </div>
+                    )}
+
+                    {updateState.status === 'downloaded' && (
+                      <button
+                        type="button"
+                        onClick={handleInstallUpdateHelper}
+                        className="h-11 w-full rounded-xl bg-emerald-500 px-6 text-xs font-extrabold uppercase tracking-wider text-white outline-none transition-colors duration-150 hover:bg-emerald-600 active:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                      >
+                        {language === 'tr' ? 'Kur ve yeniden başlat' : 'Install and restart'}
+                      </button>
+                    )}
+
+                    {(updateState.status === 'not-available' || updateState.status === 'error') && (
+                      <button
+                        type="button"
+                        onClick={handleCheckUpdates}
+                        className="h-11 w-full rounded-xl bg-white/10 px-6 text-xs font-extrabold uppercase tracking-wider text-white outline-none transition-colors duration-150 hover:bg-white/20 active:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-color)]"
+                      >
+                        {language === 'tr' ? 'Yeniden denetle' : 'Check again'}
+                      </button>
                     )}
                   </div>
-
-                  {updateState.status === 'idle' && (
-                    <button type="button"
-                      onClick={handleCheckUpdates}
-                      className="px-6 py-2.5 bg-white hover:bg-neutral-200 text-black font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
-                    >
-                      {language === 'tr' ? 'Güncelleştirmeleri Denetle' : 'Check for Updates'}
-                    </button>
-                  )}
-
-                  {updateState.status === 'checking' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-white/20 border-t-white animate-spin mt-1" />
-                  )}
-
-                  {updateState.status === 'available' && (
-                    <button type="button"
-                      onClick={handleDownloadUpdate}
-                      className="min-w-[220px] px-6 py-2.5 bg-white hover:bg-neutral-200 text-neutral-950 font-extrabold text-xs uppercase rounded-full shadow-lg transition-transform active:scale-95 transform cursor-pointer"
-                    >
-                      {language === 'tr' ? 'Güncellemeyi İndir' : 'Download Update'}
-                    </button>
-                  )}
-
-                  {updateState.status === 'downloading' && (
-                    <div className="w-full max-w-xs flex flex-col gap-2 mt-1">
-                      <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-[var(--accent-color)] h-full transition-all duration-300" style={{ width: `${updateState.progress ?? 0}%` }} />
-                      </div>
-                      <span className="text-[10px] text-neutral-500 font-extrabold text-right">% {updateState.progress ?? 0} {language === 'tr' ? 'İndiriliyor' : 'Downloading'}</span>
-                    </div>
-                  )}
-
-                  {updateState.status === 'downloaded' && (
-                    <button type="button"
-                      onClick={handleInstallUpdateHelper}
-                      className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs uppercase rounded-full shadow-lg transition-all active:scale-95 transform cursor-pointer animate-pulse mt-1"
-                    >
-                      {language === 'tr' ? 'Güncellemeyi Kur ve Yeniden Başlat' : 'Install Update & Restart'}
-                    </button>
-                  )}
-
-                  {(updateState.status === 'not-available' || updateState.status === 'error') && (
-                    <button type="button"
-                      onClick={handleCheckUpdates}
-                      className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs uppercase rounded-full shadow-md transition-transform active:scale-95 transform cursor-pointer"
-                    >
-                      {language === 'tr' ? 'Yeniden Denetle' : 'Check Again'}
-                    </button>
-                  )}
                 </div>
+
+                <p className="mt-6 select-none text-[10px] font-semibold text-neutral-600">
+                  © 2026 Strmly
+                </p>
               </div>
             </>
           )}

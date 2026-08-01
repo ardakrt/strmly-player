@@ -674,7 +674,11 @@ export function useCinematicPlayer({
         forceStartTime = 0;
       }
       if (!window.electronAPI?.startFfmpegProxy) {
-        failPlayback('FFmpeg uyumluluk modu kullanilamiyor');
+        console.warn('[AutoTranscode] FFmpeg API unavailable, falling back to direct native playback');
+        isTranscodingRef.current = false;
+        setFfmpegFallbackActive(false);
+        setPlaybackMessage('');
+        await loadPlayerSource(selectedChannel.url, false);
         return;
       }
 
@@ -720,15 +724,18 @@ export function useCinematicPlayer({
           video.volume = playerVolumeRef.current;
           video.play().catch(() => { });
         } else {
+          console.warn('[AutoTranscode] FFmpeg proxy returned error, falling back to direct native playback:', result.error);
           isTranscodingRef.current = false;
           setFfmpegFallbackActive(false);
-          failPlayback(result.error || 'Uyumluluk modu baslatilamadi');
+          setPlaybackMessage('');
+          await loadPlayerSource(selectedChannel.url, false);
         }
       } catch (err) {
-        console.error('[AutoTranscode] Fallback error:', err);
+        console.error('[AutoTranscode] Fallback error, falling back to direct native playback:', err);
         isTranscodingRef.current = false;
         setFfmpegFallbackActive(false);
-        failPlayback('Uyumluluk modu hata verdi');
+        setPlaybackMessage('');
+        await loadPlayerSource(selectedChannel.url, false);
       } finally {
         ffmpegRestartInFlightRef.current = false;
       }
@@ -904,7 +911,7 @@ export function useCinematicPlayer({
           const t = nativeTracks[i];
           tracks.push({
             id: i,
-            name: t.label || t.language || `Parça ${i + 1}`,
+            name: t.label || t.language || (language === 'tr' ? `Parça ${i + 1}` : `Track ${i + 1}`),
             lang: t.language || ''
           });
         }
@@ -928,7 +935,7 @@ export function useCinematicPlayer({
           const t = nativeTracks[i];
           tracks.push({
             id: i,
-            name: t.label || t.language || `Parça ${i + 1}`,
+            name: t.label || t.language || (language === 'tr' ? `Parça ${i + 1}` : `Track ${i + 1}`),
             lang: t.language || ''
           });
         }
@@ -1318,21 +1325,24 @@ export function useCinematicPlayer({
       const nameLower = selectedChannel.name.toLowerCase();
       const urlLower = selectedChannel.url.toLowerCase();
       const hasUnsupportedKeyword =
-        nameLower.includes('ac3') || nameLower.includes('ddp') || nameLower.includes('dts') ||
-        nameLower.includes('eac3') || nameLower.includes('5.1') || nameLower.includes('truehd') ||
-        nameLower.includes('atmos') ||
-        urlLower.includes('ac3') || urlLower.includes('ddp') || urlLower.includes('dts') ||
-        urlLower.includes('eac3') || urlLower.includes('5.1') || urlLower.includes('truehd') ||
-        urlLower.includes('atmos');
+        nameLower.includes('ac3') || nameLower.includes('ac-3') || nameLower.includes('ddp') ||
+        nameLower.includes('eac3') || nameLower.includes('e-ac-3') || nameLower.includes('dts') ||
+        nameLower.includes('dca') || nameLower.includes('5.1') || nameLower.includes('7.1') ||
+        nameLower.includes('truehd') || nameLower.includes('atmos') || nameLower.includes('dolby') ||
+        nameLower.includes('surround') || nameLower.includes('multi') ||
+        urlLower.includes('ac3') || urlLower.includes('ac-3') || urlLower.includes('ddp') ||
+        urlLower.includes('eac3') || urlLower.includes('e-ac-3') || urlLower.includes('dts') ||
+        urlLower.includes('dca') || urlLower.includes('5.1') || urlLower.includes('7.1') ||
+        urlLower.includes('truehd') || urlLower.includes('atmos') || urlLower.includes('dolby') ||
+        urlLower.includes('surround') || urlLower.includes('multi');
 
       if (hasUnsupportedKeyword) {
         shouldTranscode = true;
       }
 
-      // Codec analysis for non-HLS VOD (remote + local downloads). Local app-file://
-      // used to be rejected by the main process, so AC3 downloads never got a
-      // working FFmpeg fallback and looked stuck/unopenable.
-      if (selectedChannel.type !== 'live' && !playUrl.includes('.m3u8') && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
+      // Codec analysis for all non-live VOD streams (remote + local downloads, including HLS VOD).
+      // Chromium cannot decode AC3/EAC3/DTS natively even in HLS playlists.
+      if (selectedChannel.type !== 'live' && window.electronAPI?.probeAudioCodec && window.electronAPI?.startFfmpegProxy) {
         setPlaybackStatus('loading');
         setPlaybackMessage(language === 'tr' ? 'Ses formatı kontrol ediliyor...' : 'Checking audio format...');
         try {
@@ -1350,7 +1360,7 @@ export function useCinematicPlayer({
 
             if (res.audioStreams && res.audioStreams.length > 0) {
               setAudioTracks(res.audioStreams);
-              // Automatically select Turkish track if present, otherwise first track
+              // Automatically select Turkish track if present, otherwise preferred / first track
               const trTrack = res.audioStreams.findIndex(
                 (t: any) => t.name?.toLowerCase().includes('türk') || t.name?.toLowerCase().includes('turk') || t.lang === 'tr'
               );
@@ -1364,19 +1374,43 @@ export function useCinematicPlayer({
               activeAudioStreamIdRef.current = streamId;
             }
 
-            const unsupportedCodecs = ['ac3', 'eac3', 'dts', 'truehd', 'mlp', 'pcm_bluray', 'pcm_s16le'];
+            const isUnsupportedAudioCodec = (codecStr: string): boolean => {
+              const c = (codecStr || '').toLowerCase().trim();
+              if (!c) return false;
+              return (
+                c.includes('ac3') ||
+                c.includes('ac-3') ||
+                c.includes('eac3') ||
+                c.includes('e-ac-3') ||
+                c.includes('ddp') ||
+                c.includes('dts') ||
+                c.includes('dca') ||
+                c.includes('truehd') ||
+                c.includes('mlp') ||
+                c.includes('bluray') ||
+                c.includes('pcm') ||
+                c.includes('wmav') ||
+                c.includes('aac_latm') ||
+                c === 'mp2'
+              );
+            };
+
             const browserSafeAudio = ['aac', 'mp3', 'opus', 'vorbis', 'mp4a'];
+            const allCodecs = ((res as any).allCodecs || []).map((c: string) => (c || '').toLowerCase());
             const selectedCodec = (
               (typeof streamId === 'number'
                 ? res.audioStreams?.find(s => s.streamId === streamId)?.codec
                 : undefined) || res.codec || ''
             ).toLowerCase();
-            if (selectedCodec && unsupportedCodecs.includes(selectedCodec)) {
+
+            if (selectedCodec && isUnsupportedAudioCodec(selectedCodec)) {
               shouldTranscode = true;
             }
-            // Browser often cannot demux multi-audio IPTV TS cleanly even if one track is AAC.
-            if (res.audioStreams && res.audioStreams.length > 1 &&
-                res.audioStreams.some(s => unsupportedCodecs.includes((s.codec || '').toLowerCase()))) {
+            // Check if ANY audio track in the stream or in allCodecs has an unsupported codec (e.g. EAC3 / AC3 / DTS / 5.1 in dual-audio streams)
+            if (
+              allCodecs.some((c: string) => isUnsupportedAudioCodec(c)) ||
+              (res.audioStreams && res.audioStreams.some(s => isUnsupportedAudioCodec(s.codec || '')))
+            ) {
               shouldTranscode = true;
             }
             // Local remux of HEVC often fails natively in Chromium — prefer FFmpeg path.
@@ -1399,13 +1433,14 @@ export function useCinematicPlayer({
               shouldTranscode = true;
             }
           } else if (!isLocalFile) {
-            // Only force transcode on probe failure for remote streams.
-            if (transcodeMode === 'full' || transcodeMode === 'copy') {
-              shouldTranscode = true;
-            }
+            // Force transcode on probe failure for remote VOD streams to prevent silent native playback.
+            shouldTranscode = true;
           }
         } catch (e) {
           console.error('[AutoTranscode] Error during background codec probing:', e);
+          if (!isLocalFile) {
+            shouldTranscode = true;
+          }
         }
       }
 
@@ -1433,9 +1468,11 @@ export function useCinematicPlayer({
           setPlaybackMessage('');
           await loadPlayerSource(playUrl, false);
         } else {
+          console.warn('[AutoTranscode] FFmpeg transcode failed or unavailable, falling back to direct native playback:', transcodeRes.error);
           isTranscodingRef.current = false;
           setFfmpegFallbackActive(false);
-          failPlayback(transcodeRes.error || 'Uyumluluk modu baslatilamadi');
+          setPlaybackMessage('');
+          await loadPlayerSource(playUrl, false);
         }
       } else {
         setPlaybackMessage('');

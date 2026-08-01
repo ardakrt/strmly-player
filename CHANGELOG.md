@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0 - 2026-08-01
+
+### Highlights
+
+- Refined the home, favorites, catalog, search, settings, and playback surfaces with denser responsive layouts, clearer navigation, reusable interaction components, and source-backed media presentation.
+- Rebuilt Spotlight Search as a full-screen discovery experience with improved grouping, filtering, keyboard navigation, and responsive result layouts.
+- Added richer personalized home discovery, real TMDB Top 10 metadata, resilient title artwork, and provider-first movie artwork without inventing missing metadata.
+
+### Reliability and Privacy
+
+- Fixed startup failures caused by the design-token stylesheet being loaded as JavaScript and by duplicate splash-screen identifiers.
+- Kept automatic profile startup on one branded loading surface, removing the duplicate profile loading modal before the home screen opens.
+- Improved playlist refresh, cache revision handling, worker parsing, update-state recovery, and local Xtream credential recovery while keeping IPTV credentials device-local.
+- Expanded regression, catalog, accessibility, security, and performance coverage for the updated application flows.
+
 ## 1.7.1 - 2026-07-17
 
 ### Fixes
