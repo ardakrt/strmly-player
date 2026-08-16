@@ -8,53 +8,30 @@ import {
   cleanMovieName,
   buildTmdbSearchPath,
   getResolvedTmdbResult,
-  resolveTmdbImageSrc,
-  fetchTmdbDetails,
   getTmdbLanguage,
-  resolveTmdbOverview,
   isMissingTmdbOverview,
 } from '../utils/tmdb';
 import {
-  getItemNameLower,
-  getItemGroupLower,
-  isUnavailableCatalogItem,
-} from '../utils/searchHelpers';
-import {
-  dailyStableScore,
   getLocalCalendarDaySeed,
   getTmdbShowcaseScore,
-  takeTopByScore,
   selectMixedPopularShowcase,
   type PopularShowcaseCandidate,
 } from '../utils/catalogFilters';
-import { isSloganLikeBlurb, pickHeroSynopsis } from '../utils/helpers';
-
-interface UseHomeDataProps {
-  items: PlaylistItem[];
-  itemBuckets: {
-    live: PlaylistItem[];
-    movie: PlaylistItem[];
-    series: PlaylistItem[];
-  };
-  allGroupedSeries: GroupedSeries[];
-  recentlyWatched: PlaylistItem[];
-  tmdbApiKey: string;
-  activeContentPreferences: string[];
-  globalFavorites?: string[];
-}
-
-export interface FeaturedTmdbData {
-  match: string;
-  rating: string;
-  year: string;
-  /** Short billboard blurb (tagline or clipped overview) — never the full synopsis. */
-  desc: string;
-  backdrop?: string;
-  poster?: string;
-  logo?: string;
-  duration?: string;
-  genres?: string[];
-}
+import { isSloganLikeBlurb } from '../utils/helpers';
+import {
+  getFeaturedCacheKey,
+  getHomeItemCleanTitle,
+  selectPopularMovies,
+  selectPopularSeries,
+  selectQuickLiveChannels,
+  selectUniqueRecentlyWatched,
+  sampleUniqueHomeCandidates,
+  toPopularShowcaseCandidate,
+} from './homeDataSelectors';
+import { selectHomeDiscoveryItems } from './homeDiscoverySelector';
+import { buildFeaturedTmdbData, createEmptyFeaturedMetadata } from './homeFeaturedMetadata';
+import type { FeaturedTmdbData, UseHomeDataProps } from './homeDataTypes';
+export type { FeaturedTmdbData } from './homeDataTypes';
 
 export function useHomeData({
   items,
@@ -77,6 +54,7 @@ export function useHomeData({
   const [displayFeaturedIndex, setDisplayFeaturedIndex] = useState<number>(0);
   const [isHomeReady, setIsHomeReady] = useState(false);
   const [showcaseDaySeed, setShowcaseDaySeed] = useState(() => getLocalCalendarDaySeed());
+  const sessionSeedRef = useRef<number>(Math.floor(Date.now() / 1800000) ^ Math.floor(Math.random() * 100000));
 
   const isFirstLoadRef = useRef(true);
   /** In-session cache so hero carousel switches reuse metadata without a blank intermediate frame. */
@@ -93,14 +71,6 @@ export function useHomeData({
     );
     return () => window.clearTimeout(timeout);
   }, [showcaseDaySeed]);
-
-  const getFeaturedCacheKey = (item: PlaylistItem) => {
-    const isSeries = item.type === 'series';
-    const cleanTitle = isSeries
-      ? parseSeriesEpisodeInfo(item.name).cleanTitle
-      : cleanMovieName(item.name);
-    return `${item.url || item.name}|${item.type}|${cleanTitle}`;
-  };
 
   // Select highly-rated VOD items (movies/series) for Hero Showcase Carousel from cache/network
   useEffect(() => {
@@ -119,6 +89,15 @@ export function useHomeData({
     let active = true;
     let worker: Worker | null = null;
     const selectionController = new AbortController();
+
+    // Safety failsafe: never let home initialization hang the splash screen forever.
+    const safetyTimeout = window.setTimeout(() => {
+      if (active && isFirstLoadRef.current) {
+        setIsHomeReady(true);
+        isFirstLoadRef.current = false;
+      }
+    }, 2500);
+
     if (isFirstLoadRef.current) {
       setIsHomeReady(false);
     }
@@ -131,6 +110,7 @@ export function useHomeData({
 
       const finishReady = (selected: PlaylistItem[]) => {
         if (!active) return;
+        window.clearTimeout(safetyTimeout);
         setShowcaseItems(selected);
         setActiveFeaturedIndex(0);
         setDisplayFeaturedIndex(0);
@@ -140,28 +120,7 @@ export function useHomeData({
       };
 
       try {
-        const toPopularCandidate = (
-          item: PlaylistItem,
-          result: any | null,
-        ): PopularShowcaseCandidate | null => {
-          if (!result) return null;
-          const hasArt = !!(result.backdrop_path || result.poster_path);
-          if (!hasArt) return null;
-          return {
-            item,
-            rating: typeof result.vote_average === 'number' ? result.vote_average : 0,
-            popularity: typeof result.popularity === 'number' ? result.popularity : undefined,
-            voteCount: typeof result.vote_count === 'number' ? result.vote_count : undefined,
-            hasBackdrop: !!result.backdrop_path,
-          };
-        };
-
-        const getCleanTitle = (item: PlaylistItem) => {
-          const isSeries = item.type === 'series';
-          return isSeries
-            ? parseSeriesEpisodeInfo(item.name).cleanTitle.toLowerCase().trim()
-            : cleanMovieName(item.name).toLowerCase().trim();
-        };
+        const getCleanTitle = getHomeItemCleanTitle;
 
         // Worker with timeout — never block app boot if the worker stalls.
         const sortedCandidatesSource = await new Promise<PlaylistItem[]>((resolve) => {
@@ -207,29 +166,22 @@ export function useHomeData({
           worker = null;
         }
 
+        const activeSeed = showcaseDaySeed ^ sessionSeedRef.current ^ Math.floor(Date.now() / 1000) ^ Math.floor(Math.random() * 100000);
+
         const source =
           sortedCandidatesSource.length > 0
             ? sortedCandidatesSource
             : [...itemBuckets.series, ...itemBuckets.movie];
-        const uniqueByTitle = (list: PlaylistItem[], limit: number) => {
-          const seen = new Set<string>();
-          const unique: PlaylistItem[] = [];
-          for (const item of list) {
-            const title = getCleanTitle(item);
-            if (!title || seen.has(title)) continue;
-            seen.add(title);
-            unique.push(item);
-            if (unique.length >= limit) break;
-          }
-          return unique;
-        };
-        const seriesCandidates = uniqueByTitle(
+
+        const seriesCandidates = sampleUniqueHomeCandidates(
           source.filter((item) => item.type === 'series'),
           CACHE_CANDIDATES_PER_TYPE,
+          activeSeed,
         );
-        const movieCandidates = uniqueByTitle(
+        const movieCandidates = sampleUniqueHomeCandidates(
           source.filter((item) => item.type !== 'series'),
           CACHE_CANDIDATES_PER_TYPE,
+          activeSeed ^ 0x9e3779b9,
         );
         const candidates = [...seriesCandidates, ...movieCandidates];
 
@@ -248,7 +200,7 @@ export function useHomeData({
             const cachedValue = cachedData?.value ?? cachedData;
             if (cachedValue?.results) {
               const bestResult = selectBestTmdbResult(cachedValue.results, cleanTitle);
-              return toPopularCandidate(item, bestResult);
+              return toPopularShowcaseCandidate(item, bestResult);
             }
           } catch (e) {
             console.error("Showcase cache check error:", e);
@@ -300,7 +252,7 @@ export function useHomeData({
                   cleanTitle,
                   selectionController.signal,
                 );
-                return toPopularCandidate(item, result);
+                return toPopularShowcaseCandidate(item, result);
               } catch (error) {
                 if ((error as Error)?.name !== 'AbortError') {
                   console.warn(`TMDB showcase lookup skipped for "${cleanTitle}"`);
@@ -328,16 +280,16 @@ export function useHomeData({
         const finalSelected = selectMixedPopularShowcase(
           popularPool,
           SHOWCASE_COUNT,
-          showcaseDaySeed,
+          activeSeed,
           activeContentPreferences,
         );
 
         const rankTmdbCandidates = (isSeries: boolean) =>
-          popularPool
+          [...popularPool]
             .filter((candidate) =>
               isSeries ? candidate.item.type === 'series' : candidate.item.type !== 'series'
             )
-            .toSorted((a, b) =>
+            .sort((a, b) =>
               getTmdbShowcaseScore(b) - getTmdbShowcaseScore(a)
               || a.item.name.localeCompare(b.item.name, 'tr')
             )
@@ -371,6 +323,7 @@ export function useHomeData({
 
     return () => {
       active = false;
+      window.clearTimeout(safetyTimeout);
       selectionController.abort();
       if (worker) {
         worker.terminate();
@@ -436,104 +389,20 @@ export function useHomeData({
 
     const isTrUi = activeContentPreferences.includes('tr') || getTmdbLanguage() === 'tr-TR';
 
-    /** No TMDB match / API key — never invent marketing copy for the synopsis. */
-    const fallbackFeatured = (): FeaturedTmdbData => ({
-      match: '',
-      rating: '',
-      year: '',
-      desc: '',
-      backdrop: undefined,
-      poster: undefined
-    });
-
-    const buildFeaturedFromTmdb = async (
+    const fallbackFeatured = createEmptyFeaturedMetadata;
+    const buildFeaturedFromTmdb = (
       endpoint: 'tv' | 'movie',
       series: boolean,
       result: any,
       signal: AbortSignal,
-    ): Promise<FeaturedTmdbData> => {
-      const backdropPath = await resolveTmdbImageSrc(result.backdrop_path || result.poster_path, 'original', signal);
-      const posterPath = result.poster_path && result.poster_path !== result.backdrop_path
-        ? await resolveTmdbImageSrc(result.poster_path, 'w500', signal)
-        : undefined;
-
-      let logoUrl: string | undefined;
-      let duration: string | undefined;
-      let genres: string[] = [];
-      let detailsOverview: string | undefined;
-      let detailsTagline: string | undefined;
-
-      try {
-        const details: any = await fetchTmdbDetails(endpoint, tmdbApiKey, result.id, signal);
-        if (details && !details.error) {
-          detailsOverview = details.overview;
-          detailsTagline = typeof details.tagline === 'string' ? details.tagline : undefined;
-          if (details.images?.logos?.length) {
-            const logos = details.images.logos;
-            const bestLogo = logos.find((l: any) => l.iso_639_1 === 'tr')
-              || logos.find((l: any) => l.iso_639_1 === 'en')
-              || logos[0];
-            if (bestLogo) {
-              logoUrl = await resolveTmdbImageSrc(bestLogo.file_path, 'w500', signal);
-            }
-          }
-          if (details.genres) {
-            genres = details.genres.slice(0, 2).map((g: any) => g.name);
-          }
-          if (series && details.number_of_seasons) {
-            duration = `${details.number_of_seasons} ${isTrUi ? 'Sezon' : 'Seasons'}`;
-          } else if (!series && details.runtime) {
-            const hrs = Math.floor(details.runtime / 60);
-            const mins = details.runtime % 60;
-            duration = hrs > 0
-              ? (mins > 0 ? `${hrs}sa ${mins}dk` : `${hrs}sa`)
-              : `${mins}dk`;
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch TMDB featured details:', err);
-      }
-
-      // Full synopsis from TMDB (tr → en). Used only as source for a short billboard cut.
-      const overview = await resolveTmdbOverview(
-        endpoint,
-        tmdbApiKey,
-        result.id,
-        [detailsOverview, result.overview],
-        signal,
-      );
-
-      // Prefer tagline when missing in UI language — try EN details tagline.
-      let tagline = detailsTagline?.trim() || '';
-      if (!tagline && getTmdbLanguage() !== 'en-US') {
-        try {
-          const enDetails: any = await fetchTmdbDetails(endpoint, tmdbApiKey, result.id, signal, 'en-US');
-          if (enDetails && !enDetails.error && typeof enDetails.tagline === 'string') {
-            tagline = enDetails.tagline.trim();
-          }
-        } catch {
-          /* optional */
-        }
-      }
-
-      // Max-style teaser: full-sentence overview blurb (not a 3-word tagline slogan).
-      const shortDesc = pickHeroSynopsis({ tagline, overview, maxLen: 190 });
-
-      return {
-        match: '',
-        rating: result.vote_average ? result.vote_average.toFixed(1) : '',
-        year: series
-          ? (result.first_air_date ? result.first_air_date.split('-')[0] : '')
-          : (result.release_date ? result.release_date.split('-')[0] : ''),
-        desc: shortDesc,
-        backdrop: backdropPath || posterPath || undefined,
-        poster: posterPath || undefined,
-        logo: logoUrl || undefined,
-        duration: duration || undefined,
-        genres: genres.length > 0 ? genres : undefined
-      };
-    };
-
+    ) => buildFeaturedTmdbData({
+      endpoint,
+      series,
+      result,
+      signal,
+      tmdbApiKey,
+      isTrUi,
+    });
     const cached = featuredCacheRef.current.get(cacheKey);
     // Re-resolve: missing, placeholder, full novel, or old slogan-only blurbs ("You can't unsee it.").
     const cacheLooksStale =
@@ -616,468 +485,47 @@ export function useHomeData({
 
   // Memoized popular movies — top-80 by daily score without full N log-sort when N >> 80
   const populerFilmler = useMemo(() => {
-    if (itemBuckets.movie.length === 0) return [];
-    const daySeed = new Date().toISOString().slice(0, 10) + '-movies';
-    const kids = activeContentPreferences.includes('kids');
-    const candidates = itemBuckets.movie.filter(item => !isUnavailableCatalogItem(item));
-    return takeTopByScore(
-      candidates,
-      (item) => {
-        let score = dailyStableScore(`${daySeed}-${item.name}-${item.group || ''}`);
-        if (kids) {
-          const text = `${getItemNameLower(item)} ${getItemGroupLower(item, '')}`;
-          if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(k => text.includes(k))) {
-            score += 1200;
-          }
-        }
-        return score;
-      },
-      80,
-    );
+    return selectPopularMovies(itemBuckets.movie, activeContentPreferences);
   }, [itemBuckets.movie, activeContentPreferences]);
 
   // Memoized popular series — same top-K path as movies
   const populerDiziler = useMemo(() => {
-    if (allGroupedSeries.length === 0) return [];
-    const daySeed = new Date().toISOString().slice(0, 10) + '-series';
-    const kids = activeContentPreferences.includes('kids');
-    const candidates = allGroupedSeries.filter(item => !isUnavailableCatalogItem(item));
-    return takeTopByScore(
-      candidates,
-      (item) => {
-        let score = dailyStableScore(`${daySeed}-${item.name}-${item.group || ''}`);
-        if (kids) {
-          const text = `${getItemNameLower(item)} ${getItemGroupLower(item, '')}`;
-          if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(k => text.includes(k))) {
-            score += 1200;
-          }
-        }
-        return score;
-      },
-      80,
-    );
+    return selectPopularSeries(allGroupedSeries, activeContentPreferences);
   }, [allGroupedSeries, activeContentPreferences]);
 
-  const homeDiscoveryItems = useMemo(() => {
-    if (itemBuckets.movie.length + allGroupedSeries.length === 0) return [];
-
-    const recommendationLimit = 16;
-    const ignoredGroupTokens = new Set([
-      'tr', 'film', 'filmler', 'movie', 'movies', 'dizi', 'diziler',
-      'series', 'hd', 'fhd', 'uhd', '4k', 'raw', 'istek', 'yapilan',
-    ]);
-    const titleStopWords = new Set([
-      'bir', 've', 'ile', 'veya', 'de', 'da', 'ki', 'icin', 'bu', 'su', 'o',
-      'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with',
-      'season', 'sezon', 'bolum', 'episode', 'tek', 'parca', 'hd', 'fhd', 'uhd', '4k',
-      'tr', 'eng', 'dublaj', 'altyazili', 'full', 'watch', 'izle', 'series', 'movie'
-    ]);
-
-    const titleKey = (item: PlaylistItem | GroupedSeries) => {
-      const title = item.type === 'series'
-        ? parseSeriesEpisodeInfo(item.name).cleanTitle
-        : cleanMovieName(item.name);
-      return (title || item.name).toLocaleLowerCase('tr-TR').trim();
-    };
-    const groupTokens = (group?: string) =>
-      (group || '')
-        .toLocaleLowerCase('tr-TR')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .split(/[^a-z0-9çğıöşü]+/u)
-        .filter(token => token.length > 2 && !ignoredGroupTokens.has(token));
-
-    const extractTitleKeywords = (title: string) => {
-      const cleaned = cleanMovieName(title)
-        .toLocaleLowerCase('tr-TR')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '');
-      return cleaned
-        .split(/[^a-z0-9çğıöşü]+/u)
-        .filter(w => w.length > 2 && !titleStopWords.has(w) && !ignoredGroupTokens.has(w));
-    };
-
-    const watchedTitleKeys = new Set<string>();
-    const historySignalTitles = new Set<string>();
-    const historyGroupWeights = new Map<string, number>();
-    const historyKeywordWeights = new Map<string, number>();
-    let movieHistoryWeight = 0;
-    let seriesHistoryWeight = 0;
-
-    // A) Process Recently Watched Items (Recency Decay + Completion Ratio)
-    recentlyWatched.slice(0, 50).forEach((watched, index) => {
-      if (!watched || (watched.type !== 'movie' && watched.type !== 'series')) return;
-      const key = titleKey(watched);
-      if (!key) return;
-      watchedTitleKeys.add(key);
-
-      if (historySignalTitles.has(key)) return;
-      historySignalTitles.add(key);
-
-      const recencyWeight = Math.max(5, 50 - index);
-      const engagementWeight = Math.min(15, Math.max(0, (watched.progress ?? 0) / 100 * 15));
-      const signalWeight = recencyWeight + engagementWeight;
-
-      if (watched.type === 'series') seriesHistoryWeight += signalWeight;
-      else movieHistoryWeight += signalWeight;
-
-      groupTokens(watched.group).forEach((token) => {
-        historyGroupWeights.set(
-          token,
-          (historyGroupWeights.get(token) || 0) + signalWeight,
-        );
-      });
-
-      extractTitleKeywords(watched.name).forEach((kw) => {
-        historyKeywordWeights.set(
-          kw,
-          (historyKeywordWeights.get(kw) || 0) + signalWeight * 1.5,
-        );
-      });
-    });
-
-    // B) Process Global Favorites (Explicit High-Intent Positive Signal)
-    const favSet = new Set(globalFavorites || []);
-    if (favSet.size > 0) {
-      const allItemsMap = new Map<string, PlaylistItem | GroupedSeries>();
-      items.forEach(i => allItemsMap.set(i.id, i));
-      allGroupedSeries.forEach(s => allItemsMap.set(s.id, s));
-
-      favSet.forEach(favId => {
-        const item = allItemsMap.get(favId);
-        if (!item || (item.type !== 'movie' && item.type !== 'series')) return;
-        const key = titleKey(item);
-        if (key) watchedTitleKeys.add(key);
-
-        const favoriteWeight = 40;
-        if (item.type === 'series') seriesHistoryWeight += favoriteWeight;
-        else movieHistoryWeight += favoriteWeight;
-
-        groupTokens(item.group).forEach((token) => {
-          historyGroupWeights.set(
-            token,
-            (historyGroupWeights.get(token) || 0) + favoriteWeight,
-          );
-        });
-
-        extractTitleKeywords(item.name).forEach((kw) => {
-          historyKeywordWeights.set(
-            kw,
-            (historyKeywordWeights.get(kw) || 0) + favoriteWeight * 1.8,
-          );
-        });
-      });
-    }
-
-    const totalSignalWeight = movieHistoryWeight + seriesHistoryWeight;
-    const hasHistorySignals = totalSignalWeight > 0;
-    const itemScores = new Map<string, number>();
-
-    const scoreItem = (item: PlaylistItem | GroupedSeries) => {
-      let score = 0;
-
-      if (hasHistorySignals) {
-        const typeWeight = item.type === 'series'
-          ? seriesHistoryWeight
-          : movieHistoryWeight;
-        score += (typeWeight / totalSignalWeight) * 1200;
-
-        for (const token of groupTokens(item.group)) {
-          score += (historyGroupWeights.get(token) || 0) * 24;
-        }
-
-        for (const kw of extractTitleKeywords(item.name)) {
-          const kwWeight = historyKeywordWeights.get(kw) || 0;
-          if (kwWeight > 0) {
-            score += kwWeight * 35 + 300;
-          }
-        }
-      } else {
-        if (activeContentPreferences.includes('series') && item.type === 'series') score += 700;
-        if (activeContentPreferences.includes('movies') && item.type === 'movie') score += 700;
-      }
-
-      if (activeContentPreferences.includes('kids')) {
-        const nLower = getItemNameLower(item);
-        const gLower = getItemGroupLower(item, '');
-        const text = `${nLower} ${gLower}`;
-        if (['çocuk', 'cocuk', 'kids', 'çizgi', 'cizgi', 'animasyon', 'cartoon', 'disney'].some(keyword => text.includes(keyword))) score += 1000;
-      }
-
-      const lowerName = item.name.toLowerCase();
-      if (lowerName.includes('4k') || lowerName.includes('uhd')) score += 120;
-      else if (lowerName.includes('1080p') || lowerName.includes('fhd')) score += 60;
-
-      // Daily seed rotation score so top recommendations update & refresh every single calendar day
-      const dailyVariety = dailyStableScore(`${showcaseDaySeed}-daily-discovery-${item.name}-${item.group || ''}`);
-      score += dailyVariety * 150;
-
-      itemScores.set(item.id, score);
-      return score;
-    };
-
-    const movieCandidates = itemBuckets.movie.filter(item =>
-      !isUnavailableCatalogItem(item) && !watchedTitleKeys.has(titleKey(item))
-    );
-    const seriesCandidates = allGroupedSeries.filter(item =>
-      !isUnavailableCatalogItem(item) && !watchedTitleKeys.has(titleKey(item))
-    );
-    const rankedMovies = takeTopByScore(
-      movieCandidates,
-      scoreItem,
-      recommendationLimit * 2,
-    );
-    const rankedSeries = takeTopByScore(
-      seriesCandidates,
-      scoreItem,
-      recommendationLimit * 2,
-    );
-
-    let movieTarget = 8;
-    if (hasHistorySignals) {
-      const movieShare = movieHistoryWeight / totalSignalWeight;
-      movieTarget = Math.min(12, Math.max(4, Math.round(recommendationLimit * movieShare)));
-    } else if (
-      activeContentPreferences.includes('movies')
-      && !activeContentPreferences.includes('series')
-    ) {
-      movieTarget = 11;
-    } else if (
-      activeContentPreferences.includes('series')
-      && !activeContentPreferences.includes('movies')
-    ) {
-      movieTarget = 5;
-    }
-    const seriesTarget = recommendationLimit - movieTarget;
-    const movieQuota = Math.min(movieTarget, rankedMovies.length);
-    const seriesQuota = Math.min(seriesTarget, rankedSeries.length);
-
-    const recommendations: Array<PlaylistItem | GroupedSeries> = [];
-    let movieIndex = 0;
-    let seriesIndex = 0;
-    const movieFirst = movieTarget >= seriesTarget;
-    while (
-      recommendations.length < recommendationLimit
-      && (movieIndex < movieQuota || seriesIndex < seriesQuota)
-    ) {
-      if (movieFirst) {
-        if (movieIndex < movieQuota && rankedMovies[movieIndex]) {
-          recommendations.push(rankedMovies[movieIndex++]);
-        }
-        if (seriesIndex < seriesQuota && rankedSeries[seriesIndex]) {
-          recommendations.push(rankedSeries[seriesIndex++]);
-        }
-      } else {
-        if (seriesIndex < seriesQuota && rankedSeries[seriesIndex]) {
-          recommendations.push(rankedSeries[seriesIndex++]);
-        }
-        if (movieIndex < movieQuota && rankedMovies[movieIndex]) {
-          recommendations.push(rankedMovies[movieIndex++]);
-        }
-      }
-    }
-
-    while (recommendations.length < recommendationLimit) {
-      const nextMovie = rankedMovies[movieIndex++];
-      const nextSeries = rankedSeries[seriesIndex++];
-      if (nextMovie) recommendations.push(nextMovie);
-      if (recommendations.length < recommendationLimit && nextSeries) {
-        recommendations.push(nextSeries);
-      }
-      if (!nextMovie && !nextSeries) break;
-    }
-
-    return recommendations;
-  }, [
-    items,
-    itemBuckets.movie,
-    allGroupedSeries,
-    recentlyWatched,
-    globalFavorites,
-    activeContentPreferences,
-    showcaseDaySeed,
-  ]);
-
+  const homeDiscoveryItems = useMemo(
+    () => selectHomeDiscoveryItems({
+      items,
+      movies: itemBuckets.movie,
+      groupedSeries: allGroupedSeries,
+      recentlyWatched,
+      globalFavorites,
+      activeContentPreferences,
+      showcaseDaySeed,
+    }),
+    [
+      items,
+      itemBuckets.movie,
+      allGroupedSeries,
+      recentlyWatched,
+      globalFavorites,
+      activeContentPreferences,
+      showcaseDaySeed,
+    ],
+  );
   // Memoized Live TV quick popular Turkish channels
-  const homeLiveTvQuickChannels = useMemo(() => {
-    const popularPatterns = [
-      { match: ['trt 1', 'trt1'] },
-      { match: ['atv'] },
-      { match: ['star tv', 'star'] },
-      { match: ['show tv', 'show'] },
-      { match: ['tv8', 'tv 8'] },
-      { match: ['kanal d', 'kanald'] },
-      { match: ['now tv', 'now', 'fox tv', 'fox'] },
-      { match: ['bein sports 1', 'bein sport 1', 'bein 1', 'bein connect 1'] },
-      { match: ['bein sports 2', 'bein sport 2', 'bein 2', 'bein connect 2'] },
-      { match: ['bein sports 3', 'bein sport 3', 'bein 3', 'bein connect 3'] },
-      { match: ['bein sports 4', 'bein sport 4', 'bein 4', 'bein connect 4'] },
-      { match: ['s sport 1', 's sport', 'ssport 1', 'ssport'] },
-      { match: ['s sport 2', 'ssport 2'] },
-      { match: ['trt spor', 'trtspor'] },
-      { match: ['a spor', 'aspor'] },
-      { match: ['ntv'] },
-      { match: ['cnn turk', 'cnnturk'] },
-      { match: ['haberturk', 'haber turk'] },
-      { match: ['tv8.5', 'tv 8.5', 'tv8,5', 'tv 8,5'] }
-    ];
-
-    const selected: PlaylistItem[] = [];
-
-    for (const pattern of popularPatterns) {
-      const match = itemBuckets.live.find(channel => {
-        const nameLower = channel.name.toLowerCase();
-        if (nameLower.includes('yedek') || nameLower.includes('test') || nameLower.includes('bakim')) {
-          return false;
-        }
-        return pattern.match.some(term => {
-          const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(`\\b${escapedTerm}\\b`, 'i');
-          return regex.test(nameLower) || nameLower === term;
-        });
-      });
-
-      if (match) {
-        selected.push(match);
-      }
-    }
-
-    if (selected.length < 10) {
-      for (const channel of itemBuckets.live) {
-        if (selected.length >= 15) break;
-        const nameLower = channel.name.toLowerCase();
-        if (nameLower.includes('yedek') || nameLower.includes('test') || nameLower.includes('bakim') || nameLower.includes('adult') || nameLower.includes('xxx')) {
-          continue;
-        }
-        if (!selected.some(s => s.id === channel.id)) {
-          selected.push(channel);
-        }
-      }
-    }
-
-    const visibleChannels = selected.slice(0, 15);
-    if (activeContentPreferences.includes('sports')) {
-      const sportsKeywords = ['spor', 'sport', 'bein', 's sport', 'ssport', 'tivibu spor', 'smart spor', 'nba', 'futbol'];
-      return visibleChannels.toSorted((a, b) => {
-        const aText = `${a.name} ${a.group || ''}`.toLocaleLowerCase('tr-TR');
-        const bText = `${b.name} ${b.group || ''}`.toLocaleLowerCase('tr-TR');
-        const aSport = sportsKeywords.some(keyword => aText.includes(keyword)) ? 1 : 0;
-        const bSport = sportsKeywords.some(keyword => bText.includes(keyword)) ? 1 : 0;
-        return bSport - aSport;
-      });
-    }
-    return visibleChannels;
-  }, [itemBuckets.live, activeContentPreferences]);
-
+  const homeLiveTvQuickChannels = useMemo(
+    () => selectQuickLiveChannels(itemBuckets.live, activeContentPreferences),
+    [itemBuckets.live, activeContentPreferences],
+  );
   // Filter recently watched list to keep only the most recent episode of each series, and movies
   // If an episode/movie is finished (progress > 90%):
   // - For movies: remove it
   // - For series: show next episode (with progress = 0), or remove if no next episode
-  const uniqueRecentlyWatched = useMemo(() => {
-    const seenSeries = new Set<string>();
-    const mapped = recentlyWatched.map((item) => {
-      if (!item) return null;
-      const rawName = String(item.name || '').trim();
-      if (!rawName) return null;
-
-      // Some older history entries may miss type — infer series from episode pattern
-      let type = item.type;
-      if (type !== 'movie' && type !== 'series' && type !== 'live') {
-        const looksLikeEpisode =
-          /s\s*\d+\s*e\s*\d+/i.test(rawName) ||
-          /\d+\s*\.?\s*sezon/i.test(rawName) ||
-          /\d+\s*\.?\s*bölüm/i.test(rawName);
-        type = looksLikeEpisode ? 'series' : 'movie';
-      }
-
-      const progress = item.progress ?? 0;
-      const isFinished = progress > 90;
-      const baseItem: PlaylistItem = { ...item, name: rawName, type };
-
-      if (type === 'movie') {
-        if (isFinished) return null;
-        return baseItem;
-      }
-
-      if (type === 'series') {
-        const parsed = parseSeriesEpisodeInfo(rawName);
-        const seriesKeyName = (parsed.cleanTitle || rawName).trim() || rawName;
-        const key = `${seriesKeyName.toLowerCase()}:::${item.group || ''}`;
-        if (seenSeries.has(key)) return null;
-        seenSeries.add(key);
-
-        const titleKey = seriesKeyName.toLowerCase();
-        const grouped =
-          allGroupedSeries.find(
-            (series) =>
-              series.name === seriesKeyName &&
-              (series.group || 'Genel') === (item.group || 'Genel'),
-          ) ||
-          allGroupedSeries.find(
-            (series) =>
-              (parseSeriesEpisodeInfo(series.name).cleanTitle || series.name)
-                .toLowerCase() === titleKey,
-          );
-
-        const resolveLogo = (base: PlaylistItem): PlaylistItem => {
-          const hasLogo = Boolean(
-            base.logo && String(base.logo).trim() && !base.isGenericLogo,
-          );
-          if (hasLogo) return base;
-          const seriesLogo =
-            grouped?.logo && String(grouped.logo).trim()
-              ? grouped.logo
-              : undefined;
-          if (!seriesLogo) return base;
-          return { ...base, logo: seriesLogo, isGenericLogo: false };
-        };
-
-        if (isFinished) {
-          if (grouped) {
-            const allEpisodes: {
-              episodeNumber: number;
-              seasonNumber: number;
-              item: PlaylistItem;
-            }[] = [];
-            for (const sNoStr in grouped.seasons) {
-              const sNo = parseInt(sNoStr, 10);
-              allEpisodes.push(...grouped.seasons[sNo]);
-            }
-            allEpisodes.sort((a, b) => {
-              if (a.seasonNumber !== b.seasonNumber) {
-                return a.seasonNumber - b.seasonNumber;
-              }
-              return a.episodeNumber - b.episodeNumber;
-            });
-
-            const currentIndex = allEpisodes.findIndex(
-              (ep) =>
-                ep.seasonNumber === parsed.season &&
-                ep.episodeNumber === parsed.episode,
-            );
-
-            if (currentIndex !== -1 && currentIndex < allEpisodes.length - 1) {
-              const nextEp = allEpisodes[currentIndex + 1].item;
-              return resolveLogo({
-                ...nextEp,
-                currentTime: undefined,
-                duration: undefined,
-                progress: undefined,
-              });
-            }
-          }
-          return null;
-        }
-
-        return resolveLogo(baseItem);
-      }
-
-      return null;
-    });
-
-    return mapped.filter((item): item is PlaylistItem => item !== null);
-  }, [recentlyWatched, allGroupedSeries]);
-
+  const uniqueRecentlyWatched = useMemo(
+    () => selectUniqueRecentlyWatched(recentlyWatched, allGroupedSeries),
+    [recentlyWatched, allGroupedSeries],
+  );
   return {
     showcaseItems,
     featuredTmdbData,
@@ -1091,6 +539,6 @@ export function useHomeData({
     homeDiscoveryItems,
     homeLiveTvQuickChannels,
     uniqueRecentlyWatched,
-    isHomeReady
+    isHomeReady,
   };
 }

@@ -13,11 +13,11 @@ declare global {
       ) => Promise<{ success: boolean; message: string }>;
       saveConfig: (
         key: string,
-        value: any,
+        value: unknown,
       ) => Promise<{ success: boolean; error?: string }>;
       saveConfigSync?: (
         key: string,
-        value: any,
+        value: unknown,
       ) => { success: boolean; error?: string };
       saveConfigBatchSync?: (entries: Record<string, unknown>) => {
         success: boolean;
@@ -30,7 +30,7 @@ declare global {
         profileId: string,
         playlistId: string,
       ) => Promise<{ success: boolean; playlist?: SavedPlaylist; error?: string }>;
-      loadConfig: (key: string) => Promise<any>;
+      loadConfig: (key: string) => Promise<unknown>;
       savePlaylistItems: (
         id: string,
         items: PlaylistItem[],
@@ -43,7 +43,7 @@ declare global {
       fetchTmdbImage?: (
         path: string,
         size?: string,
-      ) => Promise<{ dataUrl?: string; localUrl?: string; error?: string }>;
+      ) => Promise<{ dataUrl?: string; localUrl?: string; error?: string; bytes?: number; cached?: boolean }>;
       startFfmpegProxy?: (
         url: string,
         startTime?: number,
@@ -80,6 +80,7 @@ declare global {
         status: 'idle' | 'checking' | 'available' | 'downloading' | 'not-available' | 'downloaded' | 'error';
         message: string;
         version?: string;
+        releaseNotes?: string;
         error?: string;
       }>;
       downloadUpdate?: () => Promise<{ success: boolean; error?: string }>;
@@ -88,9 +89,10 @@ declare global {
       getAppVersion?: () => Promise<string>;
       onUpdateStatus?: (
         callback: (data: {
-          status: any;
+          status: 'idle' | 'checking' | 'available' | 'downloading' | 'not-available' | 'downloaded' | 'error';
           message: string;
           version?: string;
+          releaseNotes?: string;
         }) => void,
       ) => () => void;
       onUpdateProgress?: (
@@ -253,6 +255,17 @@ export interface TmdbSearchResponse {
   error?: string;
 }
 
+export interface TmdbData {
+  id?: number;
+  match?: string;
+  rating?: string;
+  year?: string;
+  desc?: string;
+  poster?: string;
+  backdrop?: string;
+  genres?: string[];
+}
+
 export interface TmdbMetadata {
   posterUrl: string | null;
   backdropUrl?: string | null;
@@ -284,6 +297,7 @@ export interface ImageWithFallbackProps {
   preferPlaylistArtwork?: boolean;
   /** Use playlist artwork as a last resort when TMDB has no usable image. */
   fallbackToPlaylist?: boolean;
+  blurUp?: boolean;
   /** Overlay the official TMDB series wordmark when one exists. */
   showOfficialTitleLogo?: boolean;
 }

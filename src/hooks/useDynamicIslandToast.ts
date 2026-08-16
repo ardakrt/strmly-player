@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getToastDuration } from '../utils/toastHelpers';
+import { getFriendlyToastMessage, getToastDuration } from '../utils/toastHelpers';
+import type { Language } from '../utils/translations';
 
 interface UseDynamicIslandToastProps {
   toast: { show: boolean; message: string };
   hideToast: () => void;
+  language: Language;
 }
 
-export function useDynamicIslandToast({ toast, hideToast }: UseDynamicIslandToastProps) {
+export function useDynamicIslandToast({ toast, hideToast, language }: UseDynamicIslandToastProps) {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastExit, setToastExit] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -28,17 +30,18 @@ export function useDynamicIslandToast({ toast, hideToast }: UseDynamicIslandToas
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (toastExitTimerRef.current) clearTimeout(toastExitTimerRef.current);
 
-      setToastMessage(toast.message);
+      const friendlyMessage = getFriendlyToastMessage(toast.message, language);
+      setToastMessage(friendlyMessage);
       setToastExit(false);
       setToastVisible(true);
 
-      toastTimerRef.current = setTimeout(startToastExit, getToastDuration(toast.message));
+      toastTimerRef.current = setTimeout(startToastExit, getToastDuration(friendlyMessage));
     }
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (toastExitTimerRef.current) clearTimeout(toastExitTimerRef.current);
     };
-  }, [toast.show, toast.message, startToastExit]);
+  }, [toast.show, toast.message, language, startToastExit]);
 
   const handleToastMouseEnter = () => {
     if (toastTimerRef.current) {

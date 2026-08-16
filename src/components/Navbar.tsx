@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Search, X, ArrowLeft, Settings, ChevronDown, RefreshCw } from 'lucide-react';
+import { Search, X, ArrowLeft, Settings, ChevronDown, RefreshCw, UserRound } from 'lucide-react';
 import type { Profile, SavedPlaylist } from '../types';
 import type { PlaylistItem } from '../utils/m3uParser';
 import { useSettings } from '../context/SettingsContext';
@@ -70,9 +70,15 @@ export const Navbar = memo(function Navbar({
   };
 
   return (
-    <div className={`pointer-events-none fixed top-0 left-0 right-0 z-50 px-3 sm:px-5 lg:px-8 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-      scrolled || showSpotlight ? 'pt-2.5' : 'pt-4'
-    }`}>
+    <>
+      {/* Dedicated Linux-friendly window handle. It stays large enough to
+          grab when maximized; double-clicking it toggles maximize natively. */}
+      <div
+        className="titlebar-drag-strip fixed left-0 right-0 top-0 z-[60] h-8"
+        aria-hidden="true"
+        title={language === 'tr' ? 'Pencereyi taşımak için sürükleyin' : 'Drag to move the window'}
+      />
+      <div className="pointer-events-none fixed top-0 left-0 right-0 z-50 px-3 pt-8 sm:px-5 lg:px-8 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
       <nav
         aria-label="Ana navigasyon"
         className={`pointer-events-auto navbar-liquid-glass mx-auto flex w-full items-center justify-between gap-2 px-2.5 sm:px-3 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] rounded-full ${
@@ -81,11 +87,11 @@ export const Navbar = memo(function Navbar({
             : 'h-12 max-w-[1180px]'
         }`}
       >
-        <div className="flex min-w-0 flex-1 items-center h-full">
+        <div className="flex min-w-0 flex-1 items-center h-full relative z-[1]">
           <button
             type="button"
             aria-label={t('navbar.home')}
-            className="flex shrink-0 items-center group cursor-pointer focusable-item rounded-full px-2 sm:px-3"
+            className="flex shrink-0 items-center group cursor-pointer  rounded-full px-2 sm:px-2.5"
             onClick={() => {
               exitSearch();
               setSelectedGroup('Ana Sayfa');
@@ -95,7 +101,10 @@ export const Navbar = memo(function Navbar({
             <span className="text-[14px] font-black tracking-[-0.015em] text-white leading-none transition-opacity duration-200 group-hover:opacity-80">Strmly</span>
           </button>
 
-          <div className="hide-scrollbar flex min-w-0 flex-1 items-center h-full gap-0.5 overflow-x-auto px-1 sm:ml-1 sm:px-2">
+          {/* Discreet vertical divider between logo and navigation links */}
+          <div className="h-3.5 w-[1px] bg-white/12 mx-1 sm:mx-1.5 shrink-0 select-none" />
+
+          <div className="navbar-nav-scroll-cue hide-scrollbar flex min-w-0 flex-1 items-center h-full gap-0.5 overflow-x-auto px-1 pr-6 sm:px-1.5 sm:pr-1.5">
             {[
               { id: 'Ana Sayfa', label: t('navbar.home') },
               { id: 'Canlı TV', label: t('navbar.liveTv') },
@@ -115,7 +124,7 @@ export const Navbar = memo(function Navbar({
                     setSelectedGroup(link.id);
                     clearCatalogSearch();
                   }}
-                  className={`navbar-nav-item relative shrink-0 px-3 sm:px-3.5 py-1.5 rounded-full border text-[10px] sm:text-[11px] font-bold transition-all duration-200 cursor-pointer focusable-item ${isActive
+                  className={`navbar-nav-item relative shrink-0 px-3 sm:px-3.5 py-1.5 rounded-full border text-xs font-bold transition-all duration-200 cursor-pointer ${isActive
                       ? 'text-white bg-white/[0.09] border-white/[0.10] shadow-[inset_0_1px_0_rgba(255,255,255,0.055)]'
                       : 'text-neutral-400 border-transparent hover:text-white hover:bg-white/[0.045]'
                     }`}
@@ -126,18 +135,18 @@ export const Navbar = memo(function Navbar({
             })}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 relative">
+        <div className="flex shrink-0 items-center gap-2 relative z-[1]">
           <div
-            className={`relative flex h-8 items-center rounded-full border transition-all duration-200 ${
+            className={`relative flex h-8 items-center rounded-full border transition-all duration-300 ease-out ${
               showSpotlight
-                ? 'w-[min(46vw,18rem)] sm:w-52 lg:w-64 border-white/25 bg-black/55'
-                : 'w-9 md:w-44 lg:w-56 xl:w-64 border-white/[0.10] bg-white/[0.07] hover:border-white/[0.16] hover:bg-white/[0.10]'
+                ? 'w-[min(46vw,18rem)] sm:w-52 lg:w-64 border-white/30 bg-black/60 shadow-[0_0_24px_rgba(0,0,0,0.4)]'
+                : 'w-9 md:w-44 lg:w-56 xl:w-64 border-white/[0.09] bg-white/[0.06] hover:border-white/[0.18] hover:bg-white/[0.09]'
             }`}
           >
             <Search
-              size={14}
+              size={13}
               className={`pointer-events-none absolute left-2.5 transition-colors ${
-                showSpotlight ? 'text-white/70' : 'text-neutral-500'
+                showSpotlight ? 'text-white/80' : 'text-neutral-400'
               }`}
             />
             <input
@@ -148,7 +157,13 @@ export const Navbar = memo(function Navbar({
               aria-label={t('navbar.searchTitle')}
               autoComplete="off"
               spellCheck={false}
-              onFocus={openSearch}
+              onFocus={(event) => {
+                if (event.currentTarget.dataset.spotlightReturnFocus === 'true') {
+                  delete event.currentTarget.dataset.spotlightReturnFocus;
+                  return;
+                }
+                openSearch();
+              }}
               onChange={(event) => {
                 openSearch();
                 setSpotlightSearchInput(event.target.value);
@@ -160,7 +175,7 @@ export const Navbar = memo(function Navbar({
                   event.currentTarget.blur();
                 }
               }}
-              className="h-full w-full min-w-0 rounded-full bg-transparent pl-8 pr-8 text-[11px] font-medium text-white outline-none placeholder:text-neutral-500"
+              className="h-full w-full min-w-0 rounded-full bg-transparent pl-8 pr-8 text-base md:text-xs font-medium text-white outline-none placeholder:text-neutral-400/80"
             />
             {showSpotlight && spotlightSearchInput ? (
               <button
@@ -169,13 +184,13 @@ export const Navbar = memo(function Navbar({
                   setSpotlightSearchInput('');
                   spotlightInputRef.current?.focus();
                 }}
-                className="absolute right-1.5 grid h-6 w-6 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white cursor-pointer"
+                className="absolute right-1.5 grid h-5.5 w-5.5 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white cursor-pointer"
                 aria-label={language === 'tr' ? 'Temizle' : 'Clear'}
               >
                 <X size={12} />
               </button>
             ) : !showSpotlight ? (
-              <div className="pointer-events-none absolute right-2 hidden lg:flex items-center px-1.5 py-0.5 rounded-md bg-white/[0.045] border border-white/[0.08] text-[8px] font-bold text-neutral-500 select-none">
+              <div className="pointer-events-none absolute right-2 hidden lg:flex items-center px-1.5 py-0.5 rounded-md bg-white/[0.07] border border-white/[0.12] backdrop-blur-sm text-xs font-mono font-semibold text-neutral-300 shadow-sm select-none">
                 Ctrl K
               </div>
             ) : null}
@@ -185,39 +200,36 @@ export const Navbar = memo(function Navbar({
               type="button"
               onClick={applyPendingUpdate}
               title={language === 'tr' ? 'Güncellenmiş listeyi yükle' : 'Apply updated playlist'}
-              className="h-8 px-3 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-500/10 shrink-0"
+              className="h-8 px-3 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-500/10 shrink-0"
             >
               <RefreshCw size={12} className="animate-spin" style={{ animationDuration: '4s' }} />
               <span className="hidden sm:inline">{language === 'tr' ? 'Yeni Liste Hazır' : 'Playlist Updated'} ({pendingPlaylistUpdate.channelCount})</span>
               <span className="sm:hidden">{language === 'tr' ? 'Yenile' : 'Refresh'}</span>
             </button>
           )}
+          {/* Profile Dropdown */}
           <div className="relative">
             <button
               type="button"
               aria-expanded={profileDropdownOpen}
-              className={`h-9 rounded-full bg-white/[0.07] hover:bg-white/[0.10] border flex items-center gap-2 pl-1 pr-3 transition-all duration-200 cursor-pointer focusable-item ${
-                profileDropdownOpen ? 'border-white/20 bg-white/[0.11]' : 'border-white/10'
+              className={`navbar-profile-btn group h-8.5 rounded-full bg-white/[0.06] hover:bg-white/[0.11] border flex items-center gap-2 pl-1 pr-2.5 transition-all duration-200 cursor-pointer  ${
+                profileDropdownOpen ? 'border-white/25 bg-white/[0.12] shadow-md' : 'border-white/10 hover:border-white/20'
               }`}
               onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
             >
               <div className="relative">
-                <div className="w-7 h-7 rounded-full overflow-hidden border border-white/15 flex items-center justify-center shadow-md bg-white/[0.06] transition-all duration-200">
-                  {currentProfile ? (
-                    isCurrentProfileGradient ? (
-                      <div className="w-full h-full" style={{ background: currentProfile.avatarUrl }} />
-                    ) : (
-                      <img src={currentProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
-                    )
+                <div className="w-6.5 h-6.5 rounded-full overflow-hidden border border-white/20 ring-1 ring-white/15 group-hover:ring-white/35 flex items-center justify-center shadow-md bg-neutral-800 transition-all duration-200">
+                  {currentProfile && currentProfile.avatarUrl && !isCurrentProfileGradient ? (
+                    <img src={currentProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-[10px] font-black text-white/80 tracking-wider">VIP</span>
+                    <UserRound size={14} className="text-neutral-300 shrink-0" />
                   )}
                 </div>
               </div>
-              <span className="hidden lg:block max-w-26 truncate text-[11.5px] font-semibold text-neutral-300">
+              <span className="hidden lg:block max-w-26 truncate text-xs font-medium text-neutral-200 group-hover:text-white transition-colors">
                 {currentProfile ? currentProfile.name : t('navbar.user')}
               </span>
-              <ChevronDown size={12} className={`hidden lg:block text-neutral-500 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-neutral-200' : ''}`} />
+              <ChevronDown size={12} className={`hidden lg:block text-neutral-400 group-hover:text-white transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-white' : ''}`} />
             </button>
 
             {profileDropdownOpen && (
@@ -225,15 +237,11 @@ export const Navbar = memo(function Navbar({
                 <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setProfileDropdownOpen(false))(); } }} tabIndex={0} role="button" className="fixed inset-0 z-40" onClick={() => setProfileDropdownOpen(false)} />
                 <div className="absolute right-0 top-11 mt-2 w-60 bg-neutral-950/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_24px_70px_rgba(0,0,0,0.6)] overflow-hidden z-50 animate-scale-in">
                   <div className="p-3.5 border-b border-white/5 flex items-center gap-3 bg-white/[0.02]">
-                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 flex items-center justify-center shadow-lg bg-white/[0.06]">
-                      {currentProfile ? (
-                        isCurrentProfileGradient ? (
-                          <div className="w-full h-full" style={{ background: currentProfile.avatarUrl }} />
-                        ) : (
+                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 flex items-center justify-center shadow-lg bg-neutral-800 shrink-0">
+                      {currentProfile && currentProfile.avatarUrl && !isCurrentProfileGradient ? (
                         <img src={currentProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
-                        )
                       ) : (
-                        <span className="text-[9px] font-black text-white/80">VIP</span>
+                        <UserRound size={17} className="text-neutral-300 shrink-0" />
                       )}
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -245,7 +253,7 @@ export const Navbar = memo(function Navbar({
 
                   {profiles.filter(p => p.id !== currentProfile?.id).length > 0 && (
                     <div className="p-2 border-b border-white/5 flex flex-col gap-1 max-h-[160px] overflow-y-auto hide-scrollbar text-left">
-                      <span className="text-[8px] font-extrabold text-neutral-500 uppercase tracking-wider px-2 py-1 select-none">{t('navbar.otherProfiles')}</span>
+                      <span className="text-xs font-extrabold text-neutral-500 uppercase tracking-wider px-2 py-1 select-none">{t('navbar.otherProfiles')}</span>
                       {profiles.filter(p => p.id !== currentProfile?.id).map(prof => {
                         const isProfGradient = prof.avatarUrl.startsWith('linear-gradient');
                         return (
@@ -255,16 +263,16 @@ export const Navbar = memo(function Navbar({
                               setProfileDropdownOpen(false);
                               handleSelectProfile(prof.id);
                             }}
-                            className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-all text-left cursor-pointer focusable-item"
+                            className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-all text-left cursor-pointer "
                           >
-                            <div className="w-6 h-6 rounded-md overflow-hidden border border-white/5 flex items-center justify-center bg-white/[0.03] shrink-0">
-                              {isProfGradient ? (
-                                <div className="w-full h-full" style={{ background: prof.avatarUrl }} />
-                              ) : (
+                            <div className="w-6 h-6 rounded-md overflow-hidden border border-white/5 flex items-center justify-center bg-neutral-800 shrink-0">
+                              {prof.avatarUrl && !isProfGradient ? (
                                 <img src={prof.avatarUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <UserRound size={13} className="text-neutral-300 shrink-0" />
                               )}
                             </div>
-                            <span className="text-[11px] font-semibold text-neutral-400 hover:text-white truncate flex-1">{prof.name}</span>
+                            <span className="text-xs font-semibold text-neutral-400 hover:text-white truncate flex-1">{prof.name}</span>
                           </button>
                         );
                       })}
@@ -273,15 +281,15 @@ export const Navbar = memo(function Navbar({
 
                   <div className="p-1.5 flex flex-col gap-0.5 text-left">
                     <button type="button"
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer focusable-item"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-xs text-neutral-300 hover:text-white cursor-pointer"
                       onClick={() => { setProfileDropdownOpen(false); handleLogoutProfile(); }}
                     >
                       <ArrowLeft size={13} className="text-neutral-400 rotate-180" /> {t('navbar.changeProfile')}
                     </button>
                     <button type="button"
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-[11px] text-neutral-300 hover:text-white cursor-pointer focusable-item"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all text-xs text-neutral-300 hover:text-white cursor-pointer"
                       onClick={() => { setProfileDropdownOpen(false); setSelectedGroup('Ayarlar'); }}
-                     aria-label="Settings">
+                      aria-label={t('navbar.advancedSettings')}>
                       <Settings size={13} className="text-neutral-400" /> {t('navbar.advancedSettings')}
                     </button>
                   </div>
@@ -291,6 +299,7 @@ export const Navbar = memo(function Navbar({
           </div>
         </div>
       </nav>
-    </div>
+      </div>
+    </>
   );
 });

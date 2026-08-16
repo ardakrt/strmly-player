@@ -1,10 +1,16 @@
 {
   "name": "strmly",
   "private": true,
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Strmly is a desktop IPTV player.",
-  "author": "Arda",
+  "license": "MIT",
+  "homepage": "https://github.com/ardakrt/strmly-player",
+  "author": {
+    "name": "Arda",
+    "email": "ardakrt@users.noreply.github.com"
+  },
   "overrides": {
+    "js-yaml": "^4.3.1",
     "shell-quote": "^1.8.4",
     "tar": "^7.5.16"
   },
@@ -20,18 +26,19 @@
     "test:regressions": "node scripts/test-regressions.js",
     "check:a11y": "node scripts/check-a11y-controls.js",
     "test:security": "node scripts/test-security.js",
-    "test:performance": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-performance.ps1",
-    "doctor": "react-doctor . --yes --blocking none --no-dead-code",
+    "test:performance": "node scripts/test-performance.js",
     "verify": "npm run lint && npm run typecheck:unused && npm run test:migration && npm run test:security && npm run test:catalog && npm run test:regressions && npm run check:a11y && npm run build",
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "dist": "npm run build && electron-builder",
-    "dist:linux": "npm run build && electron-builder --linux"
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb",
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
-    "ffmpeg-static": "^5.3.0"
+    "ffmpeg-static": "^5.3.0",
+    "ogl": "^1.0.11"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -54,7 +61,6 @@
     "postcss": "^8.5.15",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-doctor": "^0.7.7",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
@@ -64,6 +70,7 @@
   "build": {
     "appId": "com.strmly.iptv",
     "productName": "Strmly",
+    "icon": "build/icon.png",
     "publish": [
       {
         "provider": "github",
@@ -96,6 +103,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -110,13 +118,37 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Strmly"
+      "shortcutName": "Strmly",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     },
     "linux": {
+      "executableName": "strmly",
+      "icon": "build/icon.png",
+      "maintainer": "Arda <ardakrt@users.noreply.github.com>",
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
-      "category": "Video"
+      "category": "AudioVideo",
+      "artifactName": "Strmly-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "Name": "Strmly",
+        "Comment": "Desktop IPTV player",
+        "Categories": "AudioVideo;Video;Player;"
+      }
+    },
+    "deb": {
+      "depends": [
+        "ffmpeg",
+        "libgtk-3-0 | libgtk-3-0t64",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils"
+      ]
     }
   }
 }

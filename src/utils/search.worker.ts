@@ -55,7 +55,7 @@ self.onmessage = (e: MessageEvent) => {
         if (hiddenLiveSet.has(ch.group || 'Genel')) continue;
         const groupLower = getItemGroupLower(ch);
         if (groupLower.includes('ulusal') && !isHdChannel(ch.name)) continue;
-        const score = getItemSearchScore(ch, query);
+        const score = getItemSearchScore(ch, query, 'Genel', 'live');
         if (score > 0) {
           matches.push({ type: 'live', item: ch, score });
         }
@@ -71,7 +71,7 @@ self.onmessage = (e: MessageEvent) => {
         if (hiddenMovieSet.has(ch.group || 'Genel')) continue;
         const clNameLower = getItemCleanNameLower(ch);
         const nameLower = getItemNameLower(ch);
-        const score = getItemSearchScore(ch, query);
+        const score = getItemSearchScore(ch, query, 'Genel', 'movie');
         if (score > 0) {
           const qRank = getQualityRank(ch.name, nameLower);
           const existing = dedupedMovies[clNameLower];
@@ -92,7 +92,7 @@ self.onmessage = (e: MessageEvent) => {
         const series = allGroupedSeries[i];
         if (hiddenSeriesSet.has(series.group || 'Genel')) continue;
         const sNameLower = getItemNameLower(series);
-        const score = getItemSearchScore(series, query);
+        const score = getItemSearchScore(series, query, 'Genel', 'series');
 
         let episodeMatch = false;
         const seasons = Object.values(series.seasons);
@@ -219,7 +219,9 @@ self.onmessage = (e: MessageEvent) => {
         try {
           const transaction = db.transaction(storeName, 'readonly');
           const store = transaction.objectStore(storeName);
-          const range = IDBKeyRange.bound("resolved-", "resolved-\uffff");
+          // Only hydrate the lightweight poster manifest. Loading titles, stills,
+          // or image bytes here delays boot without helping catalogue cards.
+          const range = IDBKeyRange.bound("resolved-poster-", "resolved-poster-\uffff");
           const keysRequest = store.getAllKeys(range);
           
           keysRequest.onsuccess = () => {

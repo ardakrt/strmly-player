@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlaylistItem } from '../types';
 import { parseSeriesEpisodeInfo } from '../utils/seriesGroupers';
 
@@ -34,7 +34,9 @@ export function usePlayerState({
     }
   }, [selectedChannel]);
 
-  const toggleFavorite = (itemId: string, e?: React.MouseEvent) => {
+  // Stable identity (only changes when favorites/language change) so memoized
+  // catalog views (SeriesView rows/cards) don't re-render on unrelated updates.
+  const toggleFavorite = useCallback((itemId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const currentFavs = globalFavorites;
     let newFavs: string[];
@@ -48,7 +50,7 @@ export function usePlayerState({
 
     setGlobalFavorites(newFavs);
     saveAppSetting('cinema_global_favorites', newFavs);
-  };
+  }, [globalFavorites, showToast, language, saveAppSetting]);
 
   const saveToWatchHistory = (item: PlaylistItem) => {
     const prev = recentlyWatchedRef.current;
@@ -78,11 +80,16 @@ export function usePlayerState({
     saveAppSetting('cinema_recently_watched', updated);
   };
 
+  const activeProfileIdRef = useRef<string | null>(null);
+
   const load = async (profileId: string) => {
+    activeProfileIdRef.current = profileId;
     const [savedGlobalFavs, savedRecentlyWatched] = await Promise.all([
       loadAppSetting('cinema_global_favorites', true, profileId),
       loadAppSetting('cinema_recently_watched', true, profileId)
     ]);
+
+    if (activeProfileIdRef.current !== profileId) return;
 
     const favsList = Array.isArray(savedGlobalFavs) ? savedGlobalFavs : [];
     const watchedList = Array.isArray(savedRecentlyWatched) ? savedRecentlyWatched : [];

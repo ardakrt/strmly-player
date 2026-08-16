@@ -2,14 +2,26 @@ import { lazy, Suspense } from 'react';
 import type { AppProviderValue } from '../hooks/useAppProvider';
 import { APP_VIEWS, isLiveTvView } from '../navigation/views';
 import { FavoritesEmptyState } from './FavoritesEmptyState';
-import { SpotlightSearch } from './SpotlightSearch';
 import { CatalogPageSkeleton } from './CatalogPageSkeleton';
 
-const HomeView = lazy(() => import('./HomeView').then(m => ({ default: m.HomeView })));
-const LiveTvView = lazy(() => import('./LiveTvView').then(m => ({ default: m.LiveTvView })));
-const SeriesView = lazy(() => import('./SeriesView').then(m => ({ default: m.SeriesView })));
-const MoviesView = lazy(() => import('./MoviesView').then(m => ({ default: m.MoviesView })));
-const FavoritesView = lazy(() => import('./FavoritesView').then(m => ({ default: m.FavoritesView })));
+const loadHomeView = () => import('./HomeView');
+const loadLiveTvView = () => import('./LiveTvView');
+const loadSeriesView = () => import('./series/SeriesView');
+const loadMoviesView = () => import('./movies/MoviesView');
+const loadFavoritesView = () => import('./FavoritesView');
+
+// Prefetch core view chunks so tab switching is instantaneous
+loadMoviesView();
+loadSeriesView();
+loadLiveTvView();
+loadHomeView();
+loadFavoritesView();
+
+const HomeView = lazy(() => loadHomeView().then(m => ({ default: m.HomeView })));
+const LiveTvView = lazy(() => loadLiveTvView().then(m => ({ default: m.LiveTvView })));
+const SeriesView = lazy(() => loadSeriesView().then(m => ({ default: m.SeriesView })));
+const MoviesView = lazy(() => loadMoviesView().then(m => ({ default: m.MoviesView })));
+const FavoritesView = lazy(() => loadFavoritesView().then(m => ({ default: m.FavoritesView })));
 const SettingsPanel = lazy(() => import('./SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const DownloadsView = lazy(() => import('./DownloadsView').then(m => ({ default: m.DownloadsView })));
 
@@ -18,28 +30,11 @@ interface MainViewRouterProps {
 }
 
 export function MainViewRouter({ app }: MainViewRouterProps) {
-  const { navigation, catalog, home, playback, showToast, spotlight } = app;
+  const { navigation, catalog, home, playback, showToast } = app;
   const { selectedGroup, deferredSearchQuery, setSelectedGroup, setActiveSettingsTab, setShowAddPlaylistForm } = navigation;
 
-  if (spotlight.showSpotlight) {
-    return (
-      <SpotlightSearch
-        showSpotlight={spotlight.showSpotlight}
-        setShowSpotlight={spotlight.setShowSpotlight}
-        spotlightScope={spotlight.spotlightScope}
-        setSpotlightScope={spotlight.setSpotlightScope}
-        spotlightSearchInput={spotlight.spotlightSearchInput}
-        setSpotlightSearchInput={spotlight.setSpotlightSearchInput}
-        spotlightSearchResults={spotlight.spotlightSearchResults}
-        isSearchingWorker={spotlight.isSearchingWorker}
-        handlePlayStream={playback.handlePlayStream}
-        handleOpenDetails={catalog.handleOpenDetails}
-        handleOpenSeriesModalDirect={catalog.handleOpenSeriesModalDirect}
-      />
-    );
-  }
-
   return (
+
     <>
       {selectedGroup === APP_VIEWS.home && !deferredSearchQuery.trim() && (
         <Suspense fallback={<CatalogPageSkeleton />}>
@@ -121,7 +116,8 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
             liveCat={catalog.liveCat}
             visibleLiveCategoryLimit={catalog.visibleLiveCategoryLimit}
             setVisibleLiveCategoryLimit={catalog.setVisibleLiveCategoryLimit}
-            filteredDisplayItems={catalog.favItems}
+            allLiveItems={(catalog as any).allLiveItems || catalog.favItems}
+            recentlyWatched={home.uniqueRecentlyWatched}
             handleMainScroll={catalog.handleMainScroll}
             handlePlayStream={playback.handlePlayStream}
             checkedStatusMap={catalog.checkedStatusMap}
@@ -132,7 +128,9 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
         </Suspense>
       )}
 
-      {selectedGroup === APP_VIEWS.series && (
+      {/* Keep a small first-screen slice mounted while inactive so its local
+          posters are decoded before the first Series navigation. */}
+      {(
         <Suspense fallback={<CatalogPageSkeleton />}>
           <SeriesView
             selectedGroup={selectedGroup}
@@ -145,6 +143,7 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
             visibleSeriesCategoryLimit={catalog.visibleSeriesCategoryLimit}
             setVisibleSeriesCategoryLimit={catalog.setVisibleSeriesCategoryLimit}
             groupedSeriesList={catalog.groupedSeriesList}
+            seriesCategoryCounts={catalog.seriesCategoryCounts}
             handleMainScroll={catalog.handleMainScroll}
             handleOpenSeriesModalDirect={catalog.handleOpenSeriesModalDirect}
             toggleFavorite={catalog.toggleFavorite}
@@ -154,7 +153,8 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
         </Suspense>
       )}
 
-      {selectedGroup === APP_VIEWS.movies && (
+      {/* Movies follows the same bounded first-screen prewarm strategy. */}
+      {(
         <Suspense fallback={<CatalogPageSkeleton />}>
           <MoviesView
             selectedGroup={selectedGroup}
@@ -166,11 +166,11 @@ export function MainViewRouter({ app }: MainViewRouterProps) {
             movieCat={catalog.movieCat}
             visibleMovieCategoryLimit={catalog.visibleMovieCategoryLimit}
             setVisibleMovieCategoryLimit={catalog.setVisibleMovieCategoryLimit}
-            filteredDisplayItems={catalog.favItems}
+            movieCatalogItems={catalog.movieCatalogItems}
+            movieCategoryCounts={catalog.movieCategoryCounts}
             handleMainScroll={catalog.handleMainScroll}
             handleOpenDetails={catalog.handleOpenDetails}
             handlePlayStream={playback.handlePlayStream}
-            checkedStatusMap={catalog.checkedStatusMap}
             toggleFavorite={catalog.toggleFavorite}
             globalFavorites={catalog.globalFavorites}
             setVisibleCount={catalog.setVisibleCount}

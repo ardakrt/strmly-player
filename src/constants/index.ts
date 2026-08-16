@@ -21,6 +21,9 @@ export const DEFAULT_AVATARS = [
   'linear-gradient(to right, #a18cd1, #fbc2eb)'  // Plum Velvet
 ];
 
-export const TMDB_CACHE_VERSION = 'tmdb-v5';
+export const TMDB_CACHE_VERSION = 'tmdb-v6';
+
+// Brandfetch CDN client ID — official platform/brand logos (https://cdn.brandfetch.io/{domain}?c={id})
+export const BRANDFETCH_CLIENT_ID: string = import.meta.env.VITE_BRANDFETCH_CLIENT_ID || '1idhGGeVKD7aryQ4vFo';
 
 export const DEFAULT_AUTO_UPDATE_INTERVAL_HOURS = 24;

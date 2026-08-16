@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import type { PlaylistItem } from '../utils/m3uParser';
+import type { PlaylistItem, TmdbData } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
 
 const ChannelModal = lazy(() => import('./ChannelModal').then(m => ({ default: m.ChannelModal })));
@@ -10,11 +10,11 @@ interface AppModalsProps {
   setSelectedChannelForModal: (channel: PlaylistItem | null) => void;
   selectedSeriesForModal: GroupedSeries | null;
   setSelectedSeriesForModal: (series: GroupedSeries | null) => void;
-  tmdbData: any;
+  tmdbData: TmdbData | null;
   tmdbShowId: number | null;
   activeSeason: number;
   expandedEpisodeId: string | null;
-  recentlyWatched: any[];
+  recentlyWatched: PlaylistItem[];
   handlePlayStream: (item: PlaylistItem) => void;
   globalFavorites: string[];
   toggleFavorite: (id: string, e?: React.MouseEvent) => void;

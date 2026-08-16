@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
+console.log('[PRELOAD_BENCH_DEBUG]', process.env.STRMLY_PERF_BENCH);
 
 // Used by the performance harness and readiness gates in the renderer.
 contextBridge.exposeInMainWorld('strmlyPerfBench', process.env.STRMLY_PERF_BENCH === '1');
@@ -18,7 +19,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchTmdbImage: (path, size) => ipcRenderer.invoke('fetch-tmdb-image', { path, size }),
   startFfmpegProxy: (url, startTime, audioStreamId, transcodeMode, contentType) => ipcRenderer.invoke('start-ffmpeg-proxy', { url, startTime, audioStreamId, transcodeMode, contentType }),
   stopFfmpegProxy: () => ipcRenderer.invoke('stop-ffmpeg-proxy'),
-  checkFfmpeg: () => ipcRenderer.invoke('check-ffmpeg'),
   probeAudioCodec: (url) => ipcRenderer.invoke('probe-audio-codec', { url }),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getUpdateState: () => ipcRenderer.invoke('get-update-state'),

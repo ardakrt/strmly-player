@@ -58,7 +58,7 @@ export function ContextMenu({ x, y, title, subtitle, items, onClose }: ContextMe
     <div
       ref={menuRef}
       role="menu"
-      className="fixed z-[7000] w-[280px] overflow-hidden rounded-2xl border border-white/15 bg-[#0b0b0d]/98 p-2 text-white shadow-[0_24px_80px_rgba(0,0,0,0.72)] backdrop-blur-2xl animate-scale-in select-none"
+      className="fixed z-layer-context-menu w-[280px] overflow-hidden rounded-2xl border border-white/15 bg-[#0b0b0d]/98 p-2 text-white shadow-[0_24px_80px_rgba(0,0,0,0.72)] backdrop-blur-2xl animate-scale-in select-none"
       style={{ left: position.x, top: position.y }}
       onMouseDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}

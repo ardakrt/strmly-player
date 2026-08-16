@@ -7,6 +7,15 @@ const {
   redactSensitiveText,
   redactSensitiveUrl,
 } = require("../electron/security");
+const {
+  createMediaUrlService,
+  isLocalMediaUrl,
+} = require("../electron/media-url-service");
+const {
+  isSafeConfigEntries,
+  isSafeConfigKey,
+} = require("../electron/config-service");
+const { parseAppFilePath } = require("../electron/app-file-protocol");
 
 const httpsOptions = buildSecureHttpsOptions(
   "api.themoviedb.org",
@@ -68,5 +77,21 @@ const redactedLog = redactSensitiveText(
 assert(!redactedLog.includes("alice"));
 assert(!redactedLog.includes("secret"));
 assert(redactedLog.includes("after timeout"));
+
+assert.strictEqual(isSafeConfigKey("profile_arda_settings"), true);
+assert.strictEqual(isSafeConfigKey("__proto__"), false);
+assert.strictEqual(isSafeConfigKey("../escape"), false);
+assert.strictEqual(isSafeConfigEntries({ theme: "dark", enabled: true }), true);
+assert.strictEqual(isSafeConfigEntries({ constructor: "blocked" }), false);
+
+assert.strictEqual(isLocalMediaUrl("app-file:///C:/media/movie.mp4"), true);
+assert.strictEqual(isLocalMediaUrl("https://media.example/movie.mp4"), false);
+const mediaUrlService = createMediaUrlService({
+  isInsideMediaLibrary: () => false,
+});
+assert.strictEqual(mediaUrlService.isAllowedMediaUrl("https://media.example/live.m3u8"), true);
+assert.strictEqual(mediaUrlService.isAllowedMediaUrl("javascript:alert(1)"), false);
+assert.strictEqual(mediaUrlService.isAllowedMediaUrl("file:///outside/library.mp4"), false);
+assert.match(parseAppFilePath("app-file:///C:/media/movie.mp4"), /media[\\/]movie\.mp4$/);
 
 console.log("security regression tests passed");

@@ -1,7 +1,91 @@
 import { AlertCircle, CheckCircle2, Info, Loader2 } from 'lucide-react';
+import { getTranslation, type Language } from './translations';
 
 function normalizeMessage(message: string) {
   return message.toLocaleLowerCase('tr-TR');
+}
+
+export function getFriendlyToastMessage(message: string, language: Language): string {
+  const normalized = normalizeMessage(message);
+  const isError = [
+    'hata',
+    'başarısız',
+    'bulunamadı',
+    'geçersiz',
+    'yüklenemedi',
+    'açılamadı',
+    'kurulamadı',
+    'kaydedilemedi',
+    'yenilenemedi',
+    'error',
+    'failed',
+    'invalid',
+    "couldn't",
+    'could not',
+    'not found',
+  ].some(token => normalized.includes(token));
+
+  if (!isError) return message;
+
+  const alreadyActionable = [
+    'tekrar deney',
+    'kontrol edin',
+    'kontrol edip',
+    'try again',
+    'check the',
+    'change the search',
+    'profili düzenleyip',
+    'edit the profile',
+    'başka bir',
+    'try another',
+  ].some(token => normalized.includes(token));
+
+  if (alreadyActionable) return message;
+
+  if (normalized.includes('xtream')) {
+    return getTranslation('feedback.playlist.xtreamFailed', language);
+  }
+
+  if (
+    (normalized.includes('m3u') && normalized.includes('dosya')) ||
+    (normalized.includes('m3u') && normalized.includes('file'))
+  ) {
+    return getTranslation('feedback.playlist.localFileFailed', language);
+  }
+
+  if (
+    normalized.includes('playlist') ||
+    normalized.includes('liste') ||
+    normalized.includes('kanal') ||
+    normalized.includes('channel') ||
+    normalized.includes('m3u')
+  ) {
+    return getTranslation('feedback.playlist.loadFailed', language);
+  }
+
+  if (
+    normalized.includes('oyuncu') ||
+    normalized.includes('actor') ||
+    normalized.includes('cast')
+  ) {
+    return getTranslation('feedback.profile.castLoadFailed', language);
+  }
+
+  if (
+    normalized.includes('tmdb') ||
+    normalized.includes('görsel') ||
+    normalized.includes('image')
+  ) {
+    return getTranslation('feedback.profile.imageSearchFailed', language);
+  }
+
+  if (normalized.includes('profil') || normalized.includes('profile')) {
+    return normalized.includes('kaydet') || normalized.includes('sav')
+      ? getTranslation('feedback.profile.saveFailed', language)
+      : getTranslation('feedback.profile.loadFailed', language);
+  }
+
+  return getTranslation('feedback.genericError', language);
 }
 
 export function getToastDetails(message: string) {
@@ -31,6 +115,12 @@ export function getToastDetails(message: string) {
     msgLower.includes('başarısız') ||
     msgLower.includes('bulunamadı') ||
     msgLower.includes('olamadı') ||
+    msgLower.includes('yüklenemedi') ||
+    msgLower.includes('açılamadı') ||
+    msgLower.includes('kurulamadı') ||
+    msgLower.includes('kaydedilemedi') ||
+    msgLower.includes("couldn't") ||
+    msgLower.includes('could not') ||
     msgLower.includes('error') ||
     msgLower.includes('failed') ||
     msgLower.includes('yanlış') ||
@@ -78,6 +168,12 @@ export function getToastDuration(message: string) {
     msgLower.includes('başarısız') ||
     msgLower.includes('bulunamadı') ||
     msgLower.includes('olamadı') ||
+    msgLower.includes('yüklenemedi') ||
+    msgLower.includes('açılamadı') ||
+    msgLower.includes('kurulamadı') ||
+    msgLower.includes('kaydedilemedi') ||
+    msgLower.includes("couldn't") ||
+    msgLower.includes('could not') ||
     msgLower.includes('error') ||
     msgLower.includes('failed') ||
     msgLower.includes('invalid');

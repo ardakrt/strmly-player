@@ -6,7 +6,7 @@ import { useCategoryManager } from './useCategoryManager';
 interface UseAppCategoriesProps {
   playlists: SavedPlaylist[];
   language: 'tr' | 'en';
-  saveAppSetting: (key: string, value: any) => Promise<void>;
+  saveAppSetting: (key: string, value: unknown) => Promise<void>;
   uniqueLiveCategories: string[];
   uniqueSeriesCategories: string[];
   uniqueMovieCategories: string[];

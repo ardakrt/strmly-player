@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { PlaylistItem } from '../types';
 import type { GroupedSeries } from '../utils/seriesGroupers';
+import type { PlaylistIndex } from './usePlaylistIndex';
 import {
   applyCatalogPostFilters,
   dedupeMovieCatalogItems,
@@ -17,7 +18,7 @@ interface UseFilteredCatalogProps {
     movie: PlaylistItem[];
     series: PlaylistItem[];
   };
-  playlistIndex: any;
+  playlistIndex: PlaylistIndex;
   allGroupedSeries: GroupedSeries[];
   selectedGroup: string;
   globalFavorites: string[];
@@ -118,6 +119,30 @@ export function useFilteredCatalog({
     return sortByNameAzZa(dedupeSeriesCatalogItems(out), sortOption);
   }, [allGroupedSeries, activeSeriesCategory, hiddenSeriesCategories, deferredSearchQuery, sortOption, qualityFilter]);
 
+  // Series count per raw category over the FULL (unfiltered) list. Used to
+  // pick the richest variant when sibling categories collapse into one row
+  // ("[TR] Netflix Dizi" vs "[TR] Netflix Film" both present as "Netflix").
+  const seriesCategoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (let i = 0; i < allGroupedSeries.length; i++) {
+      const group = allGroupedSeries[i].group || 'Genel';
+      counts.set(group, (counts.get(group) || 0) + 1);
+    }
+    return counts;
+  }, [allGroupedSeries]);
+
+  // Movie count per raw category over the FULL (unfiltered) list — same
+  // richest-variant selection as seriesCategoryCounts for merged movie rows.
+  const movieCategoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const movieItems = playlistIndex.displayMovie as PlaylistItem[];
+    for (let i = 0; i < movieItems.length; i++) {
+      const group = movieItems[i].group || 'Genel';
+      counts.set(group, (counts.get(group) || 0) + 1);
+    }
+    return counts;
+  }, [playlistIndex]);
+
   // 3. favoriteSeriesList
   const favoriteSeriesList = useMemo(() => {
     const favSet = new Set(globalFavorites || []);
@@ -136,6 +161,9 @@ export function useFilteredCatalog({
   return {
     filteredDisplayItems,
     groupedSeriesList,
-    favoriteSeriesList
+    favoriteSeriesList,
+    seriesCategoryCounts,
+    movieCatalogItems,
+    movieCategoryCounts
   };
 }

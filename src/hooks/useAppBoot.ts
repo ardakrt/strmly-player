@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import type { Profile } from '../types';
 import { DEFAULT_AVATARS } from '../constants';
 import { getTmdbApiKey, tmdbCache } from '../utils/tmdb';
-import { initSpatialNavigation } from '../utils/spatialNavigation';
 import { getTranslation } from '../utils/translations';
 import type { Language } from '../utils/translations';
 
@@ -53,6 +52,13 @@ export function useAppBoot({
     }
   });
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'>('idle');
+  const [updateVersion, setUpdateVersion] = useState<string>('');
+  const [updateReleaseNotes, setUpdateReleaseNotes] = useState<string>('');
+  const [updateProgress, setUpdateProgress] = useState<number>(0);
+  const [updateSpeed, setUpdateSpeed] = useState<string>('');
+  const [updateError, setUpdateError] = useState<string>('');
+  const [updateToastVisible, setUpdateToastVisible] = useState<boolean>(false);
   const bootStartedRef = useRef(false);
 
   // Listen to update status from main process
@@ -60,52 +66,63 @@ export function useAppBoot({
     const api = window.electronAPI;
     if (!api?.onUpdateStatus) return;
 
-    const applyUpdateState = (data: { status: string }) => {
+    const applyUpdateState = (data: { status: string; version?: string; releaseNotes?: string; message?: string; error?: string }) => {
       if (data.status === 'available' || data.status === 'downloaded') {
         setUpdateAvailable(true);
-      } else if (data.status === 'not-available' || data.status === 'error') {
+        setUpdateStatus(data.status as any);
+        if (data.version) setUpdateVersion(data.version);
+        if (data.releaseNotes) setUpdateReleaseNotes(data.releaseNotes);
+        setUpdateProgress(data.status === 'downloaded' ? 100 : 0);
+        setUpdateError('');
+        setUpdateToastVisible(true);
+      } else if (data.status === 'downloading') {
+        setUpdateAvailable(true);
+        setUpdateStatus('downloading');
+        setUpdateToastVisible(true);
+      } else if (data.status === 'error') {
+        setUpdateStatus('error');
+        setUpdateError(getTranslation('updateToast.errorDescription', language));
+      } else if (data.status === 'not-available') {
         setUpdateAvailable(false);
       }
     };
 
     const unsubStatus = api.onUpdateStatus(applyUpdateState);
-    api.getUpdateState?.().then(applyUpdateState).catch(() => {
-      // The main process will publish the next lifecycle event.
+    const unsubProgress = api.onUpdateProgress?.((data: { percent: number; speed: string }) => {
+      setUpdateStatus('downloading');
+      setUpdateProgress(data.percent);
+      setUpdateSpeed(data.speed);
+      setUpdateToastVisible(true);
     });
+
+    api.getUpdateState?.().then(applyUpdateState).catch(() => {});
 
     return () => {
       if (unsubStatus) unsubStatus();
+      if (unsubProgress) unsubProgress();
     };
-  }, []);
+  }, [language]);
 
-  // Preheat TMDB IndexedDB cache when fully loaded
-  useEffect(() => {
-    if (!loaded) return;
+  const triggerInstallUpdate = async () => {
+    const api = window.electronAPI;
+    if (api?.installUpdate) {
+      try {
+        const result = await api.installUpdate();
+        if (result.success) return;
+        setUpdateStatus('error');
+        setUpdateError(getTranslation('updateToast.errorDescription', language));
+        setUpdateToastVisible(true);
+      } catch {
+        setUpdateStatus('error');
+        setUpdateError(getTranslation('updateToast.errorDescription', language));
+        setUpdateToastVisible(true);
+      }
+    }
+  };
 
-    const timer = window.setTimeout(() => {
-      tmdbCache.loadAllToMemory().catch((err) => {
-        console.error("Failed to preload TMDB cache during idle:", err);
-      });
-    }, 900);
-
-    return () => window.clearTimeout(timer);
-  }, [loaded]);
-
-  // Initialize Spatial Navigation for keyboard controls
-  useEffect(() => {
-    if (!loaded) return;
-
-    const cleanupRef = { current: undefined as undefined | (() => void) };
-    const timer = window.setTimeout(() => {
-      const cleanup = initSpatialNavigation();
-      cleanupRef.current = cleanup;
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timer);
-      cleanupRef.current?.();
-    };
-  }, [loaded]);
+  const dismissUpdateToast = () => {
+    setUpdateToastVisible(false);
+  };
 
   // Main application bootstrapper sequence
   useEffect(() => {
@@ -114,6 +131,8 @@ export function useAppBoot({
     const loadAppConfig = async () => {
       try {
         sessionStorage.setItem('strmly_session_active', 'true');
+        const posterManifestStartedAt = performance.now();
+        const posterManifestPromise = tmdbCache.loadAllToMemory();
 
         const holdBootMessage = (delayMs: number) => new Promise<void>((resolve) => {
           window.setTimeout(resolve, delayMs);
@@ -215,6 +234,10 @@ export function useAppBoot({
         }
 
         setSplashStatus(getTranslation('splash.preparingExperience', language));
+        const posterCount = await posterManifestPromise;
+        console.info(
+          `[TMDB Cache] ${posterCount} poster records ready in ${Math.round(performance.now() - posterManifestStartedAt)}ms`,
+        );
         await holdBootMessage(80);
         setSplashStatus(getTranslation('splash.openingApp', language));
         await holdBootMessage(200);
@@ -232,6 +255,15 @@ export function useAppBoot({
   return {
     loaded,
     splashStatus,
-    updateAvailable
+    updateAvailable,
+    updateStatus,
+    updateVersion,
+    updateReleaseNotes,
+    updateProgress,
+    updateSpeed,
+    updateError,
+    updateToastVisible,
+    triggerInstallUpdate,
+    dismissUpdateToast,
   };
 }

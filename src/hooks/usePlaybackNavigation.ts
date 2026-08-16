@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
-import type { Language } from '../utils/translations';
+import { getTranslation, type Language } from '../utils/translations';
 import { pauseAllDownloads } from './useDownloads';
 
 interface UsePlaybackNavigationProps {
@@ -77,7 +77,7 @@ export function usePlaybackNavigation({
         })
         .catch((err) => {
           console.error('External player failed:', err);
-          showToast(language === 'tr' ? 'Harici oynatıcı başlatılamadı.' : 'External player could not be started.');
+          showToast(getTranslation('feedback.player.externalFailed', language));
           setSelectedChannel(itemToPlay);
         });
     } else {

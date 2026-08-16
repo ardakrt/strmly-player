@@ -7,7 +7,7 @@ interface UseCategoryManagerOptions {
   language: 'tr' | 'en';
   uniqueCategories: string[];
   categorySearchQuery: string;
-  saveAppSetting: (key: string, value: any) => Promise<void>;
+  saveAppSetting: (key: string, value: unknown) => Promise<void>;
   showToast: (message: string) => void;
   activeCategory: string;
   setActiveCategory: (cat: string) => void;

@@ -14,6 +14,8 @@ export interface GroupedSeries {
   type: 'series';
   seasons: Record<number, SeriesEpisode[]>;
   episodesCount: number;
+  seasonsCount?: number;
+  firstEpisodeItem?: PlaylistItem;
   score?: number;
   nameLower?: string;
   groupLower?: string;

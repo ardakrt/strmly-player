@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.1 - 2026-08-16
+
+### Linux
+
+- Added AppImage and Debian package output with Linux desktop metadata, bundled artwork, FFmpeg fallback resources, and a Linux release workflow.
+- Added a visible draggable title-bar handle so maximized frameless windows can be moved and restored reliably.
+- Fixed Linux FFmpeg playback crashes by preferring the distribution FFmpeg over the crash-prone static binary while retaining an explicit override and bundled fallback.
+
+### Metadata and Reliability
+
+- Restored TMDB artwork and home showcase metadata in Linux release builds by using the validated release key ahead of stale install-local credentials.
+- Prevented authentication and transient network failures from being cached as permanent TMDB no-match results, and refreshed the affected cache namespace.
+- Fixed packaged dependency layout so the Linux auto-updater can load and check GitHub releases without missing-module errors.
+
 ## 1.8.0 - 2026-08-01
 
 ### Highlights

@@ -58,3 +58,5 @@ export function usePlaylistIndex(items: PlaylistItem[]) {
     };
   }, [items]);
 }
+
+export type PlaylistIndex = ReturnType<typeof usePlaylistIndex>;

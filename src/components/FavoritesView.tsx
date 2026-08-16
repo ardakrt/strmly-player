@@ -7,9 +7,9 @@ import { Heart, Tv, Film, Clapperboard } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PlaylistItem } from '../utils/m3uParser';
 import type { GroupedSeries } from '../utils/seriesGroupers';
-import { LiveChannelCard } from './LiveTvView';
-import { MovieCard } from './MoviesView';
-import { SeriesCard } from './SeriesView';
+import { LiveChannelCard } from './live/LiveChannelCard';
+import { MovieCard } from './movies/MovieCard';
+import { SeriesCard } from './series/SeriesCard';
 import { SegmentedControl } from './SegmentedControl';
 import { useSettings } from '../context/SettingsContext';
 
@@ -102,21 +102,15 @@ export function FavoritesView({
   const typeEmpty = {
     live: {
       title: language === 'tr' ? 'Henüz favori kanal eklemedin' : 'No favorite channels yet',
-      hint: language === 'tr'
-        ? 'Kartlardaki kalp simgesiyle favori kanallarınızı buraya ekleyin.'
-        : 'Tap the heart on any channel card to add it here.'
+      hint: t('favorites.liveHint')
     },
     movie: {
       title: language === 'tr' ? 'Henüz favori film eklemedin' : 'No favorite movies yet',
-      hint: language === 'tr'
-        ? 'Film kartlarındaki kalp simgesiyle favorilerinize ekleyebilirsiniz.'
-        : 'Tap the heart on any movie card to add it here.'
+      hint: t('favorites.movieHint')
     },
     series: {
       title: language === 'tr' ? 'Henüz favori dizi eklemedin' : 'No favorite series yet',
-      hint: language === 'tr'
-        ? 'Dizi kartlarındaki kalp simgesiyle favorilerinize ekleyebilirsiniz.'
-        : 'Tap the heart on any series card to add it here.'
+      hint: t('favorites.seriesHint')
     }
   } as const;
 
@@ -204,7 +198,6 @@ export function FavoritesView({
                       key={movie.id}
                       channel={movie}
                       onClick={handleOpenDetails}
-                      isOnline={checkedStatusMap[movie.id]}
                       isFavorite={favoritesSet.has(movie.id)}
                       onToggleFavorite={toggleFavorite}
                       isGenericLogo={!!movie.isGenericLogo}

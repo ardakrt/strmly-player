@@ -7,16 +7,25 @@ export const getTmdbPosterCacheKey = (
   title: string,
   aspect: 'portrait' | 'landscape',
 ) => {
-  const cacheVersion = aspect === 'landscape'
-    ? `${TMDB_CACHE_VERSION}-backdrop-v2`
-    : TMDB_CACHE_VERSION;
+  const cacheVersion = itemType === 'series' && aspect === 'portrait'
+    ? `${TMDB_CACHE_VERSION}-series-poster-v2`
+    : aspect === 'landscape'
+      ? `${TMDB_CACHE_VERSION}-backdrop-v2`
+      : TMDB_CACHE_VERSION;
   return `${cacheVersion}-${itemType}-${title.trim().toLowerCase()}-${aspect}`;
 };
+
+export const getPreparedTmdbMetadataCacheKey = (endpoint: TmdbEndpoint, title: string) => (
+  `prepared-metadata-${TMDB_CACHE_VERSION}-${endpoint}-${title.trim().toLocaleLowerCase('tr-TR')}`
+);
 
 // Global cache for TMDB poster lookups
 export const globalSyncPosterMap = new Map<string, string>();
 const originalSet = globalSyncPosterMap.set.bind(globalSyncPosterMap);
-const MAX_POSTER_MAP_SIZE = 10000;
+// This map stores only short cache keys and local image URLs, never image bytes.
+// Keep enough entries for large IPTV catalogues so a complete disk cache remains
+// synchronously addressable while the user scrolls.
+const MAX_POSTER_MAP_SIZE = 75000;
 globalSyncPosterMap.set = function(key: string, value: string) {
   if (this.size >= MAX_POSTER_MAP_SIZE && !this.has(key)) {
     const firstKey = this.keys().next().value;
@@ -31,6 +40,7 @@ class IndexedDBCache {
   private storeName = 'tmdb_cache_store';
   private db: IDBDatabase | null = null;
   private initPromise: Promise<void> | null = null;
+  private preloadPromise: Promise<number> | null = null;
 
   init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
@@ -96,37 +106,56 @@ class IndexedDBCache {
     });
   }
 
-  async loadAllToMemory(): Promise<void> {
-    return new Promise((resolve) => {
+  async loadAllToMemory(): Promise<number> {
+    if (this.preloadPromise) return this.preloadPromise;
+
+    this.preloadPromise = new Promise((resolve) => {
+      let worker: Worker | null = null;
+      let settled = false;
+      const finish = (loadedCount: number) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        worker?.terminate();
+        resolve(loadedCount);
+      };
+      const timeoutId = window.setTimeout(() => {
+        console.warn('TMDB poster manifest preload timed out; continuing boot.');
+        finish(0);
+      }, 3000);
+
       try {
-        const worker = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });
         worker.onmessage = (e) => {
           if (e.data.action === 'tmdb_preload_results') {
             const cacheData = e.data.cacheData || {};
+            let loadedCount = 0;
             for (const key in cacheData) {
               globalSyncPosterMap.set(key, cacheData[key]);
+              loadedCount += 1;
             }
-            worker.terminate();
-            resolve();
+            finish(loadedCount);
           }
         };
         worker.onerror = () => {
-          worker.terminate();
-          resolve();
+          finish(0);
         };
+        worker.onmessageerror = () => finish(0);
         worker.postMessage({ action: 'preload_tmdb_cache' });
       } catch (err) {
         console.error("Failed to preload TMDB cache using worker:", err);
-        resolve();
+        finish(0);
       }
     });
+
+    return this.preloadPromise;
   }
 }
 
 export const tmdbCache = new IndexedDBCache();
 
 const API_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_CONCURRENT_TMDB_REQUESTS = 6;
+const MAX_CONCURRENT_TMDB_REQUESTS = 16;
 const tmdbRequestsInFlight = new Map<string, Promise<unknown>>();
 const tmdbRequestQueue: Array<() => void> = [];
 let activeTmdbRequests = 0;
@@ -143,6 +172,30 @@ const runWithTmdbConcurrencyLimit = <T>(task: () => Promise<T>): Promise<T> => n
   if (activeTmdbRequests < MAX_CONCURRENT_TMDB_REQUESTS) run();
   else tmdbRequestQueue.push(run);
 });
+
+// Dedicated queue for artwork downloads: a grid mount can request hundreds of
+// posters at once; dedup + a small concurrency cap keeps the IPC bridge and
+// main-process downloader from being flooded.
+const MAX_CONCURRENT_TMDB_IMAGES = 24;
+const tmdbImageRequestsInFlight = new Map<string, Promise<string | undefined>>();
+const tmdbImageQueue: Array<() => void> = [];
+let activeTmdbImageRequests = 0;
+
+const runWithImageConcurrencyLimit = <T>(task: () => Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+  const run = () => {
+    activeTmdbImageRequests += 1;
+    task().then(resolve, reject).finally(() => {
+      activeTmdbImageRequests -= 1;
+      tmdbImageQueue.shift()?.();
+    });
+  };
+
+  if (activeTmdbImageRequests < MAX_CONCURRENT_TMDB_IMAGES) run();
+  else tmdbImageQueue.push(run);
+});
+
+/** Cached marker for titles TMDB has no match for, so they stop being re-queried. */
+export const TMDB_NO_MATCH = '__tmdb_none__';
 
 const waitForRequest = <T>(request: Promise<T>, signal?: AbortSignal): Promise<T> => {
   if (!signal) return request;
@@ -175,11 +228,15 @@ export const getTmdbApiKey = () => {
   const storedKey = (typeof localStorage !== 'undefined'
     ? localStorage.getItem('cinema_tmdb_key')?.trim()
     : '') || '';
-  
+
+  // A release key is validated during packaging and is the reliable default.
+  // Prefer it over an install-local value that may be stale/revoked but still
+  // look valid (32 hex characters), otherwise every visible card retries a
+  // request that TMDB rejects with 401 and the home hero never resolves.
   if (isValidTmdbKey(bundledKey)) return bundledKey;
   if (isValidTmdbKey(storedKey)) return storedKey;
   
-  return 'c7e12a2b1d8e1851399f4b92dc124332';
+  return '';
 };
 
 export const getTmdbLanguage = () => {
@@ -272,6 +329,17 @@ export const buildTmdbSearchPath = (endpoint: TmdbEndpoint, apiKey: string, clea
     include_adult: 'false'
   });
   return `/3/search/${endpoint}?${params.toString()}`;
+};
+
+/**
+ * Exact IDB cache key for a TMDB search request — must match the key
+ * fetchTmdbPath derives (same params/order, api_key stripped), otherwise
+ * cached search results are never found.
+ */
+export const getTmdbSearchCacheKey = (endpoint: TmdbEndpoint, apiKey: string, cleanTitle: string) => {
+  const cleanPath = buildTmdbSearchPath(endpoint, apiKey, cleanTitle)
+    .replace(/[?&]api_key=[^&]+/, '');
+  return `api-${cleanPath}`;
 };
 
 export const buildTmdbDetailsPath = (
@@ -423,6 +491,10 @@ export const getTmdbOverride = (endpoint: TmdbEndpoint, cleanTitle: string) => {
 };
 
 export const getResolvedTmdbResult = async (endpoint: TmdbEndpoint, apiKey: string, cleanTitle: string, signal?: AbortSignal) => {
+  const prepared = await tmdbCache.get(getPreparedTmdbMetadataCacheKey(endpoint, cleanTitle));
+  if (prepared === TMDB_NO_MATCH) return null;
+  if (prepared && typeof prepared === 'object') return prepared as TmdbSearchResult;
+
   const override = getTmdbOverride(endpoint, cleanTitle);
   if (override) {
     try {
@@ -453,6 +525,7 @@ export const resolveTmdbLogo = async (
 
   try {
     const cached = await tmdbCache.get(cacheKey);
+    // Stale install-local logo paths must not be restored from cache.
     if (cached && !String(cached).startsWith('app-file://')) {
       globalSyncPosterMap.set(cacheKey, cached);
       return cached;
@@ -474,6 +547,8 @@ export const resolveTmdbLogo = async (
         const logoSrc = await resolveTmdbImageSrc(bestLogo.file_path, 'w500', signal);
         if (logoSrc) {
           globalSyncPosterMap.set(cacheKey, logoSrc);
+          // Align with the read policy above: app-file:// logos are not
+          // restored from cache, so don't accumulate unreadable entries.
           if (!logoSrc.startsWith('app-file://')) {
             tmdbCache.set(cacheKey, logoSrc).catch(() => {});
           }
@@ -488,7 +563,11 @@ export const resolveTmdbLogo = async (
 };
 
 export const getTmdbImageUrl = (path?: string | null, size = 'w500') => (
-  path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined
+  path
+    ? (typeof window !== 'undefined' && window.electronAPI
+      ? `tmdb-image://${size}${path}`
+      : `https://image.tmdb.org/t/p/${size}${path}`)
+    : undefined
 );
 
 export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', signal?: AbortSignal): Promise<string | undefined> => {
@@ -496,52 +575,74 @@ export const resolveTmdbImageSrc = async (path?: string | null, size = 'w500', s
 
   const cacheKey = `img-${size}-${path}`;
   const syncCached = globalSyncPosterMap.get(cacheKey);
-  if (syncCached) {
+  if (syncCached && !syncCached.startsWith('app-file://')) {
     return syncCached;
   }
-
-  const remoteUrl = getTmdbImageUrl(path, size);
 
   if (signal?.aborted) {
     throw new DOMException('The user aborted a request.', 'AbortError');
   }
 
-  // Prefer Electron's main-process downloader in both packaged and Vite dev modes.
-  // The renderer/worker can be unable to reach TMDB's CDN even while the main
-  // process succeeds through its DoH-backed transport.
-  if (typeof window !== 'undefined' && window.electronAPI?.fetchTmdbImage) {
-    try {
-      const image = await window.electronAPI.fetchTmdbImage(path, size);
-      const resultUrl = image.localUrl || image.dataUrl;
-      if (resultUrl && !resultUrl.includes('error')) {
-        globalSyncPosterMap.set(cacheKey, resultUrl);
-        return resultUrl;
+  // Many cards can request the same artwork at once (poster reused across
+  // episodes/rows) — share one in-flight download instead of firing parallel
+  // IPC calls.
+  let shared = tmdbImageRequestsInFlight.get(cacheKey);
+  if (!shared) {
+    shared = runWithImageConcurrencyLimit(async () => {
+      const remoteUrl = getTmdbImageUrl(path, size);
+
+      // Prefer Electron's main-process downloader in both packaged and Vite dev modes.
+      // The renderer/worker can be unable to reach TMDB's CDN even while the main
+      // process succeeds through its DoH-backed transport.
+      // TMDB artwork is streamed directly from the CDN. No local image file is
+      // created; the browser's normal HTTP cache may still optimize reloads.
+      if (remoteUrl) {
+        globalSyncPosterMap.set(cacheKey, remoteUrl);
+        return remoteUrl;
       }
-    } catch (err) {
-      console.warn("Electron image download failed:", err);
-    }
+
+      return undefined;
+    }).finally(() => tmdbImageRequestsInFlight.delete(cacheKey));
+    tmdbImageRequestsInFlight.set(cacheKey, shared);
   }
 
-  // Browser-only fallback when the Electron bridge is unavailable.
-  if (remoteUrl) {
-    globalSyncPosterMap.set(cacheKey, remoteUrl);
-    return remoteUrl;
-  }
+  return waitForRequest(shared, signal);
+};
 
-  return undefined;
+export const getSyncTmdbResult = (endpoint: 'tv' | 'movie', title: string): any => {
+  if (!title) return null;
+  const cleanTitle = cleanMovieName(title);
+  const cacheKey = getTmdbSearchCacheKey(endpoint, getTmdbApiKey(), cleanTitle);
+  const syncCached = globalSyncPosterMap.get(cacheKey);
+  if (!syncCached) return null;
+  const value = (syncCached as any)?.value ?? syncCached;
+  return value?.results?.[0] || null;
 };
 
 export const getCachedTmdbResult = async (endpoint: 'tv' | 'movie', title: string): Promise<any> => {
   if (!title) return null;
   const cleanTitle = cleanMovieName(title);
-  const cacheKey = `api-/3/search/${endpoint}?query=${encodeURIComponent(cleanTitle)}&include_adult=false&page=1`;
+  const prepared = await tmdbCache.get(getPreparedTmdbMetadataCacheKey(endpoint, cleanTitle));
+  if (prepared === TMDB_NO_MATCH) return null;
+  if (prepared && typeof prepared === 'object') return prepared;
+  const cacheKey = getTmdbSearchCacheKey(endpoint, getTmdbApiKey(), cleanTitle);
+
+  const extract = (cached: any): any => {
+    const value = cached?.value ?? cached;
+    return value?.results?.[0] || null;
+  };
+
+  // Fast path: after boot preload the whole IDB lives in the sync map.
+  const syncCached = globalSyncPosterMap.get(cacheKey);
+  if (syncCached) {
+    return extract(syncCached);
+  }
+
   try {
     const cached = await tmdbCache.get(cacheKey);
-    if (cached?.value?.results?.[0]) {
-      return cached.value.results[0];
-    }
-    if (cached?.results?.[0]) {
-      return cached.results[0];
+    if (cached) {
+      globalSyncPosterMap.set(cacheKey, cached);
+      return extract(cached);
     }
   } catch {
     return null;

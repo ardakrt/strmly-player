@@ -1,25 +1,22 @@
-import { useState, useEffect, useMemo } from 'react';
-import { CheckCircle2, Clock3, Play, X, Download, Info } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { CheckCircle2, Play, X, Download, Info, ChevronDown, Check } from 'lucide-react';
 import { LikeBurstButton } from './LikeBurstButton';
 import { ImageWithFallback } from './ImageWithFallback';
-import { EpisodeThumb } from './EpisodeThumb';
-import { cleanMediaTitle } from '../utils/seriesGroupers';
-import { fetchTmdbPath, getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, getTmdbLanguage } from '../utils/tmdb';
-import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
-import type { PlaylistItem } from '../utils/m3uParser';
+import type { GroupedSeries } from '../utils/seriesGroupers';
+import type { PlaylistItem, TmdbData } from '../types';
 import { useSettings } from '../context/SettingsContext';
 import { useDownloads } from '../hooks/useDownloads';
-
-interface TmdbData {
-  id?: number;
-  match: string;
-  rating: string;
-  year: string;
-  desc: string;
-  poster?: string;
-  backdrop?: string;
-  genres?: string[];
-}
+import { useSeriesModalData } from '../hooks/useSeriesModalData';
+import {
+  SeriesCastModal,
+} from './series/SeriesModalParts';
+import {
+  buildSeriesMetaParts,
+  cleanSeriesGroup,
+  findResumeEpisode,
+  getSeasonWatchStats,
+} from './series/seriesModalHelpers';
+import { SeriesEpisodeRow } from './series/SeriesEpisodeRow';
 
 interface SeriesModalProps {
   series: GroupedSeries;
@@ -35,57 +32,6 @@ interface SeriesModalProps {
   isFavorite: boolean;
   onToggleFavorite: (e: React.MouseEvent) => void;
   onNavigateToDownloads?: () => void;
-}
-
-interface CastMember {
-  name: string;
-  character: string;
-  avatarUrl: string;
-}
-
-interface EpisodeMeta {
-  stillPath?: string;
-  runtime?: number;
-  overview?: string;
-  name?: string;
-}
-
-function CircularSaveProgress({ progress }: { progress: number }) {
-  const radius = 7;
-  const circumference = 2 * Math.PI * radius;
-  const safeProgress = Math.max(0, Math.min(100, progress || 0));
-  const offset = circumference - (safeProgress / 100) * circumference;
-
-  return (
-    <span className="relative flex h-5 w-5 items-center justify-center">
-      <svg className="h-5 w-5 -rotate-90" viewBox="0 0 20 20" aria-hidden="true">
-        <circle
-          cx="10"
-          cy="10"
-          r={radius}
-          stroke="currentColor"
-          strokeWidth="2"
-          fill="none"
-          className="text-blue-400/20"
-        />
-        <circle
-          cx="10"
-          cy="10"
-          r={radius}
-          stroke="currentColor"
-          strokeWidth="2"
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          className="text-blue-300 transition-[stroke-dashoffset] duration-300"
-        />
-      </svg>
-      <span className="absolute text-[6px] font-black leading-none text-blue-100 tabular-nums">
-        {safeProgress > 0 ? Math.round(safeProgress) : ''}
-      </span>
-    </span>
-  );
 }
 
 export const SeriesModal = ({
@@ -105,79 +51,37 @@ export const SeriesModal = ({
 }: SeriesModalProps) => {
   const { language } = useSettings();
   const { downloads, addDownload, getDownloadByStreamUrl } = useDownloads();
-  const [savedEpisodeUrls, setSavedEpisodeUrls] = useState<Set<string>>(() => new Set());
   const [descExpanded, setDescExpanded] = useState(false);
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const seasonsList = Object.keys(series.seasons).map(Number).sort((a, b) => a - b);
   const episodes = useMemo(() => series.seasons[activeSeason] || [], [activeSeason, series.seasons]);
   const seriesCleanName = series.name.toLowerCase();
+  const { savedEpisodeUrls, episodeMeta, cast } = useSeriesModalData({
+    episodes,
+    downloads,
+    getDownloadByStreamUrl,
+    tmdbShowId,
+    tmdbDataId: tmdbData?.id,
+    activeSeason,
+  });
+
+  const seasonScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let active = true;
-
-    const checkSavedEpisodes = async () => {
-      const savedUrls = new Set<string>();
-      const needsDiskLookup: {
-        key: string;
-        type: 'series';
-        name: string;
-        streamUrl: string;
-      }[] = [];
-
-      for (const episode of episodes) {
-        const knownDownload = getDownloadByStreamUrl(episode.item.url);
-        if (knownDownload?.status === 'pending' || knownDownload?.status === 'downloading') {
-          continue;
-        }
-        if (knownDownload?.status === 'completed') {
-          savedUrls.add(episode.item.url);
-          continue;
-        }
-
-        const matchingByName = downloads.find(
-          d => d.type === 'series' && d.name.toLowerCase() === episode.item.name.toLowerCase()
-        );
-        if (matchingByName?.status === 'completed') {
-          savedUrls.add(episode.item.url);
-          continue;
-        }
-
-        needsDiskLookup.push({
-          key: episode.item.url,
-          type: 'series',
-          name: episode.item.name,
-          streamUrl: episode.item.url,
-        });
+    if (seasonScrollRef.current) {
+      const activeEl = seasonScrollRef.current.querySelector('.series-season-chip.is-active');
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       }
+    }
+  }, [activeSeason]);
 
-      if (needsDiskLookup.length > 0) {
-        try {
-          if (window.electronAPI?.getSavedMediaInfoBatch) {
-            const batch = await window.electronAPI.getSavedMediaInfoBatch(needsDiskLookup);
-            for (const result of batch.results || []) {
-              if (result.exists && result.key) savedUrls.add(result.key);
-            }
-          } else if (window.electronAPI?.getSavedMediaInfo) {
-            for (const item of needsDiskLookup) {
-              const savedMedia = await window.electronAPI.getSavedMediaInfo(item);
-              if (savedMedia?.exists) savedUrls.add(item.key);
-            }
-          }
-        } catch {
-          // Older Electron builds may not expose batch/lookup handlers.
-        }
-      }
-
-      if (active) {
-        setSavedEpisodeUrls(savedUrls);
-      }
-    };
-
-    void checkSavedEpisodes();
-
-    return () => {
-      active = false;
-    };
-  }, [downloads, episodes, getDownloadByStreamUrl]);
+  const handleSeasonWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!seasonScrollRef.current) return;
+    if (e.deltaY !== 0 && !e.shiftKey) {
+      seasonScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
 
   const playEpisode = (item: PlaylistItem) => {
     const known =
@@ -223,177 +127,32 @@ export const SeriesModal = ({
     };
   };
 
-  const [episodeMeta, setEpisodeMeta] = useState<Record<number, EpisodeMeta>>({});
-  
-  const [cast, setCast] = useState<CastMember[]>([]);
   const [showCastModal, setShowCastModal] = useState(false);
 
-  useEffect(() => {
-    if (!tmdbShowId) {
-      setEpisodeMeta({});
-      return;
-    }
-
-    let cancelled = false;
-    const apiKey = getTmdbApiKey();
-    const path = `/3/tv/${tmdbShowId}/season/${activeSeason}?api_key=${apiKey}&language=${getTmdbLanguage()}`;
-
-    fetchTmdbPath<{ episodes?: { episode_number: number; still_path?: string; runtime?: number; overview?: string; name?: string }[]; error?: string }>(path)
-      .then((data) => {
-        if (cancelled) return;
-        const metaMap: Record<number, EpisodeMeta> = {};
-        if (data && Array.isArray(data.episodes)) {
-          data.episodes.forEach((ep) => {
-            metaMap[ep.episode_number] = {
-              stillPath: ep.still_path,
-              runtime: ep.runtime,
-              overview: ep.overview,
-              name: ep.name
-            };
-          });
-        }
-        if (!cancelled) setEpisodeMeta(metaMap);
-      })
-      .catch((err) => {
-        console.error("Failed to load tmdb season details:", err);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [tmdbShowId, activeSeason]);
-
-  useEffect(() => {
-    const tmdbId = tmdbShowId || tmdbData?.id;
-    if (!tmdbId) {
-      setCast([]);
-      return;
-    }
-
-    let cancelled = false;
-    const cacheKey = `cast-tv-${tmdbId}`;
-
-    const loadCast = async () => {
-      try {
-        const cached = await tmdbCache.get(cacheKey);
-        if (cached && Array.isArray(cached)) {
-          if (!cancelled) setCast(cached);
-          return;
-        }
-
-        const apiKey = getTmdbApiKey();
-        const creditsPath = `/3/tv/${tmdbId}/credits?api_key=${apiKey}&language=${getTmdbLanguage()}`;
-        
-        let rawCast: any[] = [];
-        if (window.electronAPI && window.electronAPI.fetchTmdb) {
-          const res = await window.electronAPI.fetchTmdb(creditsPath) as any;
-          if (res && Array.isArray(res.cast)) rawCast = res.cast;
-        } else {
-          const res = await fetch(`https://api.themoviedb.org${creditsPath}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.cast)) rawCast = data.cast;
-          }
-        }
-
-        const castWithPhotos = rawCast.filter(item => item.profile_path).slice(0, 18);
-        const resolvedCast = await Promise.all(
-          castWithPhotos.map(async (item) => {
-            const avatarUrl = await resolveTmdbImageSrc(item.profile_path, 'w185');
-            return {
-              name: item.name,
-              character: item.character,
-              avatarUrl: avatarUrl || ''
-            };
-          })
-        );
-
-        const finalCast = resolvedCast.filter(item => item.avatarUrl);
-        if (finalCast.length > 0) {
-          await tmdbCache.set(cacheKey, finalCast);
-        }
-
-        if (!cancelled) setCast(finalCast);
-      } catch (err) {
-        console.error("Failed to load series cast:", err);
-      }
-    };
-
-    loadCast();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [tmdbShowId, tmdbData?.id]);
-
-  // Akıllı Kaldığın Yerden Devam Et / Başla Mekanizması
-  let resumeEpisode: SeriesEpisode | null = null;
-  let bestHistoryIndex = -1;
-
-  for (const sNum in series.seasons) {
-    const sEps = series.seasons[sNum];
-    for (const ep of sEps) {
-      const idx = recentlyWatched.findIndex(x => x.id === ep.item.id);
-      if (idx !== -1 && (bestHistoryIndex === -1 || idx < bestHistoryIndex)) {
-        bestHistoryIndex = idx;
-        resumeEpisode = ep;
-      }
-    }
-  }
+  const resumeEpisode = useMemo(
+    () => findResumeEpisode(series.seasons, recentlyWatched),
+    [recentlyWatched, series.seasons],
+  );
 
   const firstSeasonNum = seasonsList[0];
   const firstSeasonEpisodes = series.seasons[firstSeasonNum] || [];
   const firstEpisode = firstSeasonEpisodes[0] || null;
 
   // Playlist groups are noisy: "[TR] HBO MAX / PARAMOUNT+"
-  const cleanedGroup = useMemo(() => {
-    if (!series.group) return '';
-    let s = String(series.group)
-      .replace(/\[[^\]]*]/g, ' ')
-      .replace(/\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|hdr|dv|atmos)\b/gi, ' ')
-      .replace(/[|/\\]+/g, ' · ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (s.length > 32) s = `${s.slice(0, 30).trim()}…`;
-    return s;
-  }, [series.group]);
+  const cleanedGroup = useMemo(
+    () => cleanSeriesGroup(series.group),
+    [series.group],
+  );
 
-  const metaParts = useMemo(() => {
-    const parts: { text: string; accent?: boolean }[] = [];
-    if (tmdbData?.match) {
-      const score = String(tmdbData.match).replace(/[^0-9]/g, '');
-      if (score) {
-        parts.push({
-          text: language === 'tr' ? `%${score} Eşleşme` : `${score}% Match`,
-          accent: true,
-        });
-      }
-    }
-    if (tmdbData?.year) parts.push({ text: tmdbData.year });
-    if (tmdbData?.rating) {
-      const rating = tmdbData.rating.replace('★ ', '').trim();
-      if (rating) parts.push({ text: `★ ${rating}` });
-    }
-    parts.push({
-      text: language === 'tr'
-        ? `${seasonsList.length} Sezon`
-        : `${seasonsList.length} Season${seasonsList.length > 1 ? 's' : ''}`,
-    });
-    return parts;
-  }, [tmdbData, language, seasonsList.length]);
+  const metaParts = useMemo(
+    () => buildSeriesMetaParts(tmdbData, language, seasonsList.length),
+    [tmdbData, language, seasonsList.length],
+  );
 
-  const seasonWatchStats = useMemo(() => {
-    let watched = 0;
-    let inProgress = 0;
-    for (const ep of episodes) {
-      const h = recentlyWatched.find((x) => x.id === ep.item.id);
-      if (!h) continue;
-      const p = h.progress ?? 0;
-      if (p >= 90) watched += 1;
-      else if (p > 0) inProgress += 1;
-    }
-    return { watched, inProgress, total: episodes.length };
-  }, [episodes, recentlyWatched]);
+  const seasonWatchStats = useMemo(
+    () => getSeasonWatchStats(episodes, recentlyWatched),
+    [episodes, recentlyWatched],
+  );
 
   useEffect(() => {
     setDescExpanded(false);
@@ -664,215 +423,119 @@ export const SeriesModal = ({
               })()}
             </div>
 
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
-              {seasonsList.map(seasonNum => (
-                <button type="button"
-                  key={`season-${seasonNum}`}
-                  onClick={() => {
-                    onSetActiveSeason(seasonNum);
-                    onSetExpandedEpisodeId(null);
-                  }}
-                  className={`series-season-chip cursor-pointer ${activeSeason === seasonNum ? 'is-active' : ''}`}
+            {seasonsList.length > 6 ? (
+              <div className="relative inline-block">
+                <button
+                  type="button"
+                  onClick={() => setSeasonDropdownOpen(!seasonDropdownOpen)}
+                  className="inline-flex h-9 items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/[0.06] px-4 text-[12.5px] font-semibold text-white backdrop-blur-md shadow-md transition-all hover:border-white/25 hover:bg-white/[0.1] active:scale-[0.98] cursor-pointer min-w-[130px]"
+                  aria-expanded={seasonDropdownOpen}
                 >
-                  {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
+                  <span>{language === 'tr' ? `${activeSeason}. Sezon` : `Season ${activeSeason}`}</span>
+                  <ChevronDown size={14} className={`text-white/60 transition-transform duration-200 ${seasonDropdownOpen ? 'rotate-180 text-white' : ''}`} />
                 </button>
-              ))}
-            </div>
+
+                {seasonDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setSeasonDropdownOpen(false)}
+                    />
+                    <div className="absolute left-0 top-full mt-1.5 z-50 w-max max-w-[85vw] md:max-w-xl overflow-x-auto rounded-2xl border border-white/15 bg-[#121214]/95 p-2 shadow-[0_16px_45px_rgba(0,0,0,0.8)] backdrop-blur-2xl custom-modal-scrollbar animate-in fade-in zoom-in-95 duration-150">
+                      <div
+                        className="grid gap-1.5"
+                        style={{
+                          gridTemplateRows: `repeat(${Math.min(6, seasonsList.length)}, minmax(0, 1fr))`,
+                          gridAutoFlow: 'column',
+                        }}
+                      >
+                        {seasonsList.map(seasonNum => {
+                          const isActive = activeSeason === seasonNum;
+                          return (
+                            <button
+                              type="button"
+                              key={`season-opt-${seasonNum}`}
+                              onClick={() => {
+                                onSetActiveSeason(seasonNum);
+                                onSetExpandedEpisodeId(null);
+                                setSeasonDropdownOpen(false);
+                              }}
+                              className={`flex items-center justify-between gap-2 rounded-xl px-3.5 py-1.5 text-left text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap min-w-[100px] ${
+                                isActive
+                                  ? 'bg-white text-black font-bold shadow-sm'
+                                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              <span>{language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}</span>
+                              {isActive && <Check size={13} strokeWidth={2.5} className="text-black shrink-0 ml-1" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div
+                ref={seasonScrollRef}
+                onWheel={handleSeasonWheel}
+                className="flex w-full gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar scroll-smooth"
+              >
+                {seasonsList.map(seasonNum => (
+                  <button
+                    type="button"
+                    key={`season-${seasonNum}`}
+                    onClick={() => {
+                      onSetActiveSeason(seasonNum);
+                      onSetExpandedEpisodeId(null);
+                    }}
+                    className={`series-season-chip cursor-pointer ${activeSeason === seasonNum ? 'is-active' : ''}`}
+                  >
+                    {language === 'tr' ? `${seasonNum}. Sezon` : `Season ${seasonNum}`}
+                  </button>
+                ))}
+              </div>
+            )}
           </header>
 
           <div className="flex-1 overflow-y-auto px-2 md:px-3 py-1.5 min-h-0 custom-modal-scrollbar">
             <div className="flex flex-col">
-              {episodes.map((ep) => {
-                const epTitle = ep.item.name;
-                const cleanedTitle = cleanMediaTitle(epTitle);
-                const epSubtitle = cleanedTitle
-                  ? cleanedTitle.replace(new RegExp(`^${seriesCleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').trim()
-                  : '';
-                const cleanSubtitle = (() => {
-                  if (!epSubtitle) return '';
-                  let clean = epSubtitle.trim();
-                  clean = clean.replace(/^s\d+\s*e\d+\s*[:-]?\s*/i, '');
-                  clean = clean.replace(/^(?:\d+\.?\s*(?:sezon|season|s\.?)\s*)?(?:\d+\.?\s*(?:bölüm|episode|ep?\.?))\s*[:-]?\s*/i, '');
-                  clean = clean.replace(/^(?:(?:sezon|season|s)\s*\d+\s*)?(?:(?:bölüm|episode|ep)\s*\d+)\s*[:-]?\s*/i, '');
-                  clean = clean.replace(/^[:-]\s*/, '');
-                  return clean.trim();
-                })();
-                const historyItem = recentlyWatched.find(x => x.id === ep.item.id);
-                const progress = historyItem?.progress;
-                const isWatched = recentlyWatched.some(x => x.id === ep.item.id);
-                const isTarget = expandedEpisodeId === ep.item.id;
-                const meta = episodeMeta[ep.episodeNumber] || {};
-                const tmdbEpisodeName = (() => {
-                  if (!meta.name) return '';
-                  const lower = meta.name.toLowerCase().trim();
-                  const isGeneric =
-                    /^(?:episode|bölüm|ep\.?|s\d+e\d+)\s*\d+$/i.test(lower) ||
-                    /^[se]\d+$/i.test(lower) ||
-                    lower === `episode ${ep.episodeNumber}` ||
-                    lower === `bölüm ${ep.episodeNumber}` ||
-                    lower === `${ep.episodeNumber}. bölüm` ||
-                    lower === `${ep.episodeNumber}.bölüm`;
-                  return isGeneric ? '' : meta.name;
-                })();
-                const displayTitle = tmdbEpisodeName || cleanSubtitle || (language === 'tr' ? `${ep.episodeNumber}. Bölüm` : `Episode ${ep.episodeNumber}`);
-                const runtimeText = meta.runtime ? `${meta.runtime} dk` : null;
-                const saveState = getEpisodeSaveState(ep.item.url, ep.item.name);
-                const episodeSaved = saveState.saved;
-                const episodeSaving = saveState.saving;
-                const saveProgress = saveState.progress;
-                const epOverview = meta.overview ? meta.overview.replace(/\s+/g, ' ').trim() : '';
-
-                const fullyWatched = isWatched && (progress === undefined || progress >= 90);
-                const hasProgress = progress !== undefined && progress > 0 && progress < 90;
-
-                return (
-                  <div
-                    key={ep.item.id}
-                    onClick={() => playEpisode(ep.item)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); playEpisode(ep.item); } }}
-                    tabIndex={0}
-                    role="button"
-                    className={`series-ep-row group flex items-center gap-3 px-2.5 py-2 cursor-pointer ${isTarget ? 'is-active' : ''}`}
-                  >
-                    <div className="series-ep-thumb relative w-[6.75rem] md:w-[8rem] aspect-video shrink-0">
-                      <EpisodeThumb
-                        tmdbShowId={tmdbShowId}
-                        seasonNumber={ep.seasonNumber}
-                        episodeNumber={ep.episodeNumber}
-                        fallbackPoster={tmdbData?.poster}
-                        stillPath={meta.stillPath}
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/45 transition-colors">
-                        <div className="w-7 h-7 rounded-full bg-white/90 text-black flex items-center justify-center shadow-md opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all">
-                          <Play size={11} fill="#000" className="ml-0.5" />
-                        </div>
-                      </div>
-                      {hasProgress && (
-                        <div className="absolute bottom-0 left-0 w-full h-[3px] bg-white/15 z-20">
-                          <div className="h-full bg-white" style={{ width: `${progress}%` }} />
-                        </div>
-                      )}
-                      {fullyWatched && (
-                        <span className="absolute top-1.5 right-1.5 z-20 w-5 h-5 rounded-full bg-black/55 border border-white/15 flex items-center justify-center">
-                          <CheckCircle2 size={12} className="text-emerald-400" />
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[11px] font-medium text-white/25 tabular-nums shrink-0 w-4">
-                          {ep.episodeNumber}
-                        </span>
-                        <h4 className="text-[13px] font-medium text-white/88 truncate">
-                          {displayTitle}
-                        </h4>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 pl-6 text-[11px] text-white/28">
-                        {runtimeText ? (
-                          <span className="inline-flex items-center gap-1">
-                            <Clock3 size={10} className="opacity-70" />
-                            {runtimeText}
-                          </span>
-                        ) : null}
-                        {fullyWatched ? (
-                          <span className="text-emerald-400/70">{language === 'tr' ? 'İzlendi' : 'Watched'}</span>
-                        ) : hasProgress ? (
-                          <span className="text-white/45">
-                            {language === 'tr' ? `Devam · %${Math.round(progress!)}` : `In progress · ${Math.round(progress!)}%`}
-                          </span>
-                        ) : null}
-                      </div>
-                      {epOverview ? (
-                        <p className="mt-0.5 pl-6 text-[11px] text-white/30 line-clamp-1 leading-snug">
-                          {epOverview}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <button type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (episodeSaved) {
-                          playEpisode(ep.item);
-                          return;
-                        }
-                        if (episodeSaving && onNavigateToDownloads) {
-                          onNavigateToDownloads();
-                          return;
-                        }
-                        await addDownload(ep.item);
-                      }}
-                      className={`series-icon-btn shrink-0 cursor-pointer ${
-                        episodeSaved ? 'is-saved' : ''
-                      }`}
-                      title={episodeSaved
-                        ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
-                        : (language === 'tr' ? 'Kaydet' : 'Save')}
-                      aria-label={episodeSaved
-                        ? (language === 'tr' ? 'Çevrimdışı oynat' : 'Play offline')
-                        : (language === 'tr' ? 'Kaydet' : 'Save')}
-                    >
-                      {episodeSaved ? (
-                        <CheckCircle2 size={15} strokeWidth={2} color="#34d399" />
-                      ) : episodeSaving ? (
-                        <CircularSaveProgress progress={saveProgress} />
-                      ) : (
-                        <Download size={15} strokeWidth={1.75} />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+              {episodes.map((episode) => (
+                <SeriesEpisodeRow
+                  key={episode.item.id}
+                  episode={episode}
+                  meta={episodeMeta[episode.episodeNumber] || {}}
+                  seriesCleanName={seriesCleanName}
+                  language={language}
+                  historyItem={recentlyWatched.find(
+                    (item) => item.id === episode.item.id,
+                  )}
+                  isTarget={expandedEpisodeId === episode.item.id}
+                  tmdbShowId={tmdbShowId}
+                  fallbackPoster={tmdbData?.poster}
+                  saveState={getEpisodeSaveState(
+                    episode.item.url,
+                    episode.item.name,
+                  )}
+                  onPlay={playEpisode}
+                  onSave={addDownload}
+                  onNavigateToDownloads={onNavigateToDownloads}
+                />
+              ))}
             </div>
           </div>
         </section>
       </div>
 
-      {showCastModal && (
-        <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => setShowCastModal(false))(); } }} tabIndex={0} role="button" 
-          className="fixed inset-0 z-[4000] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
-          onClick={() => setShowCastModal(false)}
-        >
-          <div onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ((e) => e.stopPropagation())(e as any); } }} tabIndex={0} role="button" 
-            className="series-modal-sheet relative flex w-full max-w-lg flex-col gap-4 rounded-[22px] p-6 animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button type="button"
-              onClick={() => setShowCastModal(false)}
-              className="absolute top-4 right-4 z-50 w-8 h-8 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
-              aria-label={language === 'tr' ? 'Kapat' : 'Close'}
-            >
-              ✕
-            </button>
-
-            <div className="flex flex-col text-left">
-              <span className="text-[10px] uppercase tracking-widest font-extrabold text-neutral-500">{language === 'tr' ? 'Oyuncu Kadrosu' : 'Cast & Crew'}</span>
-              <h3 className="text-lg font-black text-white mt-0.5 truncate max-w-[85%]">{series.name}</h3>
-            </div>
-
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 mt-2 max-h-[360px] overflow-y-auto pr-1.5 custom-modal-scrollbar">
-              {cast.map((member, idx) => (
-                <div key={idx} className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
-                  <img
-                    src={member.avatarUrl}
-                    alt={member.name}
-                    className="w-14 h-14 rounded-full object-cover border border-white/10 shadow-md"
-                  />
-                  <div className="flex flex-col w-full min-w-0">
-                    <span className="text-[10px] text-white font-extrabold truncate w-full" title={member.name}>
-                      {member.name}
-                    </span>
-                    <span className="text-[9px] text-neutral-400 font-medium truncate w-full mt-0.5" title={member.character}>
-                      {member.character}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {showCastModal ? (
+        <SeriesCastModal
+          cast={cast}
+          language={language}
+          seriesName={series.name}
+          onClose={() => setShowCastModal(false)}
+        />
+      ) : null}
     </div>
   );
 };

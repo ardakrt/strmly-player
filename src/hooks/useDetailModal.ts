@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PlaylistItem } from '../types';
 import { parseSeriesEpisodeInfo, getSeriesId } from '../utils/seriesGroupers';
 import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
@@ -119,11 +119,20 @@ export function useDetailModal({
     };
   }, [selectedChannelForModal, selectedSeriesForModal, tmdbApiKey]);
 
-  // Open series modal with a pre-grouped series object
-  const handleOpenSeriesModalDirect = async (series: GroupedSeries, targetEpisodeItem?: PlaylistItem) => {
+  // Keep the latest grouping helper callable from a stable callback below
+  // (usePlaylists recreates it on every render).
+  const buildXtreamSeriesGroupRef = useRef(buildXtreamSeriesGroup);
+  useEffect(() => {
+    buildXtreamSeriesGroupRef.current = buildXtreamSeriesGroup;
+  }, [buildXtreamSeriesGroup]);
+
+  // Open series modal with a pre-grouped series object.
+  // Stable identity: it is passed as a prop to memoized catalog views
+  // (SeriesView), where a fresh function per render would break React.memo.
+  const handleOpenSeriesModalDirect = useCallback(async (series: GroupedSeries, targetEpisodeItem?: PlaylistItem) => {
     const firstSeason = Object.keys(series.seasons).map(Number).sort((a, b) => a - b)[0];
     const firstSeriesItem = targetEpisodeItem || (firstSeason ? series.seasons[firstSeason]?.[0]?.item : null);
-    const xtreamGroup = await buildXtreamSeriesGroup(firstSeriesItem || null, series);
+    const xtreamGroup = await buildXtreamSeriesGroupRef.current(firstSeriesItem || null, series);
     if (xtreamGroup) {
       series = xtreamGroup;
       targetEpisodeItem = undefined;
@@ -144,7 +153,7 @@ export function useDetailModal({
         setExpandedEpisodeId(null);
       }
     }
-  };
+  }, []);
 
   // Open series modal by dynamically grouping sibling episodes from the entire items list
   const handleOpenSeriesModalForFlatItem = async (item: PlaylistItem) => {
