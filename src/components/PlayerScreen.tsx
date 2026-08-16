@@ -70,7 +70,7 @@ export function PlayerScreen({
       onSpeedChange={player.handleSpeedChange}
       onQualityChange={player.handleQualityChange}
       onAudioTrackChange={player.handleAudioTrackChange}
-      onSubtitleChange={player.setActiveSubtitle}
+      onSubtitleChange={player.handleSubtitleChange}
       onSubtitleUpload={player.handleSubtitleUpload}
       onPiP={player.handlePlayerPiP}
       onToggleFullscreen={player.handleToggleFullscreen}

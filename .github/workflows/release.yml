@@ -61,11 +61,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY }}
         run: |
+          npm run verify
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            npm run verify
-            npx electron-builder --win --publish always
+            npx electron-builder --win nsis --publish always
           else
-            npm run verify
-            npx electron-builder --linux --publish always
+            npx electron-builder --linux AppImage deb --publish always
           fi
         shell: bash

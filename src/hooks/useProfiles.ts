@@ -4,7 +4,7 @@ import { parseM3UAsync } from '../utils/m3uParser';
 import { deletePlaylistFromBrowserStorage, savePlaylistToBrowserStorage } from '../utils/playlistStorage';
 import { resolveTmdbImageSrc, getTmdbLanguage } from '../utils/tmdb';
 import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS, DEFAULT_AVATARS } from '../constants';
-import type { Language } from '../utils/translations';
+import { getTranslation, type Language } from '../utils/translations';
 
 interface UseProfilesProps {
   tmdbApiKey: string;
@@ -29,6 +29,9 @@ export interface ProfileSetupStatus {
   title: string;
   detail: string;
   itemCount?: number;
+  progress?: number;
+  completedItems?: number;
+  totalItems?: number;
 }
 
 const yieldToInterface = () => new Promise<void>(resolve => window.setTimeout(resolve, 0));
@@ -107,26 +110,50 @@ export function useProfiles({
         };
 
         const tmdbLang = getTmdbLanguage();
-        // Discover prominent Turkish TV shows
-        const pages = await Promise.all([1, 2, 3].map(page => {
-          const discoverPath = `/3/discover/tv?api_key=${tmdbApiKey}&with_origin_country=TR&with_original_language=tr&sort_by=popularity.desc&include_null_first_air_dates=false&language=${tmdbLang}&page=${page}`;
-          return fetchTmdbJson(discoverPath);
-        }));
-        const seenIds = new Set<number>();
-        const results = pages
-          .flatMap(data => Array.isArray(data?.results) ? data.results : [])
-          .filter(item => item?.id && !seenIds.has(item.id) && seenIds.add(item.id));
+        // Discover top popular & trending Movies & TV Shows intermingled from TMDB
+        const [trendingAll, popularMovies, popularTv, topMovies] = await Promise.all([
+          fetchTmdbJson(`/3/trending/all/week?api_key=${tmdbApiKey}&language=${tmdbLang}`),
+          fetchTmdbJson(`/3/movie/popular?api_key=${tmdbApiKey}&language=${tmdbLang}`),
+          fetchTmdbJson(`/3/tv/popular?api_key=${tmdbApiKey}&language=${tmdbLang}`),
+          fetchTmdbJson(`/3/movie/top_rated?api_key=${tmdbApiKey}&language=${tmdbLang}`)
+        ]);
 
-        const items = results.filter(item => item.poster_path).slice(0, 48);
+        const allItems: any[] = [];
+        const maxLen = Math.max(
+          trendingAll?.results?.length || 0,
+          popularMovies?.results?.length || 0,
+          popularTv?.results?.length || 0,
+          topMovies?.results?.length || 0
+        );
+
+        for (let i = 0; i < maxLen; i++) {
+          if (trendingAll?.results?.[i]) allItems.push(trendingAll.results[i]);
+          if (popularMovies?.results?.[i]) allItems.push({ ...popularMovies.results[i], media_type: 'movie' });
+          if (popularTv?.results?.[i]) allItems.push({ ...popularTv.results[i], media_type: 'tv' });
+          if (topMovies?.results?.[i]) allItems.push({ ...topMovies.results[i], media_type: 'movie' });
+        }
+
+        const seenIds = new Set<string>();
+        const filtered = allItems.filter(item => {
+          const mType = item.media_type || (item.title ? 'movie' : 'tv');
+          const key = `${mType}_${item.id}`;
+          if (!item?.id || !item?.poster_path || seenIds.has(key)) return false;
+          seenIds.add(key);
+          return true;
+        });
+
+        const items = filtered.slice(0, 48);
 
         // Resolve images in parallel
         const resolvedList = await Promise.all(
           items.map(async (item) => {
             const posterUrl = await resolveTmdbImageSrc(item.poster_path, 'w185');
+            const mediaType = (item.media_type || (item.title || item.first_air_date === undefined ? 'movie' : 'tv')) as 'movie' | 'tv';
             return {
               id: item.id,
-              name: item.name,
-              posterUrl: posterUrl || ''
+              name: item.name || item.title || item.original_name || item.original_title || '',
+              posterUrl: posterUrl || '',
+              mediaType
             };
           })
         );
@@ -134,9 +161,9 @@ export function useProfiles({
         if (cancelled) return;
         setLocalSeries(resolvedList.filter(item => item.posterUrl));
 
-        // Build quick-avatar row from actors in prominent series
+        // Build quick-avatar row from actors in prominent series/movies
         const credits = await Promise.all(items.slice(0, 12).map(item => (
-          fetchTmdbJson(`/3/tv/${item.id}/credits?api_key=${tmdbApiKey}&language=${tmdbLang}`).catch(() => ({ cast: [] }))
+          fetchTmdbJson(`/3/${item.mediaType || (item.title ? 'movie' : 'tv')}/${item.id}/credits?api_key=${tmdbApiKey}&language=${tmdbLang}`).catch(() => ({ cast: [] }))
         )));
         const seenProfiles = new Set<string>();
         const actorPaths = credits
@@ -187,7 +214,7 @@ export function useProfiles({
       }
 
       // Filter cast to those who have profile photos
-      const castWithPhotos = castList.filter(item => item.profile_path).slice(0, 18);
+      const castWithPhotos = castList.filter(item => item.profile_path).slice(0, 24);
 
       // Resolve image URLs in parallel
       const resolvedCast = await Promise.all(
@@ -203,7 +230,7 @@ export function useProfiles({
       setSeriesCast(resolvedCast.filter(item => item.avatarUrl));
     } catch (e) {
       console.error("Error fetching cast:", e);
-      showToast(language === 'tr' ? "Oyuncular yüklenirken bir hata oluştu." : "An error occurred while loading actors.");
+      showToast(getTranslation('feedback.profile.castLoadFailed', language));
     } finally {
       setCastLoading(false);
     }
@@ -227,7 +254,8 @@ export function useProfiles({
       setActiveProfileId(profileId);
     } catch (error) {
       console.error("Error loading selected profile:", error);
-      showToast(language === 'tr' ? "Profil verileri yüklenirken bir hata oluştu." : "An error occurred while loading profile data.");
+      setProfileSetupStatus(previous => ({ ...previous, active: false }));
+      showToast(getTranslation('feedback.profile.loadFailed', language));
     } finally {
       setIsParsing(false);
       setProfileEntryReady(false);
@@ -240,6 +268,20 @@ export function useProfiles({
     await resetAllProfileData();
   };
 
+  const openCreateProfileWizard = async () => {
+    setProfileFormName('');
+    setProfileFormAvatar('');
+    setProfileContentPreferences([]);
+    setSelectedSeriesForCast(null);
+    setSeriesCast([]);
+    setProfilePlaylistType('none');
+    setProfileAutoUpdateIntervalHours(24);
+    setEditingProfileId(null);
+    setProfileSelectMode('create');
+    setActiveProfileId(null);
+    await saveAppSetting('cinema_active_profile_id', '');
+  };
+
   const handleDeleteProfile = async (profileId: string) => {
     let storedPlaylists: SavedPlaylist[];
     try {
@@ -247,9 +289,7 @@ export function useProfiles({
       storedPlaylists = Array.isArray(loadedPlaylists) ? loadedPlaylists : [];
     } catch (e) {
       console.error(e);
-      showToast(language === 'tr'
-        ? 'Profil verileri okunamadığı için silme işlemi durduruldu.'
-        : 'Profile deletion was stopped because its data could not be read.');
+      showToast(getTranslation('feedback.profile.deleteReadFailed', language));
       return;
     }
 
@@ -257,9 +297,7 @@ export function useProfiles({
       const result = await window.electronAPI.deleteProfileData(profileId);
       if (!result.success) {
         console.error('Failed to delete durable profile data:', result.error);
-        showToast(language === 'tr'
-          ? 'Profil verileri diskten tamamen silinemedi.'
-          : 'Profile data could not be fully removed from disk.');
+        showToast(getTranslation('feedback.profile.deleteDiskFailed', language));
         return;
       }
     }
@@ -338,9 +376,7 @@ export function useProfiles({
       setAvatarSearchResults(finalResults.slice(0, 18));
     } catch (e) {
       console.error("Error searching avatars from TMDB:", e);
-      showToast(language === 'tr'
-        ? "TMDB görsel araması sırasında bir hata oluştu."
-        : "An error occurred while searching TMDB images.");
+      showToast(getTranslation('feedback.profile.imageSearchFailed', language));
     } finally {
       setAvatarSearchLoading(false);
     }
@@ -424,9 +460,7 @@ export function useProfiles({
           };
         } catch (e: any) {
           console.error(e);
-          showToast(language === 'tr'
-            ? `Kanal listesi yüklenemedi: ${e.message || e}. Profil playlist olmadan oluşturulacak.`
-            : `Could not load channel list: ${e.message || e}. The profile will be created without a playlist.`);
+          showToast(getTranslation('feedback.profile.m3uSkipped', language));
         }
       } else if (profilePlaylistType === 'xtream' && profileXtreamUrl.trim() && profileXtreamUser.trim() && profileXtreamPass.trim()) {
         setProfileSetupStatus({
@@ -480,9 +514,7 @@ export function useProfiles({
           };
         } catch (e: any) {
           console.error(e);
-          showToast(language === 'tr'
-            ? `Xtream bağlantısı başarısız: ${e.message || e}. Profil playlist olmadan oluşturulacak.`
-            : `Xtream connection failed: ${e.message || e}. The profile will be created without a playlist.`);
+          showToast(getTranslation('feedback.profile.xtreamSkipped', language));
         }
       }
 
@@ -539,7 +571,8 @@ export function useProfiles({
 
       setProfileSetupStatus({
         active: true,
-        step: 4,
+        step: 5,
+        progress: 100,
         title: language === 'tr' ? 'Ana sayfa hazırlanıyor' : 'Preparing home page',
         detail: language === 'tr' ? 'Kategoriler ve kişisel öneriler oluşturuluyor...' : 'Building categories and personal recommendations...',
         itemCount: loadedItems.length || undefined
@@ -563,7 +596,7 @@ export function useProfiles({
         : (language === 'tr' ? `Hoş geldiniz, ${newProfile.name}!` : `Welcome, ${newProfile.name}!`));
     } catch (e) {
       console.error(e);
-      showToast(language === 'tr' ? "Profil kaydedilirken bir hata oluştu." : "An error occurred while saving the profile.");
+      showToast(getTranslation('feedback.profile.saveFailed', language));
     } finally {
       profileSaveInProgressRef.current = false;
       setProfileSetupStatus(previous => ({ ...previous, active: false }));
@@ -600,6 +633,7 @@ export function useProfiles({
     profileSetupStatus,
     handleSelectProfile,
     handleLogoutProfile,
+    openCreateProfileWizard,
     handleDeleteProfile,
     handleAvatarSearch,
     handleSaveProfile,

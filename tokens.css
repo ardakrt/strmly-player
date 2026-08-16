@@ -38,4 +38,17 @@
   --rule-launch-hair: 1px;
   --radius-launch-progress: 999px;
   --z-launcher: 1000;
+
+  /* Semantic Z-Index Hierarchy Tokens */
+  --z-layer-nav: 60;
+  --z-layer-dropdown: 100;
+  --z-layer-player: 2000;
+  --z-layer-spotlight: 2000;
+  --z-layer-modal: 3000;
+  --z-layer-modal-nested: 4000;
+  --z-layer-wizard: 4500;
+  --z-layer-dialog: 5000;
+  --z-layer-profile: 6000;
+  --z-layer-context-menu: 7000;
+  --z-layer-toast: 9999;
 }

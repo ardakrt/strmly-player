@@ -1,5 +1,7 @@
 import { AppModals } from './AppModals';
 import { DynamicIslandToast } from './DynamicIslandToast';
+import { UpdateToast } from './UpdateToast';
+import { SpotlightSearch } from './SpotlightSearch';
 import type { AppProviderValue } from '../hooks/useAppProvider';
 
 interface AppOverlaysProps {
@@ -7,7 +9,7 @@ interface AppOverlaysProps {
 }
 
 export function AppOverlays({ app }: AppOverlaysProps) {
-  const { ui, modals, catalog, playback, navigation } = app;
+  const { ui, modals, catalog, playback, navigation, boot, appSettings, spotlight } = app;
 
   return (
     <>
@@ -18,6 +20,33 @@ export function AppOverlays({ app }: AppOverlaysProps) {
         scrolled={ui.scrolled}
         onMouseEnter={ui.dynamicIslandToast.handleToastMouseEnter}
         onMouseLeave={ui.dynamicIslandToast.handleToastMouseLeave}
+      />
+
+      <UpdateToast
+        visible={boot.updateToastVisible ?? false}
+        version={boot.updateVersion ?? ''}
+        releaseNotes={boot.updateReleaseNotes ?? ''}
+        status={boot.updateStatus ?? 'idle'}
+        progressPercent={boot.updateProgress ?? 0}
+        downloadSpeed={boot.updateSpeed ?? ''}
+        errorMessage={boot.updateError ?? ''}
+        onInstall={boot.triggerInstallUpdate}
+        onDismiss={boot.dismissUpdateToast}
+        language={appSettings.language ?? 'tr'}
+      />
+
+      <SpotlightSearch
+        showSpotlight={spotlight.showSpotlight}
+        setShowSpotlight={spotlight.setShowSpotlight}
+        spotlightScope={spotlight.spotlightScope}
+        setSpotlightScope={spotlight.setSpotlightScope}
+        spotlightSearchInput={spotlight.spotlightSearchInput}
+        setSpotlightSearchInput={spotlight.setSpotlightSearchInput}
+        spotlightSearchResults={spotlight.spotlightSearchResults}
+        isSearchingWorker={spotlight.isSearchingWorker}
+        handlePlayStream={playback.handlePlayStream}
+        handleOpenDetails={catalog.handleOpenDetails}
+        handleOpenSeriesModalDirect={catalog.handleOpenSeriesModalDirect}
       />
 
       <AppModals

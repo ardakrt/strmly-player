@@ -8,7 +8,7 @@ interface FavoritesEmptyStateProps {
 }
 
 export function FavoritesEmptyState({ onGoToLiveTv, onGoToHome }: FavoritesEmptyStateProps) {
-  const { language } = useSettings();
+  const { t, language } = useSettings();
   return (
     <div className="flex min-h-[calc(100vh-180px)] items-center justify-center px-6 animate-fade-in">
       <div className="flex max-w-sm flex-col items-center text-center">
@@ -19,9 +19,7 @@ export function FavoritesEmptyState({ onGoToLiveTv, onGoToHome }: FavoritesEmpty
           {language === 'tr' ? 'Henüz favorin yok' : 'No favorites yet'}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-neutral-400">
-          {language === 'tr'
-            ? 'Kanalların, filmlerin veya dizilerin üzerindeki kalp simgesine tıklayarak favori listenizi oluşturabilirsiniz.'
-            : 'Tap the heart icon on channels, movies, or series to build your favorites list.'}
+          {t('favorites.emptyDescription')}
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <button

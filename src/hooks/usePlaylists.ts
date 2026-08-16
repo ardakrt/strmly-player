@@ -2,35 +2,29 @@ import { startTransition, useEffect, useRef, useState } from 'react';
 import type { SavedPlaylist, PlaylistItem } from '../types';
 import { parseM3UAsync } from '../utils/m3uParser';
 import { preprocessPlaylistItems } from '../utils/searchHelpers';
-import { DEFAULT_AUTO_UPDATE_INTERVAL_HOURS } from '../constants';
+import type { GroupedSeries } from '../utils/seriesGroupers';
+import { getTranslation, type Language } from '../utils/translations';
 import {
-  deletePlaylistFromBrowserStorage,
-  loadPlaylistFromBrowserStorage,
-  savePlaylistToBrowserStorage
-} from '../utils/playlistStorage';
-import { cleanMovieName } from '../utils/tmdb';
-import type { GroupedSeries, SeriesEpisode } from '../utils/seriesGroupers';
-import type { Language } from '../utils/translations';
-
-const AUTO_UPDATE_INTERVALS = [6, 12, 24, 168] as const;
-
-const normalizeAutoUpdateInterval = (value: unknown): 6 | 12 | 24 | 168 => {
-  const numeric = Number(value);
-  return AUTO_UPDATE_INTERVALS.includes(numeric as 6 | 12 | 24 | 168)
-    ? numeric as 6 | 12 | 24 | 168
-    : DEFAULT_AUTO_UPDATE_INTERVAL_HOURS;
-};
-
-const getCacheBustedUrl = (url: string): string => {
-  const cb = Date.now();
-  return url.includes('?') ? `${url}&_cb=${cb}` : `${url}?_cb=${cb}`;
-};
-
-const hasXtreamCredentials = (playlist: SavedPlaylist | undefined): playlist is SavedPlaylist & {
-  xtreamUrl: string;
-  xtreamUser: string;
-  xtreamPass: string;
-} => Boolean(playlist?.xtreamUrl?.trim() && playlist.xtreamUser?.trim() && playlist.xtreamPass?.trim());
+  getCacheBustedUrl,
+  getPlaylistMode,
+  hasXtreamCredentials,
+  normalizeAutoUpdateInterval,
+} from './playlists/playlistHelpers';
+import {
+  deletePlaylistData,
+  loadPlaylistData,
+  savePlaylistData,
+} from './playlists/playlistDataStorage';
+import {
+  fetchXtreamSeriesGroup,
+  getXtreamSeriesId,
+} from './playlists/xtreamSeriesService';
+import {
+  createImportedPlaylist,
+  fetchPlaylistImport,
+  parsePlaylistImport,
+} from './playlists/playlistImportService';
+import { prepareProfilePlaylists } from './playlists/playlistProfileLoader';
 
 export type IptvUpdateMode = 'prompt' | 'silent' | 'manual';
 
@@ -116,30 +110,6 @@ export function usePlaylists({
     activePlaylistIdRef.current = activePlaylistId;
   }, [activePlaylistId]);
 
-  const savePlaylistData = async (id: string, playlistItems: PlaylistItem[]) => {
-    if (window.electronAPI && window.electronAPI.savePlaylistItems) {
-      await window.electronAPI.savePlaylistItems(id, playlistItems);
-    } else {
-      await savePlaylistToBrowserStorage(id, playlistItems);
-    }
-  };
-
-  const loadPlaylistData = async (id: string): Promise<PlaylistItem[]> => {
-    if (window.electronAPI && window.electronAPI.loadPlaylistItems) {
-      return await window.electronAPI.loadPlaylistItems(id);
-    } else {
-      return loadPlaylistFromBrowserStorage(id);
-    }
-  };
-
-  const deletePlaylistData = async (id: string) => {
-    if (window.electronAPI && window.electronAPI.deletePlaylistItems) {
-      await window.electronAPI.deletePlaylistItems(id);
-    } else {
-      await deletePlaylistFromBrowserStorage(id);
-    }
-  };
-
   const clearAutoUpdateTimer = () => {
     if (autoUpdateTimerRef.current !== null) {
       window.clearTimeout(autoUpdateTimerRef.current);
@@ -153,9 +123,9 @@ export function usePlaylists({
     delayOverrideMs?: number,
   ) => {
     clearAutoUpdateTimer();
-    if (iptvUpdateModeRef.current === 'manual') return;
+    if (iptvUpdateModeRef.current === 'manual' && delayOverrideMs === undefined) return;
 
-    const mode = playlist.playlistMode || (playlist.xtreamUrl ? 'xtream' : (playlist.url ? 'm3u' : undefined));
+    const mode = getPlaylistMode(playlist);
     if (!mode) return;
 
     const intervalHours = normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours);
@@ -165,7 +135,7 @@ export function usePlaylists({
     // Boot deferral: Wait at least 30 seconds after app startup before checking background updates
     const BOOT_DEFERRAL_MS = 30000;
     const delayMs = delayOverrideMs !== undefined
-      ? Math.max(BOOT_DEFERRAL_MS, delayOverrideMs)
+      ? Math.max(0, delayOverrideMs)
       : Math.max(BOOT_DEFERRAL_MS, dueAt - Date.now());
 
     autoUpdateTimerRef.current = window.setTimeout(() => {
@@ -174,12 +144,12 @@ export function usePlaylists({
         scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
         return;
       }
-      autoUpdatePlaylist({ ...playlist, autoUpdateIntervalHours: intervalHours }, currentActiveId);
+      autoUpdatePlaylist({ ...playlist, autoUpdateIntervalHours: intervalHours }, currentActiveId, false, delayOverrideMs !== undefined);
     }, delayMs);
   };
 
-  const autoUpdatePlaylist = async (playlist: SavedPlaylist, currentActiveId: string, isManual = false) => {
-    const mode = playlist.playlistMode || (playlist.xtreamUrl ? 'xtream' : (playlist.url ? 'm3u' : undefined));
+  const autoUpdatePlaylist = async (playlist: SavedPlaylist, currentActiveId: string, isManual = false, isRecovery = false) => {
+    const mode = getPlaylistMode(playlist);
     const url = playlist.url;
 
     if (!mode || (mode === 'm3u' && !url)) {
@@ -192,14 +162,12 @@ export function usePlaylists({
     }
     if (mode === 'xtream' && !hasXtreamCredentials(playlist)) {
       if (isManual) {
-        showToast(language === 'tr'
-          ? 'Kayıtlı Xtream bağlantı bilgileri okunamadı.'
-          : 'The saved Xtream connection details could not be read.');
+        showToast(getTranslation('feedback.playlist.credentialsMissing', language));
       }
       return;
     }
 
-    if (!isManual && iptvUpdateModeRef.current === 'manual') return;
+    if (!isManual && !isRecovery && iptvUpdateModeRef.current === 'manual') return;
     if (!isManual && isPlayingRef.current) {
       scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
       return;
@@ -316,9 +284,7 @@ export function usePlaylists({
         scheduleAutoUpdate(playlist, currentActiveId, 5 * 60 * 1000);
       }
       if (isManual) {
-        showToast(language === 'tr'
-          ? `Güncelleme başarısız: ${err.message}`
-          : `Update failed: ${err.message}`);
+        showToast(getTranslation('feedback.playlist.refreshFailed', language));
       }
     } finally {
       updateInFlightRef.current.delete(playlist.id);
@@ -328,69 +294,19 @@ export function usePlaylists({
     }
   };
 
+  const activeProfileIdRef = useRef<string | null>(null);
+
   const load = async (profileId: string) => {
+    activeProfileIdRef.current = profileId;
     const savedPlaylists = await loadAppSetting('cinema_playlists', true, profileId);
     let nextPlaylists: SavedPlaylist[] = [];
-    let restoredCredentials = false;
     let nextActivePlaylistId = '';
     let nextItems: PlaylistItem[] = [];
 
     if (savedPlaylists && Array.isArray(savedPlaylists)) {
-      nextPlaylists = savedPlaylists.map((playlist: SavedPlaylist) => {
-        let mode = playlist.playlistMode;
-        if (!mode) {
-          if (playlist.xtreamUrl) {
-            mode = 'xtream';
-          } else if (playlist.url) {
-            mode = 'm3u';
-          }
-        }
-        return {
-          ...playlist,
-          playlistMode: mode,
-          autoUpdateIntervalHours: normalizeAutoUpdateInterval(playlist.autoUpdateIntervalHours)
-        };
-      });
-
-      const browserStorageKey = `profile_${profileId}_cinema_playlists`;
-      try {
-        const browserPlaylists = JSON.parse(localStorage.getItem(browserStorageKey) || '[]') as SavedPlaylist[];
-        if (Array.isArray(browserPlaylists)) {
-          const browserById = new Map(browserPlaylists.map((playlist) => [playlist.id, playlist]));
-          nextPlaylists = nextPlaylists.map((playlist) => {
-            if (playlist.playlistMode !== 'xtream' || hasXtreamCredentials(playlist)) return playlist;
-            const localPlaylist = browserById.get(playlist.id);
-            if (!hasXtreamCredentials(localPlaylist)) return playlist;
-            restoredCredentials = true;
-            return {
-              ...playlist,
-              xtreamUrl: localPlaylist.xtreamUrl.trim(),
-              xtreamUser: localPlaylist.xtreamUser.trim(),
-              xtreamPass: localPlaylist.xtreamPass.trim()
-            };
-          });
-        }
-      } catch {
-        // A malformed browser fallback must not prevent the durable playlist from loading.
-      }
-
-      if (window.electronAPI?.recoverPlaylistCredentials) {
-        nextPlaylists = await Promise.all(nextPlaylists.map(async (playlist) => {
-          if (playlist.playlistMode !== 'xtream' || hasXtreamCredentials(playlist)) return playlist;
-          try {
-            const result = await window.electronAPI!.recoverPlaylistCredentials!(profileId, playlist.id);
-            if (!result.success || !hasXtreamCredentials(result.playlist)) return playlist;
-            restoredCredentials = true;
-            return result.playlist;
-          } catch {
-            // Renderer hot reloads can temporarily outlive an older Electron main process.
-            // Credential recovery is optional and must never block profile loading.
-            return playlist;
-          }
-        }));
-      }
-
-      if (restoredCredentials) {
+      const prepared = await prepareProfilePlaylists(savedPlaylists, profileId);
+      nextPlaylists = prepared.playlists;
+      if (prepared.restoredCredentials) {
         await saveAppSetting('cinema_playlists', nextPlaylists, profileId);
       }
       if (nextPlaylists.length > 0) {
@@ -409,11 +325,11 @@ export function usePlaylists({
           const intervalHours = normalizeAutoUpdateInterval(activePlaylist.autoUpdateIntervalHours);
           const lastUpdatedAt = Number(activePlaylist.lastAutoUpdatedAt || 0);
 
-          if (!lastUpdatedAt) {
+          if (!lastUpdatedAt || nextItems.length === 0) {
             const now = Date.now();
             nextPlaylists = nextPlaylists.map(p => p.id === activeId ? { ...p, lastAutoUpdatedAt: now } : p);
             await saveAppSetting('cinema_playlists', nextPlaylists, profileId);
-            scheduleAutoUpdate({ ...activePlaylist, autoUpdateIntervalHours: intervalHours, lastAutoUpdatedAt: now }, activeId);
+            scheduleAutoUpdate({ ...activePlaylist, autoUpdateIntervalHours: intervalHours, lastAutoUpdatedAt: now }, activeId, 1000);
           } else {
             scheduleAutoUpdate({ ...activePlaylist, autoUpdateIntervalHours: intervalHours }, activeId);
           }
@@ -421,8 +337,11 @@ export function usePlaylists({
       }
     }
 
+    if (activeProfileIdRef.current !== profileId) return;
+
     setPlaylists(nextPlaylists);
     setActivePlaylistId(nextActivePlaylistId);
+    console.log('PLAYLIST_ITEMS_LOADED:', nextItems.length);
     setItems(nextItems);
   };
 
@@ -433,6 +352,23 @@ export function usePlaylists({
     setItems([]);
   };
 
+  const activateImportedPlaylist = async (
+    playlist: SavedPlaylist,
+    playlistItems: PlaylistItem[],
+    scheduleUpdates: boolean,
+  ) => {
+    await savePlaylistData(playlist.id, playlistItems);
+    const updated = [...playlistsRef.current, playlist];
+    playlistsRef.current = updated;
+    setPlaylists(updated);
+    await saveAppSetting('cinema_playlists', updated);
+    setActivePlaylistId(playlist.id);
+    await saveAppSetting('cinema_active_playlist', playlist.id);
+    setItems(playlistItems);
+    if (scheduleUpdates) scheduleAutoUpdate(playlist, playlist.id);
+    setShowAddPlaylistForm(false);
+  };
+
   const handlePlaylistLoadFromUrl = async () => {
     if (!m3uUrl.trim() || !playlistFormName.trim()) return;
     setIsParsing(true);
@@ -440,53 +376,21 @@ export function usePlaylists({
       ? "M3U Listesi indiriliyor ve çözümleniyor..."
       : "Downloading and parsing M3U list...");
     try {
-      const res = await fetch(getCacheBustedUrl(m3uUrl), {
-        cache: 'no-store',
-        headers: {
-          'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
-        }
-      });
-      if (!res.ok) throw new Error(language === 'tr' ? "HTTP Hatası: " + res.status : "HTTP Error: " + res.status);
-      const data = await res.arrayBuffer();
-      const parsedPlaylist = await parseM3UAsync(data);
-      const parsedItems = parsedPlaylist.items;
-
-      if (parsedItems.length === 0) throw new Error(language === 'tr' ? "Çözümlenebilir kanal bulunamadı!" : "No playable channels found!");
-
-      const distinctGroups = parsedPlaylist.groups;
-
-      const newList: SavedPlaylist = {
-        id: Date.now().toString(),
+      const parsed = await fetchPlaylistImport(m3uUrl, language);
+      const newList = createImportedPlaylist({
         name: playlistFormName,
-        channelCount: parsedItems.length,
-        groupCount: distinctGroups.length,
-        groups: distinctGroups,
-        playlistMode: 'm3u',
+        parsed,
+        mode: 'm3u',
         url: m3uUrl,
-        autoUpdateIntervalHours: DEFAULT_AUTO_UPDATE_INTERVAL_HOURS,
-        lastAutoUpdatedAt: Date.now(),
-        contentRevision: parsedPlaylist.revision,
-      };
-
-      await savePlaylistData(newList.id, parsedItems);
-
-      const updated = [...playlists, newList];
-      setPlaylists(updated);
-      await saveAppSetting('cinema_playlists', updated);
-
-      setActivePlaylistId(newList.id);
-      await saveAppSetting('cinema_active_playlist', newList.id);
-      setItems(parsedItems);
-      scheduleAutoUpdate(newList, newList.id);
+      });
+      await activateImportedPlaylist(newList, parsed.items, true);
 
       setM3uUrl('');
       setPlaylistFormName('');
-      setShowAddPlaylistForm(false);
-      showToast(language === 'tr'
-        ? `${parsedItems.length} kanal başarıyla yüklendi!`
-        : `${parsedItems.length} channels loaded successfully!`);
+      showToast(getTranslation('feedback.playlist.loaded', language, { count: parsed.items.length }));
     } catch (err: any) {
-      showToast(language === 'tr' ? "Hata: " + err.message : "Error: " + err.message);
+      console.error('Failed to load M3U playlist:', err);
+      showToast(getTranslation('feedback.playlist.loadFailed', language));
     } finally {
       setIsParsing(false);
     }
@@ -507,57 +411,27 @@ export function usePlaylists({
       ? "Xtream API'ye bağlanılıyor, listeler çekiliyor..."
       : "Connecting to Xtream API, fetching lists...");
     try {
-      const res = await fetch(getCacheBustedUrl(finalUrl), {
-        cache: 'no-store',
-        headers: {
-          'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
-        }
-      });
-      if (!res.ok) throw new Error(language === 'tr' ? "HTTP Hatası: " + res.status : "HTTP Error: " + res.status);
-      const data = await res.arrayBuffer();
-      const parsedPlaylist = await parseM3UAsync(data);
-      const parsedItems = parsedPlaylist.items;
-      if (parsedItems.length === 0) throw new Error(language === 'tr'
-        ? "Çözümlenebilir kanal veya VOD bulunamadı! Bilgilerinizi kontrol edin."
-        : "No playable channels or VOD found! Please check your credentials.");
-
-      const distinctGroups = parsedPlaylist.groups;
-      const newList: SavedPlaylist = {
-        id: Date.now().toString(),
+      const parsed = await fetchPlaylistImport(finalUrl, language);
+      const newList = createImportedPlaylist({
         name: playlistFormName,
-        channelCount: parsedItems.length,
-        groupCount: distinctGroups.length,
-        groups: distinctGroups,
-        playlistMode: 'xtream',
-        xtreamUrl: cleanUrl,
-        xtreamUser: xtreamUser.trim(),
-        xtreamPass: xtreamPass.trim(),
-        autoUpdateIntervalHours: DEFAULT_AUTO_UPDATE_INTERVAL_HOURS,
-        lastAutoUpdatedAt: Date.now(),
-        contentRevision: parsedPlaylist.revision,
-      };
-
-      await savePlaylistData(newList.id, parsedItems);
-
-      const updated = [...playlists, newList];
-      setPlaylists(updated);
-      await saveAppSetting('cinema_playlists', updated);
-
-      setActivePlaylistId(newList.id);
-      await saveAppSetting('cinema_active_playlist', newList.id);
-      setItems(parsedItems);
-      scheduleAutoUpdate(newList, newList.id);
+        parsed,
+        mode: 'xtream',
+        xtream: {
+          url: cleanUrl,
+          user: xtreamUser.trim(),
+          pass: xtreamPass.trim(),
+        },
+      });
+      await activateImportedPlaylist(newList, parsed.items, true);
 
       setXtreamUrl('');
       setXtreamUser('');
       setXtreamPass('');
       setPlaylistFormName('');
-      setShowAddPlaylistForm(false);
-      showToast(language === 'tr'
-        ? `Xtream Bağlantısı Başarılı! ${parsedItems.length} içerik yüklendi.`
-        : `Xtream connection successful! ${parsedItems.length} items loaded.`);
+      showToast(getTranslation('feedback.playlist.xtreamConnected', language, { count: parsed.items.length }));
     } catch (err) {
-      showToast(language === 'tr' ? "Hata: " + (err instanceof Error ? err.message : err) : "Error: " + (err instanceof Error ? err.message : err));
+      console.error('Failed to connect to Xtream:', err);
+      showToast(getTranslation('feedback.playlist.xtreamFailed', language));
     } finally {
       setIsParsing(false);
     }
@@ -570,40 +444,16 @@ export function usePlaylists({
     setIsParsing(true);
     showToast(language === 'tr' ? "Yerel M3U dosyası yükleniyor..." : "Loading local M3U file...");
     try {
-        const data = await file.arrayBuffer();
-        const parsedPlaylist = await parseM3UAsync(data);
-        const parsedItems = parsedPlaylist.items;
-        if (parsedItems.length === 0) throw new Error(language === 'tr' ? "M3U dosyası geçersiz veya boş!" : "M3U file is invalid or empty!");
-
-        const distinctGroups = parsedPlaylist.groups;
-
-        const newList: SavedPlaylist = {
-          id: Date.now().toString(),
-          name: file.name.replace(".m3u", ""),
-          channelCount: parsedItems.length,
-          groupCount: distinctGroups.length,
-          groups: distinctGroups,
-          autoUpdateIntervalHours: DEFAULT_AUTO_UPDATE_INTERVAL_HOURS,
-          lastAutoUpdatedAt: Date.now(),
-          contentRevision: parsedPlaylist.revision,
-        };
-
-        await savePlaylistData(newList.id, parsedItems);
-
-        const updated = [...playlists, newList];
-        setPlaylists(updated);
-        await saveAppSetting('cinema_playlists', updated);
-
-        setActivePlaylistId(newList.id);
-        await saveAppSetting('cinema_active_playlist', newList.id);
-        setItems(parsedItems);
-
-        setShowAddPlaylistForm(false);
-        showToast(language === 'tr'
-          ? `${parsedItems.length} kanal yerel dosyadan yüklendi!`
-          : `${parsedItems.length} channels loaded from local file!`);
+        const parsed = await parsePlaylistImport(await file.arrayBuffer(), language);
+        const newList = createImportedPlaylist({
+          name: file.name.replace(/\.m3u$/i, ""),
+          parsed,
+        });
+        await activateImportedPlaylist(newList, parsed.items, false);
+        showToast(getTranslation('feedback.playlist.loaded', language, { count: parsed.items.length }));
       } catch (err: any) {
-        showToast(language === 'tr' ? "Hata: " + err.message : "Error: " + err.message);
+        console.error('Failed to load local M3U file:', err);
+        showToast(getTranslation('feedback.playlist.localFileFailed', language));
       } finally {
         setIsParsing(false);
       }
@@ -672,8 +522,9 @@ export function usePlaylists({
         } else {
           scheduleAutoUpdate({ ...found, autoUpdateIntervalHours: intervalHours }, id);
         }
-      } catch {
-        showToast(language === 'tr' ? "Liste yüklenirken hata oluştu." : "An error occurred while loading the playlist.");
+      } catch (error) {
+        console.error('Failed to activate playlist:', error);
+        showToast(getTranslation('feedback.playlist.loadFailed', language));
       } finally {
         setIsParsing(false);
       }
@@ -695,115 +546,17 @@ export function usePlaylists({
     }
   };
 
-  interface XtreamSeriesEpisode {
-    id?: string | number;
-    episode_num?: string | number;
-    title?: string;
-    container_extension?: string;
-    info?: {
-      movie_image?: string;
-      duration_secs?: string | number;
-    };
-  }
-
-  interface XtreamSeriesInfoResponse {
-    info?: {
-      name?: string;
-      cover?: string;
-      movie_image?: string;
-    };
-    episodes?: Record<string, XtreamSeriesEpisode[]>;
-  }
-
-  const getXtreamSeriesId = (item: PlaylistItem | null) => {
-    if (!item) return null;
-    const match = item.id.match(/^xt-series-(\d+)$/);
-    return match ? match[1] : null;
-  };
-
   const buildXtreamSeriesGroup = async (sourceItem: PlaylistItem | null, fallbackSeries?: GroupedSeries): Promise<GroupedSeries | null> => {
-    const seriesId = getXtreamSeriesId(sourceItem);
     const activePlaylist = playlists.find(playlist => playlist.id === activePlaylistId);
-    if (!sourceItem || !seriesId || !activePlaylist?.xtreamUrl || !activePlaylist.xtreamUser || !activePlaylist.xtreamPass) {
-      return null;
-    }
-
-    const baseUrl = activePlaylist.xtreamUrl.replace(/\/$/, '');
-    const username = encodeURIComponent(activePlaylist.xtreamUser);
-    const password = encodeURIComponent(activePlaylist.xtreamPass);
-    const apiUrl = `${baseUrl}/player_api.php?username=${username}&password=${password}&action=get_series_info&series_id=${encodeURIComponent(seriesId)}`;
-
     try {
-      const response = await fetch(apiUrl, {
-        cache: 'no-store',
-        headers: {
-          'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20'
-        }
+      return await fetchXtreamSeriesGroup({
+        sourceItem,
+        fallbackSeries,
+        activePlaylist,
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const data = await response.json() as XtreamSeriesInfoResponse;
-      if (!data.episodes || typeof data.episodes !== 'object') {
-        return null;
-      }
-
-      const seasonsMap: Record<number, SeriesEpisode[]> = {};
-      let episodesCount = 0;
-      const seriesTitle = cleanMovieName(data.info?.name || fallbackSeries?.name || sourceItem.name);
-      const logo = data.info?.cover || data.info?.movie_image || fallbackSeries?.logo || sourceItem.logo || '';
-
-      Object.entries(data.episodes).forEach(([seasonKey, seasonEpisodes]) => {
-        const seasonNumber = Number(seasonKey) || 1;
-        if (!Array.isArray(seasonEpisodes)) return;
-        if (!seasonsMap[seasonNumber]) seasonsMap[seasonNumber] = [];
-
-        seasonEpisodes.forEach((episode, index) => {
-          const episodeId = episode.id !== undefined ? String(episode.id) : '';
-          if (!episodeId) return;
-          const episodeNumber = Number(episode.episode_num) || index + 1;
-          const extension = episode.container_extension || 'mp4';
-          const episodeTitle = episode.title?.trim();
-          const streamUrl = `${baseUrl}/series/${username}/${password}/${encodeURIComponent(episodeId)}.${extension}`;
-          const item: PlaylistItem = {
-            id: `xt-episode-${seriesId}-${episodeId}`,
-            name: episodeTitle
-              ? `${seriesTitle} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')} - ${episodeTitle}`
-              : `${seriesTitle} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`,
-            logo: episode.info?.movie_image || logo,
-            group: sourceItem.group || fallbackSeries?.group || 'Genel',
-            url: streamUrl,
-            type: 'series',
-            xtreamSeriesId: seriesId,
-            xtreamEpisodeId: episodeId
-          };
-
-          seasonsMap[seasonNumber].push({
-            episodeNumber,
-            seasonNumber,
-            item
-          });
-          episodesCount++;
-        });
-      });
-
-      Object.values(seasonsMap).forEach(episodes => {
-        episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
-      });
-
-      if (episodesCount === 0) return null;
-
-      return {
-        id: fallbackSeries?.id || `series-${sourceItem.id}`,
-        name: seriesTitle,
-        logo,
-        group: sourceItem.group || fallbackSeries?.group || 'Genel',
-        type: 'series',
-        seasons: seasonsMap,
-        episodesCount
-      };
     } catch (error) {
       console.error('Failed to fetch Xtream series info:', error);
-      showToast(language === 'tr' ? 'Dizi bölümleri alınamadı.' : 'Could not load series episodes.');
+      showToast(getTranslation('feedback.playlist.seriesLoadFailed', language));
       return null;
     }
   };

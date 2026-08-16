@@ -2,19 +2,9 @@ import { useEffect, useState } from 'react';
 import { Play } from 'lucide-react';
 import { LikeBurstButton } from './LikeBurstButton';
 import { ImageWithFallback } from './ImageWithFallback';
-import type { PlaylistItem } from '../utils/m3uParser';
+import type { PlaylistItem, TmdbData } from '../types';
 import { getTmdbApiKey, resolveTmdbImageSrc, tmdbCache, getTmdbLanguage } from '../utils/tmdb';
 import { useSettings } from '../context/SettingsContext';
-
-interface TmdbData {
-  id?: number;
-  match: string;
-  rating: string;
-  year: string;
-  desc: string;
-  poster?: string;
-  backdrop?: string;
-}
 
 interface ChannelModalProps {
   channel: PlaylistItem;
@@ -63,9 +53,14 @@ export const ChannelModal = ({
         const apiKey = getTmdbApiKey();
         const creditsPath = `/3/movie/${tmdbData.id}/credits?api_key=${apiKey}&language=${getTmdbLanguage()}`;
         
-        let rawCast: any[] = [];
+        interface TmdbCastMember {
+          name: string;
+          character?: string;
+          profile_path?: string | null;
+        }
+        let rawCast: TmdbCastMember[] = [];
         if (window.electronAPI && window.electronAPI.fetchTmdb) {
-          const res = await window.electronAPI.fetchTmdb(creditsPath) as any;
+          const res = await window.electronAPI.fetchTmdb(creditsPath) as { cast?: TmdbCastMember[] };
           if (res && Array.isArray(res.cast)) rawCast = res.cast;
         } else {
           const res = await fetch(`https://api.themoviedb.org${creditsPath}`);
@@ -81,7 +76,7 @@ export const ChannelModal = ({
             const avatarUrl = await resolveTmdbImageSrc(item.profile_path, 'w185');
             return {
               name: item.name,
-              character: item.character,
+              character: item.character || '',
               avatarUrl: avatarUrl || ''
             };
           })

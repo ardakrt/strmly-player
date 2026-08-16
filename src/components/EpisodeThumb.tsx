@@ -57,7 +57,8 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
           const finalUrl = url || '';
           episodeStillCache[cacheKey] = finalUrl;
 
-          if (finalUrl && !finalUrl.startsWith('app-file://')) {
+          // Persist app-file:// stills too so they survive app restarts.
+          if (finalUrl) {
             tmdbCache.set(`resolved-still-${cacheKey}`, finalUrl).catch(() => {});
           }
 
@@ -107,7 +108,7 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
           const finalUrl = url || '';
           episodeStillCache[cacheKey] = finalUrl;
 
-          if (finalUrl && !finalUrl.startsWith('app-file://')) {
+          if (finalUrl) {
             tmdbCache.set(`resolved-still-${cacheKey}`, finalUrl).catch(() => {});
           }
 
@@ -144,6 +145,8 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
         <img
           src={stillSrc}
           alt=""
+          loading="lazy"
+          decoding="async"
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
             isStillReady ? 'opacity-100' : 'opacity-0'
           }`}
@@ -181,6 +184,8 @@ export const EpisodeThumb = memo(({ tmdbShowId, seasonNumber, episodeNumber, sti
               <img
                 src={fallbackPoster}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="absolute inset-0 h-full w-full object-cover opacity-25 filter blur-[3px] scale-110"
                 draggable={false}
               />

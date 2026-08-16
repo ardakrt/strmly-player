@@ -63,40 +63,40 @@ export function translateReason(reason: string, language: 'tr' | 'en'): string {
       en: 'First frame delayed'
     },
     'Sunucu zamaninda yanit vermedi': {
-      tr: 'Sunucu zamanında yanıt vermedi',
-      en: 'Server did not respond in time'
+      tr: 'Sunucu yanıt vermedi. Birkaç saniye sonra tekrar deneyin.',
+      en: 'The server did not respond. Try again in a few seconds.'
     },
     'FFmpeg uyumluluk modu kullanilamiyor': {
-      tr: 'FFmpeg uyumluluk modu kullanılamıyor',
-      en: 'FFmpeg compatibility mode unavailable'
+      tr: 'Bu yayın uyumluluk modunda açılamadı. Başka bir oynatıcı deneyin.',
+      en: 'This stream could not open in compatibility mode. Try another player.'
     },
     'Uyumluluk modu hata verdi': {
-      tr: 'Uyumluluk modu hata verdi',
-      en: 'Compatibility mode failed'
+      tr: 'Uyumluluk modu yayını açamadı. Başka bir oynatıcı deneyin.',
+      en: 'Compatibility mode could not open the stream. Try another player.'
     },
     'Video cozulurken hata olustu': {
-      tr: 'Video çözülürken hata oluştu',
-      en: 'Error decoding video'
+      tr: 'Video oynatılamadı. Başka bir kalite veya oynatıcı deneyin.',
+      en: 'The video could not play. Try another quality or player.'
     },
     'Oynatma hatasi': {
-      tr: 'Oynatma hatası',
-      en: 'Playback error'
+      tr: 'Yayın oynatılamadı. Tekrar deneyin.',
+      en: 'The stream could not play. Try again.'
     },
     'Video bu noktadan devam edemedi': {
       tr: 'Video bu noktadan devam edemedi',
       en: 'Video could not continue from this point'
     },
     'HLS ag hatasi': {
-      tr: 'HLS ağ hatası',
-      en: 'HLS network error'
+      tr: 'Yayın bağlantısı kesildi. Bağlantınızı kontrol edip tekrar deneyin.',
+      en: 'The stream connection was interrupted. Check your connection and try again.'
     },
     'HLS medya hatasi': {
-      tr: 'HLS medya hatası',
-      en: 'HLS media error'
+      tr: 'Yayın verisi oynatılamadı. Tekrar deneyin.',
+      en: 'The stream data could not play. Try again.'
     },
     'HLS oynatma hatasi': {
-      tr: 'HLS oynatma hatası',
-      en: 'HLS playback error'
+      tr: 'Yayın oynatılamadı. Tekrar deneyin.',
+      en: 'The stream could not play. Try again.'
     },
     'Video ileri sariliyor...': {
       tr: 'Video ileri sarılıyor...',
@@ -107,8 +107,8 @@ export function translateReason(reason: string, language: 'tr' | 'en'): string {
       en: 'Could not seek forward. The source might not support seeking from this point.'
     },
     'Video ileri sarilirken hata olustu.': {
-      tr: 'Video ileri sarılırken hata oluştu.',
-      en: 'An error occurred while seeking forward.'
+      tr: 'Video ileri sarılamadı. Birkaç saniye geriden tekrar deneyin.',
+      en: 'The video could not seek forward. Try again from a few seconds earlier.'
     },
     'Yayin akisi kurtariliyor...': {
       tr: 'Yayın akışı kurtarılıyor...',
@@ -218,4 +218,29 @@ export function getPreferredAudioTrackIndex(tracks: { name?: string; lang?: stri
     track.lang?.toLowerCase() === 'tr'
   );
   return turkish >= 0 ? turkish : 0;
+}
+
+export function formatPlayerTime(seconds: number): string {
+  if (!Number.isFinite(seconds)) return '00:00';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+  const remainingSeconds = Math.floor(seconds % 60).toString().padStart(2, '0');
+  return hours > 0
+    ? `${hours}:${minutes}:${remainingSeconds}`
+    : `${minutes}:${remainingSeconds}`;
+}
+
+const BROWSER_SAFE_AUDIO_CODECS = new Set(['aac', 'mp3', 'opus', 'vorbis', 'mp4a']);
+
+export function isUnsupportedAudioCodec(codec: string | null | undefined): boolean {
+  const normalized = (codec || '').toLowerCase().trim();
+  if (!normalized) return false;
+  return [
+    'ac3', 'ac-3', 'eac3', 'e-ac-3', 'ddp', 'dts', 'dca', 'truehd',
+    'mlp', 'bluray', 'pcm', 'wmav', 'aac_latm',
+  ].some((value) => normalized.includes(value)) || normalized === 'mp2';
+}
+
+export function isBrowserSafeAudioCodec(codec: string | null | undefined): boolean {
+  return BROWSER_SAFE_AUDIO_CODECS.has((codec || '').toLowerCase().trim());
 }

@@ -3,9 +3,21 @@ const path = require("path");
 const { buildSecureHttpsOptions, redactSensitiveUrl } = require("./security");
 // DNS over HTTPS (DoH) bypass resolver for TMDB API and image CDN
 const resolvedHostIps = {};
+const resolvingHostIps = new Map();
 
 async function resolveHostIp(hostname) {
   if (resolvedHostIps[hostname]) return resolvedHostIps[hostname];
+  const pending = resolvingHostIps.get(hostname);
+  if (pending) return pending;
+
+  const resolution = resolveHostIpFresh(hostname).finally(() => {
+    resolvingHostIps.delete(hostname);
+  });
+  resolvingHostIps.set(hostname, resolution);
+  return resolution;
+}
+
+async function resolveHostIpFresh(hostname) {
 
   const providers = [
     `https://dns.google/resolve?name=${hostname}&type=A`,
@@ -54,11 +66,48 @@ const apiAgent = new https.Agent({
 });
 const imageAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 64,
+  maxSockets: 8,
   keepAliveMsecs: 60000,
 });
 
+const MAX_TMDB_IMAGE_REQUESTS = 8;
+const tmdbImageRequests = new Map();
+const tmdbImageQueue = [];
+let activeTmdbImageRequests = 0;
+
+function queueTmdbImageRequest(requestPath, task) {
+  const existing = tmdbImageRequests.get(requestPath);
+  if (existing) return existing;
+
+  const request = new Promise((resolve, reject) => {
+    const run = () => {
+      activeTmdbImageRequests += 1;
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          activeTmdbImageRequests -= 1;
+          tmdbImageRequests.delete(requestPath);
+          tmdbImageQueue.shift()?.();
+        });
+    };
+    if (activeTmdbImageRequests < MAX_TMDB_IMAGE_REQUESTS) run();
+    else tmdbImageQueue.push(run);
+  });
+
+  tmdbImageRequests.set(requestPath, request);
+  return request;
+}
+
 async function fetchHttpsFromHost(hostname, requestPath, asBuffer = false) {
+  if (hostname === "image.tmdb.org" && asBuffer) {
+    return queueTmdbImageRequest(requestPath, () => (
+      fetchHttpsFromHostDirect(hostname, requestPath, asBuffer)
+    ));
+  }
+  return fetchHttpsFromHostDirect(hostname, requestPath, asBuffer);
+}
+
+async function fetchHttpsFromHostDirect(hostname, requestPath, asBuffer = false) {
   const ip = await resolveHostIp(hostname);
 
   return new Promise((resolve, reject) => {
@@ -95,6 +144,9 @@ async function fetchHttpsFromHost(hostname, requestPath, asBuffer = false) {
       });
     });
 
+    req.setTimeout(10000, () => {
+      req.destroy(new Error(`TMDB ${asBuffer ? "image" : "API"} request timed out`));
+    });
     req.on("error", (e) => reject(e));
     req.end();
   });
@@ -106,7 +158,9 @@ async function fetchFromTmdb(apiPath) {
 
 const tmdbMainRequests = new Map();
 const tmdbMainQueue = [];
-const MAX_TMDB_MAIN_REQUESTS = 8;
+// Profile preparation is network-bound. Keep enough requests in flight to
+// fill the keep-alive agent without opening an unbounded TMDB flood.
+const MAX_TMDB_MAIN_REQUESTS = 16;
 let activeTmdbMainRequests = 0;
 
 function queueTmdbMainRequest(task) {
@@ -126,7 +180,7 @@ function queueTmdbMainRequest(task) {
   });
 }
 
-function registerTmdbHandlers({ ipcMain, getTmdbCacheDir, appFileUrlFromPath }) {
+function registerTmdbHandlers({ ipcMain, getTmdbCacheDir, appFileUrlFromPath, offline = false }) {
   ipcMain.handle("fetch-tmdb", async (event, { path: apiPath }) => {
     if (
       typeof apiPath !== "string" ||
@@ -135,6 +189,7 @@ function registerTmdbHandlers({ ipcMain, getTmdbCacheDir, appFileUrlFromPath }) 
     ) {
       return { error: "Invalid TMDB path" };
     }
+    if (offline) return { error: "Offline benchmark" };
 
     // Helper function to query the request queue / cache map
     const executeFetch = async (pathToCheck) => {
@@ -197,8 +252,10 @@ function registerTmdbHandlers({ ipcMain, getTmdbCacheDir, appFileUrlFromPath }) 
 
         // If cached on disk, return the app-file:/// URL directly
         if (fs.existsSync(localFilePath)) {
-          return { localUrl: appFileUrlFromPath(localFilePath) };
+          const stats = await fs.promises.stat(localFilePath);
+          return { localUrl: appFileUrlFromPath(localFilePath), bytes: stats.size, cached: true };
         }
+        if (offline) return { error: "Offline benchmark" };
 
         const data = await fetchHttpsFromHost(
           "image.tmdb.org",
@@ -211,6 +268,8 @@ function registerTmdbHandlers({ ipcMain, getTmdbCacheDir, appFileUrlFromPath }) 
 
         return {
           localUrl: appFileUrlFromPath(localFilePath),
+          bytes: data.buffer.length,
+          cached: false,
         };
       } catch (err) {
         console.error("TMDB image fetch error:", err);

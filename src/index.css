@@ -47,7 +47,7 @@
   --accent-hover: #d1d1d6;
   --accent-glow: rgba(255, 255, 255, 0.15);
   
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #161622) 0%, var(--bg-surface, #07070a) 65%, var(--bg-surface, #07070a) 100%);
+  --bg-main: var(--bg-surface, #0a0a0c);
   --bg-surface: #0a0a0c;
   --bg-surface-glass: rgba(10, 10, 12, 0.35);
   --bg-card: rgba(255, 255, 255, 0.03);
@@ -71,118 +71,143 @@
   --shadow-md: 0 12px 50px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.8);
 
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(255, 255, 255, 0.035)) 0%, transparent 70%);
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(255, 255, 255, 0.015)) 0%, transparent 70%);
+  --bg-glow-1: none;
+  --bg-glow-2: none;
+
+  /* Layer z-index tokens */
+  --z-layer-nav: 60;
+  --z-layer-dropdown: 100;
+  --z-layer-player: 2000;
+  --z-layer-spotlight: 2000;
+  --z-layer-modal: 3000;
+  --z-layer-modal-nested: 4000;
+  --z-layer-wizard: 4500;
+  --z-layer-dialog: 5000;
+  --z-layer-profile: 6000;
+  --z-layer-context-menu: 7000;
+  --z-layer-toast: 9999;
 }
 
+.z-layer-nav { z-index: var(--z-layer-nav); }
+.z-layer-dropdown { z-index: var(--z-layer-dropdown); }
+.z-layer-player { z-index: var(--z-layer-player); }
+.z-layer-spotlight { z-index: var(--z-layer-spotlight); }
+.z-layer-modal { z-index: var(--z-layer-modal); }
+.z-layer-modal-nested { z-index: var(--z-layer-modal-nested); }
+.z-layer-wizard { z-index: var(--z-layer-wizard); }
+.z-layer-dialog { z-index: var(--z-layer-dialog); }
+.z-layer-profile { z-index: var(--z-layer-profile); }
+.z-layer-context-menu { z-index: var(--z-layer-context-menu); }
+.z-layer-toast { z-index: var(--z-layer-toast); }
+
 .app-wrapper.space-black {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #161622) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #07070a;
   --bg-surface-glass: rgba(7, 7, 10, 0.4);
   --bg-card: rgba(255, 255, 255, 0.025);
   --bg-card-hover: rgba(255, 255, 255, 0.05);
   --bg-modal: rgba(5, 5, 6, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(255, 255, 255, 0.04)) 0%, transparent 70%);
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(255, 255, 255, 0.02)) 0%, transparent 70%);
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.deep-space {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #131545) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #060616;
   --bg-surface-glass: rgba(6, 6, 22, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(5, 5, 18, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(147, 51, 234, 0.12)) 0%, transparent 70%); /* Purple/Violet */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(59, 130, 246, 0.09)) 0%, transparent 70%); /* Blue */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.slate-dark {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #1e293b) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #0b1122;
   --bg-surface-glass: rgba(11, 17, 34, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(10, 15, 30, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(20, 184, 166, 0.1)) 0%, transparent 70%); /* Teal */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(79, 70, 229, 0.09)) 0%, transparent 70%); /* Indigo/Indigo */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.forest-mint {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #064e3b) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #022c22;
   --bg-surface-glass: rgba(2, 44, 34, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(2, 35, 27, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(16, 185, 129, 0.12)) 0%, transparent 70%); /* Mint */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(52, 211, 153, 0.08)) 0%, transparent 70%); /* Emerald */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.sunset-orange {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #451a03) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #140801;
   --bg-surface-glass: rgba(20, 8, 1, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(15, 6, 1, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(249, 115, 22, 0.12)) 0%, transparent 70%); /* Orange */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(239, 68, 68, 0.08)) 0%, transparent 70%); /* Red */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.midnight-purple {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #2e1065) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #0b0321;
   --bg-surface-glass: rgba(11, 3, 33, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(8, 2, 25, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(168, 85, 247, 0.12)) 0%, transparent 70%); /* Violet */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(236, 72, 153, 0.08)) 0%, transparent 70%); /* Pink */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.nordic-frost {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #0f172a) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #0b0f19;
   --bg-surface-glass: rgba(11, 15, 25, 0.45);
   --bg-card: rgba(255, 255, 255, 0.025);
   --bg-card-hover: rgba(255, 255, 255, 0.055);
   --bg-modal: rgba(8, 12, 20, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(56, 189, 248, 0.1)) 0%, transparent 70%); /* Light blue */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(14, 165, 233, 0.08)) 0%, transparent 70%); /* Blue */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.rose-gold {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #2d121c) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #14050b;
   --bg-surface-glass: rgba(20, 5, 11, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(16, 4, 9, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(251, 113, 133, 0.12)) 0%, transparent 70%); /* Rose */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(244, 63, 94, 0.08)) 0%, transparent 70%); /* Pink-Red */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.crimson-tide {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #3f0712) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #140105;
   --bg-surface-glass: rgba(20, 1, 5, 0.45);
   --bg-card: rgba(255, 255, 255, 0.035);
   --bg-card-hover: rgba(255, 255, 255, 0.065);
   --bg-modal: rgba(16, 1, 4, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(225, 29, 72, 0.12)) 0%, transparent 70%); /* Crimson */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(159, 18, 57, 0.08)) 0%, transparent 70%); /* Dark Ruby */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 .app-wrapper.ocean-abyss {
-  --bg-main: radial-gradient(circle at 50% 0%, var(--hero-ambient-bg, #042f2e) 0%, var(--bg-surface) 65%, var(--bg-surface) 100%);
+  --bg-main: var(--bg-surface);
   --bg-surface: #011819;
   --bg-surface-glass: rgba(1, 24, 25, 0.45);
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(1, 20, 21, 0.96);
-  --bg-glow-1: radial-gradient(circle, var(--hero-ambient-color-1, rgba(13, 148, 136, 0.12)) 0%, transparent 70%); /* Teal */
-  --bg-glow-2: radial-gradient(circle, var(--hero-ambient-color-2, rgba(6, 182, 212, 0.08)) 0%, transparent 70%); /* Cyan */
+  --bg-glow-1: none;
+  --bg-glow-2: none;
 }
 
 @keyframes floatGlow1 {
@@ -301,6 +326,30 @@ body {
 }
 .hide-scrollbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
+}
+
+/* Skip rendering/paint of offscreen catalog rows (long series showcase) so the
+   skeleton shimmer animations and card layers only cost work near the viewport. */
+.lazy-row-shell {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
+}
+
+/* Live TV cards keep a local keyboard focus treatment without relying on a
+   shared application-wide focus class. */
+.live-channel-tile:focus-visible {
+  border-color: rgba(255, 255, 255, 0.68) !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.14),
+    0 18px 44px rgba(0, 0, 0, 0.5) !important;
+  transform: translateY(-2px) scale(1.025) !important;
+  z-index: 45 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-channel-tile:focus-visible {
+    transform: none !important;
+  }
 }
 
 .custom-modal-scrollbar {
@@ -500,6 +549,58 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .glass-modal-enter {
   animation: glassFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Spotlight Search Liquid Glass Styling - Matched to Navbar Glass */
+.spotlight-liquid-glass {
+  background: rgba(255, 255, 255, 0.045) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.35) brightness(1.04) !important;
+  backdrop-filter: blur(16px) saturate(1.35) brightness(1.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.02) !important;
+}
+
+.search-hero-panel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 12, 16, 0.65);
+  backdrop-filter: blur(48px) saturate(1.6);
+  -webkit-backdrop-filter: blur(48px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.02);
+}
+
+.search-glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.search-glass-card:hover,
+.search-glass-card.is-focused {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 20px 45px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
+
+.search-glass-card.is-focused {
+  outline: none;
+  ring: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.5),
+    0 20px 50px rgba(0, 0, 0, 0.7);
+}
+
 
 /* Redesigned Series Modal & Episode Cards */
 @keyframes slideInRight {
@@ -725,12 +826,107 @@ input[type="range"]:hover::-webkit-slider-thumb {
   perspective: 1000px;
 }
 
-/* Disable focus ring and hover effects on background items when modal is open to prevent distracting white borders */
-.app-wrapper:has(div[class*="z-[3000]"]) .focusable-item:focus,
-.app-wrapper:has(div[class*="z-[3000]"]) .focusable-item:focus-visible {
-  box-shadow: none !important;
-  border-color: rgba(255, 255, 255, 0.06) !important;
+.app-wrapper:has(div[class*="z-[3000]"]) .group:hover .premium-card {
   transform: none !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+
+.slider-fading-mask {
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    transparent 100%
+  );
+}
+
+.premium-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 20px;
+  overflow: hidden;
+  isolation: isolate;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transform: translateY(0);
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms ease,
+    box-shadow 220ms ease;
+}
+
+.group:hover .premium-card {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.72) !important;
+}
+
+.premium-card-title {
+  color: #f5f5f7;
+  transition: color 0.3s ease;
+}
+
+.group:hover .premium-card-title {
+  color: #ffffff;
+}
+
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.015'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+@keyframes spin-clockwise {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes spin-counterclockwise {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-clockwise 3s linear infinite;
+}
+
+.animate-spin-reverse-slow {
+  animation: spin-counterclockwise 2.5s linear infinite;
+}
+
+@keyframes float-up {
+  0% {
+    transform: translateY(110vh) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.35;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateY(-10vh) scale(1.2);
+    opacity: 0;
+  }
+}
+
+.animate-float-particle {
+  animation: float-up linear infinite;
 }
 
 .app-wrapper:has(div[class*="z-[3000]"]) .group:hover .premium-card {
@@ -740,75 +936,93 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 
-/* Spatial Navigation Focus Styles */
-.focusable-item {
-  outline: none !important;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-.focusable-item:focus,
-.focusable-item:focus-visible {
-  outline: none !important;
-  box-shadow: 0 0 0 2px var(--accent-color, #ffffff), 0 8px 30px rgba(0, 0, 0, 0.6) !important;
-  border-color: var(--accent-color, #ffffff) !important;
-  transform: translateY(-2px) scale(1.02) !important;
-  z-index: 40 !important;
-}
-
-/* Special scaling override for small buttons to avoid layout distortion */
-button.focusable-item:focus,
-button.focusable-item:focus-visible {
-  transform: scale(1.05) !important;
-}
-
-/* Navbar tabs keep a restrained focus state instead of the card-style glow. */
-.navbar-nav-item.focusable-item:focus,
-.navbar-nav-item.focusable-item:focus-visible {
-  border-color: rgba(255, 255, 255, 0.16) !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
-  transform: none !important;
-}
-
-/* Transparent navbar glass keeps the hero artwork and its colors visible. */
-.navbar-liquid-glass {
+/* Aether CSS "liquid glass" navbar. The backdrop layer behind the content
+   runs the SVG #glass-distortion filter (feTurbulence + feDisplacementMap)
+   so artwork scrolling underneath warps like liquid, plus an iOS-style
+   inner glow and top reflection. Tint/blur follow theme + glass setting. */
+/* Frameless window: a visible, full-width handle remains easy to grab even
+   when the window is maximized. Native title-bar controls stay above it. */
+.titlebar-drag-strip {
+  -webkit-app-region: drag;
   background:
-    linear-gradient(110deg,
-      color-mix(in srgb, var(--accent-color, #ffffff) 8%, transparent),
-      rgba(255, 255, 255, 0.055) 36%,
-      rgba(255, 255, 255, 0.025) 68%,
-      color-mix(in srgb, var(--accent-color, #ffffff) 5%, transparent));
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  -webkit-backdrop-filter: blur(22px) saturate(1.8) contrast(1.04);
-  backdrop-filter: blur(22px) saturate(1.8) contrast(1.04);
+    linear-gradient(180deg, rgba(24, 24, 27, 0.96), rgba(12, 12, 15, 0.9));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 14px 42px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 4px 18px rgba(0, 0, 0, 0.28);
+  user-select: none;
+}
+
+.titlebar-drag-strip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 42px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 639px) {
+  .navbar-nav-scroll-cue {
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 24px), transparent 100%);
+  }
+}
+
+/* Barely-frosted glass navbar. Nearly clear so content behind stays visible,
+   just a whisper of blur for separation. No border, no edge glow. */
+.navbar-liquid-glass {
+  position: relative;
+  background: rgba(255, 255, 255, 0.035);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2) brightness(1.02);
+  backdrop-filter: blur(10px) saturate(1.2) brightness(1.02);
+  border: none;
+  box-shadow: none;
   transition:
     max-width 500ms cubic-bezier(0.16, 1, 0.3, 1),
     height 500ms cubic-bezier(0.16, 1, 0.3, 1),
     padding 500ms cubic-bezier(0.16, 1, 0.3, 1),
-    background 500ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 500ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 500ms cubic-bezier(0.16, 1, 0.3, 1),
     backdrop-filter 500ms cubic-bezier(0.16, 1, 0.3, 1),
     -webkit-backdrop-filter 500ms cubic-bezier(0.16, 1, 0.3, 1);
   will-change: max-width, height, background, box-shadow;
 }
 
 .navbar-liquid-glass--scrolled {
-  background:
-    linear-gradient(110deg,
-      color-mix(in srgb, var(--accent-color, #ffffff) 8%, rgba(5, 5, 7, 0.36)),
-      rgba(8, 8, 10, 0.42) 52%,
-      color-mix(in srgb, var(--accent-color, #ffffff) 5%, rgba(5, 5, 7, 0.38)));
-  border-color: rgba(255, 255, 255, 0.13);
-  -webkit-backdrop-filter: blur(24px) saturate(1.9) contrast(1.03);
-  backdrop-filter: blur(24px) saturate(1.9) contrast(1.03);
+  background: rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25) brightness(1.02);
+  backdrop-filter: blur(14px) saturate(1.25) brightness(1.02);
+}
+
+.update-toast-glass {
+  background: linear-gradient(145deg, rgba(18, 18, 20, 0.88), rgba(5, 5, 6, 0.94));
+  -webkit-backdrop-filter: blur(22px) saturate(1.08);
+  backdrop-filter: blur(22px) saturate(1.08);
+  border: 1px solid rgba(255, 255, 255, 0.13);
   box-shadow:
-    0 18px 55px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+    0 22px 64px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: update-toast-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes update-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-toast-glass {
+    animation: none;
+  }
 }
 
 .home-media-type-badge {
@@ -919,6 +1133,25 @@ button.focusable-item:focus-visible {
   box-shadow: 0 4px 16px rgba(255, 255, 255, 0.12);
 }
 
+.season-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.4), 0 2px 4px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.season-range-input::-webkit-slider-thumb:hover,
+.season-range-input::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+  background: #ffffff;
+}
+
+
 .series-ep-row {
   border-radius: 14px;
   transition: background 0.15s ease;
@@ -945,11 +1178,54 @@ button.focusable-item:focus-visible {
 .home-hero-left-scrim {
   background:
     linear-gradient(90deg,
-      rgba(5, 5, 7, 0.96) 0%,
-      rgba(5, 5, 7, 0.82) 24%,
-      rgba(5, 5, 7, 0.42) 48%,
-      rgba(5, 5, 7, 0.08) 72%,
-      transparent 90%);
+      var(--bg-surface) 0%,
+      var(--bg-surface) 32%,
+      color-mix(in srgb, var(--bg-surface) 85%, transparent) 48%,
+      color-mix(in srgb, var(--bg-surface) 35%, transparent) 68%,
+      transparent 100%);
+}
+
+.home-hero-artwork {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0%, transparent 12%, black 40%, black 88%, transparent 100%),
+    linear-gradient(to bottom, black 0%, black 84%, transparent 97%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent 0%, transparent 12%, black 40%, black 88%, transparent 100%),
+    linear-gradient(to bottom, black 0%, black 84%, transparent 97%);
+  mask-composite: intersect;
+}
+
+.home-hero-image-overlay {
+  display: none;
+}
+
+.home-hero-floor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: -40px;
+  pointer-events: none;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-surface) 34%, transparent) 40%,
+    var(--bg-surface) 80%,
+    var(--bg-surface) 100%
+  );
+}
+
+.home-hero-copy {
+  max-width: min(42rem, 38vw);
 }
 
 .home-hero-title {
@@ -1138,14 +1414,11 @@ button.focusable-item:focus-visible {
 .top10-card .home-poster-card:focus-visible {
   z-index: 20;
   outline: none;
-  transform: translate3d(0, -5px, 0) scale(1.02);
+  transform: none;
 }
 
 .top10-card .home-poster-card:focus-visible .home-poster-frame {
-  box-shadow:
-    0 0 0 3px var(--top10-focus-ring),
-    0 0 0 6px color-mix(in srgb, var(--bg-surface) 82%, transparent),
-    0 22px 44px var(--top10-rank-shadow);
+  box-shadow: none;
 }
 
 .top10-card:focus-within .top10-rank-number {
@@ -1353,10 +1626,15 @@ button.focusable-item:focus-visible {
   }
 }
 
-/* Custom Catalog Stage Scrollbar - Ultra-sleek Dark Glass Scrollbar */
+/* Custom Catalog Stage Scrollbar - Ultra-sleek Dark Glass Scrollbar.
+   NOTE: keep standard scrollbar properties (scrollbar-width/scrollbar-color)
+   OUT of the base rule — modern Chromium treats them as authoritative and
+   silently ignores every ::-webkit-scrollbar-* customization below, which
+   paints its own dark track over the content. They only apply in Firefox
+   via the @supports block at the end. */
 .custom-catalog-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  scrollbar-width: auto;
+  scrollbar-color: auto;
 }
 
 .custom-catalog-scrollbar::-webkit-scrollbar {
@@ -1365,9 +1643,23 @@ button.focusable-item:focus-visible {
 }
 
 .custom-catalog-scrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.15);
+  background: transparent;
   border-radius: 9999px;
   margin: 6px 2px;
+}
+
+/* Chromium paints corner squares and button glyphs on the scrollbar corners
+   (overlay arrows on the vertical track). Hide every piece so only the
+   thumb itself remains visible against the page background. */
+.custom-catalog-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.custom-catalog-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  background: transparent;
+  width: 0;
+  height: 0;
 }
 
 .custom-catalog-scrollbar::-webkit-scrollbar-thumb {
@@ -1384,6 +1676,15 @@ button.focusable-item:focus-visible {
 
 .custom-catalog-scrollbar::-webkit-scrollbar-thumb:active {
   background: rgba(255, 255, 255, 0.85);
+}
+
+/* Firefox-only fallback: Chromium resolves the @supports test to false, so
+   the webkit rules above stay in charge there. */
+@supports (-moz-appearance: none) {
+  .custom-catalog-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  }
 }
 
 .home-hero-copy > * {
@@ -1404,23 +1705,88 @@ button.focusable-item:focus-visible {
   );
 }
 
+@media (max-width: 767px) {
+  .home-hero-artwork {
+    top: 0;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: 100%;
+    height: 68%;
+    object-position: center 22%;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .home-hero-image-overlay {
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 68%;
+    bottom: auto;
+    background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+  }
+
+  .home-hero-left-scrim {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--bg-surface) 12%, transparent) 32%,
+      color-mix(in srgb, var(--bg-surface) 84%, transparent) 62%,
+      var(--bg-surface) 88%,
+      var(--bg-surface) 100%
+    );
+  }
+
+  .home-hero-copy {
+    max-width: none;
+  }
+}
+
 .home-hero-copy > :nth-child(1) { animation-delay: 40ms; }
 .home-hero-copy > :nth-child(2) { animation-delay: 80ms; }
 .home-hero-copy > :nth-child(3) { animation-delay: 120ms; }
 .home-hero-copy > :nth-child(4) { animation-delay: 160ms; }
 .home-hero-copy > :nth-child(5) { animation-delay: 200ms; }
 
-@keyframes homeHeroDrift {
-  from { transform: scale(1.015); }
-  to { transform: scale(1.055); }
+@keyframes homeHeroFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.0);
+  }
+}
+
+@keyframes homeHeroFadeOut {
+  0% {
+    opacity: 1;
+    transform: scale(1.0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.home-hero-image-fade {
+  animation: homeHeroFadeIn 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.home-hero-image-drift {
+  animation: homeHeroFadeOut 1.1s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 .home-hero-image {
-  animation: fadeIn 0.4s ease-out forwards, homeHeroDrift 12s ease-out both;
+  animation: homeHeroFadeIn 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-hero-image {
+  .home-hero-image,
+  .home-hero-image-fade,
+  .home-hero-image-drift {
     animation: none;
   }
 
@@ -1428,36 +1794,6 @@ button.focusable-item:focus-visible {
     opacity: 1;
     animation: none;
   }
-
-}
-
-
-/* Special scaling for media grid cards on focus */
-div.focusable-item:focus,
-div.focusable-item:focus-visible {
-  box-shadow: none !important;
-  border-color: transparent !important;
-  transform: none !important;
-  z-index: 40 !important;
-}
-
-div.focusable-item:focus-visible .premium-card {
-  transform: translateY(0) !important;
-  border-color: var(--accent-color, #ffffff) !important;
-  box-shadow: 0 0 0 2px var(--accent-color, #ffffff), 0 12px 28px rgba(0, 0, 0, 0.65) !important;
-}
-
-/* Category selection owns its focus treatment; avoid the generic white pill ring. */
-button.series-category-item:focus,
-button.series-category-item:focus-visible {
-  transform: none !important;
-  border-color: rgba(255, 255, 255, 0.075) !important;
-  box-shadow: none !important;
-}
-
-button.series-category-item.is-active:focus,
-button.series-category-item.is-active:focus-visible {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
 }
 
 /* Dynamic Island Toast Notification */
@@ -1619,18 +1955,18 @@ button.series-category-item.is-active:focus-visible {
 
 /* Premium Netflix/Disney Grade Page Transitions */
 .page-transition-enter {
-  animation: pageEnter 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: transform, opacity;
+  animation: pageEnter 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
 }
 
 @keyframes pageEnter {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.99);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -1755,14 +2091,11 @@ button.series-category-item.is-active:focus-visible {
     rgba(0, 0, 0, 0.22);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 0 3px color-mix(in srgb, var(--accent-color, #fff) 12%, transparent),
     0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 .spotlight-scope {
   display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
   height: 1.85rem;
   padding: 0 0.75rem;
   border-radius: 9999px;
@@ -2021,6 +2354,16 @@ button.series-category-item.is-active:focus-visible {
   inset: 0;
   z-index: -1;
   background: radial-gradient(ellipse 28% 34% at 50% 46%, var(--color-launch-ambient, rgba(255,255,255,0.06)), var(--color-launch-paper, #0b0b0e) 72%);
+}
+
+/* Animated WebGL aurora behind the launch brand. Sits with the ambient
+   layer but later in DOM order so it paints above it, still behind content. */
+.cinema-boot__aurora {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: clip;
+  pointer-events: none;
 }
 
 .cinema-boot__identity {

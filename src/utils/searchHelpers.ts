@@ -32,7 +32,12 @@ export function itemMatchesQuery(item: SearchableMediaItem, query: string, fallb
   return getItemNameLower(item).includes(q) || getItemGroupLower(item, fallbackGroup).includes(q);
 }
 
-export function getItemSearchScore(item: SearchableMediaItem, query: string, fallbackGroup = 'Genel'): number {
+export function getItemSearchScore(
+  item: SearchableMediaItem,
+  query: string,
+  fallbackGroup = 'Genel',
+  itemType?: 'live' | 'movie' | 'series'
+): number {
   const cleanNameLower = getItemCleanNameLower(item);
   return getSearchScore(
     item.name,
@@ -41,7 +46,8 @@ export function getItemSearchScore(item: SearchableMediaItem, query: string, fal
     cleanNameLower,
     getItemNameLower(item),
     getItemGroupLower(item, fallbackGroup),
-    cleanNameLower
+    cleanNameLower,
+    itemType
   );
 }
 
@@ -65,7 +71,8 @@ export function getSearchScore(
   cleanedName?: string,
   nameLower?: string,
   groupLower?: string,
-  clNameLower?: string
+  clNameLower?: string,
+  itemType?: 'live' | 'movie' | 'series'
 ): number {
   const q = query.trim().toLocaleLowerCase('tr-TR');
   if (!q) return 0;
@@ -74,31 +81,70 @@ export function getSearchScore(
   const gLower = groupLower || group.toLocaleLowerCase('tr-TR');
   const clLower = clNameLower || (cleanedName || cleanMediaTitle(name)).toLocaleLowerCase('tr-TR');
 
-  // 1. Exact match on clean name
-  if (clLower === q) return 100;
+  let score = 0;
 
-  // 2. Exact match on raw name
-  if (nLower === q) return 95;
+  // 1. Full Exact Match
+  if (clLower === q && nLower === q) {
+    score = 1000;
+  } else if (clLower === q) {
+    // Clean name matches query exactly, but raw title has slash/extra tags
+    score = nLower.includes('/') || nLower.includes('-') ? 850 : 920;
+  } else if (nLower === q) {
+    score = 900;
+  }
+  // 2. Starts With Query
+  else if (clLower.startsWith(q)) {
+    score = 700;
+    // Word boundary check: exact full word match at start (e.g. "breaking bad" for "breaking")
+    if (clLower.length === q.length || clLower[q.length] === ' ' || clLower[q.length] === ':') {
+      score += 150;
+    }
+  } else if (nLower.startsWith(q)) {
+    score = 650;
+    if (nLower.length === q.length || nLower[q.length] === ' ' || nLower[q.length] === ':') {
+      score += 100;
+    }
+  }
+  // 3. Contains Query
+  else {
+    const qWords = q.split(/\s+/).filter(Boolean);
+    const clWords = clLower.split(/\s+/).filter(Boolean);
 
-  // 3. Clean name starts with query
-  if (clLower.startsWith(q)) return 80;
+    if (qWords.length > 0 && clWords.length > 0 && clWords[0] === qWords[0]) {
+      score = 550;
+    } else if (clLower.includes(q)) {
+      score = 400;
+    } else if (nLower.includes(q)) {
+      score = 350;
+    } else if (gLower === q) {
+      score = 150;
+    } else if (gLower.includes(q)) {
+      score = 100;
+    }
+  }
 
-  // 4. Raw name starts with query
-  if (nLower.startsWith(q)) return 75;
+  if (score <= 0) return 0;
 
-  // 5. Clean name contains query
-  if (clLower.includes(q)) return 60;
+  // --- RELEVANCE PENALTIES & BOOSTS ---
 
-  // 6. Raw name contains query
-  if (nLower.includes(q)) return 55;
+  // Title Length Proximity Bonus:
+  // Short, clean titles that closely match query length rank higher.
+  const lenDiff = Math.abs(clLower.length - q.length);
+  const lengthBonus = Math.max(0, 80 - lenDiff * 2);
+  score += lengthBonus;
 
-  // 7. Group name matches exact
-  if (gLower === q) return 30;
+  // Series (Dizi) Relevance Boost:
+  // When query starts or matches a TV Series title, give a major boost (+70)
+  if (itemType === 'series' && score >= 600) {
+    score += 70;
+  }
 
-  // 8. Group name contains query
-  if (gLower.includes(q)) return 20;
+  // Single-title bonus over slash-separated multi-titles (e.g. "Breaking Bad" vs "Breaking / Kopuş")
+  if (!nLower.includes('/') && !nLower.includes(' - ')) {
+    score += 30;
+  }
 
-  return 0;
+  return Math.round(score);
 }
 
 // Helper to determine media quality rank from its name
@@ -250,23 +296,4 @@ export function preprocessPlaylistItems(rawItems: PlaylistItem[]): PlaylistItem[
     item.isGenericLogo = !!(item.logo && counts[item.logo] > 5);
   }
   return rawItems;
-}
-
-export function getStableMatchPercentage(title: string, preferences?: string[], itemType?: 'movie' | 'series' | 'live'): string {
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  let baseScore = 80 + (Math.abs(hash) % 15); // Base matching between 80% and 94%
-
-  if (preferences && preferences.length > 0 && itemType) {
-    const preferenceKey = itemType === 'movie' ? 'movies' : itemType === 'series' ? 'series' : 'live';
-    if (preferences.includes(preferenceKey)) {
-      baseScore = Math.min(99, baseScore + 5);
-    } else {
-      baseScore = Math.max(60, baseScore - 15);
-    }
-  }
-
-  return String(baseScore);
 }

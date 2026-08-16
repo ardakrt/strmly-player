@@ -1,53 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
-import type { PlaylistItem } from "../utils/m3uParser";
 import { useSettings } from "../context/SettingsContext";
-
-export type DownloadStatus =
-  "pending" | "downloading" | "completed" | "failed" | "paused";
-
-export interface DownloadItem {
-  id: string;
-  name: string;
-  group: string;
-  type: "movie" | "series";
-  streamUrl: string;
-  logo?: string;
-  status: DownloadStatus;
-  progress: number;
-  speed: string;
-  timeLeft: string;
-  size: string;
-  filePath: string;
-  /** app-file:// URL usable directly by the app's own player for local playback. */
-  playUrl?: string;
-  error?: string;
-  addedAt: number;
-  completedAt?: number;
-  queuePosition?: number;
-  /** Auto-retry attempts after failure (not counting user-initiated retries). */
-  retryCount?: number;
-}
-
-interface QueueItem {
-  id: string;
-  url: string;
-  type: "movie" | "series";
-  name: string;
-}
+import { addDownloadItem } from './downloads/downloadAddAction';
+import { syncDownloadsWithDisk } from './downloads/downloadDiskSync';
+import { ensureDownloadIpcListeners } from './downloads/downloadIpcListeners';
+import { createDownloadQueueActions } from './downloads/downloadQueueActions';
+import {
+  loadPersistedDownloads,
+  persistDownloads,
+} from './downloads/downloadPersistence';
+import type {
+  DownloadItem,
+  DownloadPersistAdapter,
+  DownloadQueueItem,
+} from './downloads/downloadTypes';
+export type { DownloadItem, DownloadStatus } from './downloads/downloadTypes';
 
 // Key used with the app's profile-scoped setting storage (saveAppSetting/loadAppSetting),
 // which automatically prefixes it per active profile and persists it durably
 // (Electron config file + localStorage), not just in the browser's localStorage.
-const DOWNLOADS_SETTING_KEY = "strmly_downloads";
-// Pre-profile-scoping key. Kept only to migrate a user's existing downloads
-// (saved before downloads became profile-aware) into their current profile.
-const LEGACY_LOCAL_STORAGE_KEY = "strmly_downloads:v1";
-
 let downloadsState: DownloadItem[] = [];
-let queue: QueueItem[] = [];
+let queue: DownloadQueueItem[] = [];
 let activeDownloadId: string | null = null;
-let ipcListenersReady = false;
-const printedDownloaders = new Set<string>();
 const listeners = new Set<() => void>();
 
 // Tracks which profile's data currently lives in `downloadsState`.
@@ -55,58 +28,9 @@ const listeners = new Set<() => void>();
 let hydratedProfileId: string | null | undefined = undefined;
 let hydratingProfileId: string | null | undefined = undefined;
 
-interface PersistAdapter {
-  save: (key: string, value: unknown) => void;
-  load: (key: string, isJson?: boolean) => Promise<unknown>;
-}
-
 // Set by whichever `useDownloads()` instance is currently mounted, so module-level
 // helpers (outside of React) can persist through the app's real settings storage.
-let persistAdapter: PersistAdapter | null = null;
-
-function sanitizeLoadedDownloads(parsed: unknown): DownloadItem[] {
-  if (!Array.isArray(parsed)) return [];
-
-  // Group items by streamUrl to find duplicates
-  const groups: Record<string, DownloadItem[]> = {};
-  (parsed as DownloadItem[]).forEach((item) => {
-    if (!item?.streamUrl) return;
-    if (!groups[item.streamUrl]) {
-      groups[item.streamUrl] = [];
-    }
-    groups[item.streamUrl].push(item);
-  });
-
-  const uniqueItems: DownloadItem[] = [];
-  Object.keys(groups).forEach((url) => {
-    const items = groups[url];
-
-    // Sort items by status quality: completed > downloading > pending > paused > failed
-    items.sort((a, b) => {
-      const score = (status: string) => {
-        if (status === "completed") return 5;
-        if (status === "downloading") return 4;
-        if (status === "pending") return 3;
-        if (status === "paused") return 2;
-        return 1; // failed
-      };
-      return score(b.status) - score(a.status);
-    });
-
-    const bestItem = { ...items[0] };
-
-    // An item that was actively downloading/queued when the app last closed
-    // was interrupted, not actually saved — surface it as paused/resumable.
-    if (bestItem.status === "downloading" || bestItem.status === "pending") {
-      bestItem.status = "paused";
-      bestItem.queuePosition = undefined;
-    }
-
-    uniqueItems.push(bestItem);
-  });
-
-  return uniqueItems;
-}
+let persistAdapter: DownloadPersistAdapter | null = null;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastUiEmitAt = 0;
@@ -114,17 +38,7 @@ const UI_EMIT_MIN_MS = 300;
 const SAVE_DEBOUNCE_MS = 1200;
 
 function saveDownloadsNow(downloads: DownloadItem[]) {
-  if (persistAdapter) {
-    persistAdapter.save(DOWNLOADS_SETTING_KEY, downloads);
-    return;
-  }
-  // No profile context available yet (should be rare) — fall back to a plain
-  // localStorage write so nothing is silently lost.
-  try {
-    localStorage.setItem(LEGACY_LOCAL_STORAGE_KEY, JSON.stringify(downloads));
-  } catch (error) {
-    console.error("Failed to save downloads:", error);
-  }
+  persistDownloads(downloads, persistAdapter);
 }
 
 function scheduleSaveDownloads(downloads: DownloadItem[], force = false) {
@@ -177,7 +91,7 @@ function setDownloads(
 // what the UI now presents as the new profile's list.
 async function hydrateDownloadsForProfile(
   profileId: string,
-  adapter: PersistAdapter,
+  adapter: DownloadPersistAdapter,
 ) {
   if (hydratingProfileId === profileId) return;
   const isProfileSwitch =
@@ -198,26 +112,7 @@ async function hydrateDownloadsForProfile(
       queue = [];
     }
 
-    let stored = await adapter.load(DOWNLOADS_SETTING_KEY, true);
-
-    if (!stored || (Array.isArray(stored) && stored.length === 0)) {
-      // One-time migration from the pre-profile-scoping global key.
-      try {
-        const legacyRaw = localStorage.getItem(LEGACY_LOCAL_STORAGE_KEY);
-        if (legacyRaw) {
-          const legacyParsed = JSON.parse(legacyRaw);
-          if (Array.isArray(legacyParsed) && legacyParsed.length > 0) {
-            stored = legacyParsed;
-            adapter.save(DOWNLOADS_SETTING_KEY, legacyParsed);
-            localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
-          }
-        }
-      } catch {
-        // Ignore malformed legacy data.
-      }
-    }
-
-    downloadsState = sanitizeLoadedDownloads(stored);
+    downloadsState = await loadPersistedDownloads(adapter);
     hydratedProfileId = profileId;
     listeners.forEach((listener) => listener());
   } finally {
@@ -402,94 +297,6 @@ async function startNextDownload() {
   }
 }
 
-function ensureIpcListeners() {
-  if (ipcListenersReady) return;
-  ipcListenersReady = true;
-
-  window.electronAPI?.onDownloadProgress?.((data) => {
-    if (data.downloader && !printedDownloaders.has(data.downloadId)) {
-      printedDownloaders.add(data.downloadId);
-      console.log(
-        `%c[Strmly Downloader]%c Starting download %c${data.downloadId}%c via %c${
-          data.downloader === "segmented"
-            ? "🚀 MULTI-CONNECTION HLS SEGMENTED DOWNLOADER"
-            : "📼 STANDARD FFmpeg SINGLE-THREAD DOWNLOADER"
-        }`,
-        "color: #ffffff; background: #3b82f6; padding: 2px 6px; border-radius: 4px; font-weight: bold;",
-        "color: #94a3b8; font-weight: normal;",
-        "color: #60a5fa; font-weight: bold;",
-        "color: #94a3b8; font-weight: normal;",
-        data.downloader === "segmented"
-          ? "color: #34d399; font-weight: bold;"
-          : "color: #f59e0b; font-weight: bold;",
-      );
-    }
-
-    const isError = data.error === "DISK_FULL";
-    setDownloads(
-      (downloads) =>
-        downloads.map((download) => {
-          if (download.id === data.downloadId) {
-            if (isError) {
-              window.dispatchEvent(
-                new CustomEvent("show-toast", {
-                  detail: {
-                    message:
-                      "Disk alanı yetersiz! İndirme durduruldu. / Disk space is full!",
-                  },
-                }),
-              );
-              return {
-                ...download,
-                status: "failed",
-                error: "Disk alanı yetersiz! / Disk space is full!",
-                speed: "",
-                timeLeft: "",
-              };
-            }
-            if (download.status === "paused") {
-              return download;
-            }
-            return {
-              ...download,
-              progress: data.progress,
-              speed: data.speed,
-              timeLeft: data.timeLeft,
-              size: data.size,
-              status: "downloading",
-            };
-          }
-          return download;
-        }),
-      isError ? { forceSave: true } : { throttleUi: true },
-    );
-  });
-
-  window.electronAPI?.onDownloadComplete?.((data) => {
-    setDownloads(
-      (downloads) =>
-        downloads.map((download) =>
-          download.id === data.downloadId
-            ? {
-                ...download,
-                status: "completed",
-                progress: 100,
-                speed: "",
-                timeLeft: "",
-                filePath: data.filePath,
-                playUrl: data.playUrl || download.playUrl,
-                completedAt: Date.now(),
-                queuePosition: undefined,
-                retryCount: 0,
-                error: undefined,
-              }
-            : download,
-        ),
-      { forceSave: true },
-    );
-  });
-}
-
 const MAX_AUTO_RETRIES = 2;
 
 function scheduleAutoRetry(downloadId: string, error?: string) {
@@ -555,12 +362,24 @@ export function pauseAllDownloads() {
   );
 }
 
+const queueActions = createDownloadQueueActions({
+  getDownloads: () => downloadsState,
+  getQueue: () => queue,
+  setQueue: (nextQueue) => {
+    queue = nextQueue;
+  },
+  getActiveDownloadId: () => activeDownloadId,
+  setDownloads,
+  updateQueuePositions,
+  startNextDownload: () => void startNextDownload(),
+});
+
 export function useDownloads() {
   const { activeProfileId, onSaveSetting, onLoadSetting } = useSettings();
   const [downloads, setLocalDownloads] = useState(downloadsState);
 
   useEffect(() => {
-    ensureIpcListeners();
+    ensureDownloadIpcListeners(setDownloads);
     const listener = () => setLocalDownloads([...downloadsState]);
     listeners.add(listener);
 
@@ -598,326 +417,30 @@ export function useDownloads() {
   }, [activeProfileId, onSaveSetting, onLoadSetting]);
 
   useEffect(() => {
-    const syncDownloadsWithDisk = async () => {
-      const api = window.electronAPI;
-      if (!api || !api.getSavedMediaInfo) return;
-      const getSavedMediaInfo = api.getSavedMediaInfo;
-
-      let changed = false;
-      const updated = await Promise.all(
-        downloadsState.map(async (d) => {
-          try {
-            const info = await getSavedMediaInfo({
-              downloadId: d.id,
-              type: d.type,
-              name: d.name,
-              streamUrl: d.streamUrl,
-            });
-
-            if (info?.exists && info.filePath) {
-              if (d.status !== "completed") {
-                changed = true;
-                return {
-                  ...d,
-                  status: "completed" as const,
-                  progress: 100,
-                  speed: "",
-                  timeLeft: "",
-                  size: info.size || d.size,
-                  filePath: info.filePath,
-                  playUrl: info.playUrl || d.playUrl,
-                  completedAt: d.completedAt || Date.now(),
-                };
-              }
-            } else {
-              if (d.status === "completed") {
-                changed = true;
-                return {
-                  ...d,
-                  status: "paused" as const,
-                  progress: 0,
-                  filePath: "",
-                  playUrl: undefined,
-                  size: "",
-                };
-              }
-            }
-          } catch (e) {
-            console.warn("Sync lookup failed for item:", d.name, e);
-          }
-          return d;
-        }),
-      );
-
-      if (changed) {
-        setDownloads(() => updated);
-      }
+    const syncWithDisk = async () => {
+      const result = await syncDownloadsWithDisk(downloadsState);
+      if (result.changed) setDownloads(() => result.downloads);
     };
 
-    void syncDownloadsWithDisk();
+    void syncWithDisk();
   }, [activeProfileId]);
 
-  const addDownload = useCallback(async (item: PlaylistItem) => {
-    const type = item.type === "series" ? "series" : "movie";
-    const existing = downloadsState.find(
-      (download) => download.streamUrl === item.url,
-    );
-
-    if (existing) {
-      if (
-        existing.status === "pending" ||
-        existing.status === "downloading" ||
-        existing.status === "completed"
-      ) {
-        return existing.id;
-      }
-      if (existing.status === "paused" || existing.status === "failed") {
-        queue = queue.filter((q) => q.id !== existing.id);
-        queue.push({
-          id: existing.id,
-          url: existing.streamUrl,
-          type: existing.type,
-          name: existing.name,
-        });
-        setDownloads((current) =>
-          current.map((d) =>
-            d.id === existing.id
-              ? {
-                  ...d,
-                  status: "pending",
-                  speed: "",
-                  timeLeft: "",
-                  error: undefined,
-                }
-              : d,
-          ),
-        );
-        updateQueuePositions();
-        void startNextDownload();
-        return existing.id;
-      }
-    }
-
-    const id = `download-${item.id}-${Date.now()}`;
-
-    try {
-      if (window.electronAPI?.getSavedMediaInfo) {
-        const savedMedia = await window.electronAPI.getSavedMediaInfo({
-          downloadId: id,
-          type,
-          name: item.name,
-          streamUrl: item.url,
-        });
-
-        if (savedMedia?.exists && savedMedia.filePath) {
-          const completedDownload: DownloadItem = {
-            id,
-            name: item.name,
-            group: item.group,
-            type,
-            streamUrl: item.url,
-            logo: item.logo,
-            status: "completed",
-            progress: 100,
-            speed: "",
-            timeLeft: "",
-            size: savedMedia.size || "",
-            filePath: savedMedia.filePath,
-            playUrl: savedMedia.playUrl,
-            addedAt: Date.now(),
-            completedAt: Date.now(),
-          };
-          setDownloads((current) => [
-            completedDownload,
-            ...current.filter((download) => download.streamUrl !== item.url),
-          ]);
-          return id;
-        }
-
-        setDownloads((current) =>
-          current.filter(
-            (download) =>
-              !(
-                download.streamUrl === item.url &&
-                download.status === "completed"
-              ),
-          ),
-        );
-      }
-    } catch (error) {
-      console.warn("Saved media lookup failed, continuing with save:", error);
-    }
-
-    const newDownload: DownloadItem = {
-      id,
-      name: item.name,
-      group: item.group,
-      type,
-      streamUrl: item.url,
-      logo: item.logo,
-      status: "pending",
-      progress: 0,
-      speed: "",
-      timeLeft: "",
-      size: "",
-      filePath: "",
-      addedAt: Date.now(),
-    };
-
-    queue.push({ id, url: item.url, type, name: item.name });
-    setDownloads((current) => [newDownload, ...current]);
-    updateQueuePositions();
-    void startNextDownload();
-
-    return id;
-  }, []);
-
-  const cancelDownload = useCallback((downloadId: string) => {
-    queue = queue.filter((item) => item.id !== downloadId);
-    if (activeDownloadId === downloadId) {
-      void window.electronAPI?.cancelDownload?.(downloadId);
-    }
-    setDownloads((current) =>
-      current.map((download) =>
-        download.id === downloadId
-          ? {
-              ...download,
-              status: "paused",
-              speed: "",
-              timeLeft: "",
-              queuePosition: undefined,
-            }
-          : download,
-      ),
-    );
-    updateQueuePositions();
-    void startNextDownload();
-  }, []);
-
-  const retryDownload = useCallback((downloadId: string) => {
-    const download = downloadsState.find((item) => item.id === downloadId);
-    if (!download) return;
-
-    queue = queue.filter((item) => item.id !== downloadId);
-    queue.push({
-      id: download.id,
-      url: download.streamUrl,
-      type: download.type,
-      name: download.name,
-    });
-    setDownloads((current) =>
-      current.map((item) =>
-        item.id === downloadId
-          ? {
-              ...item,
-              status: "pending",
-              speed: "",
-              timeLeft: "",
-              error: undefined,
-            }
-          : item,
-      ),
-    );
-    updateQueuePositions();
-    void startNextDownload();
-  }, []);
-
-  const deleteDownload = useCallback((downloadId: string) => {
-    const download = downloadsState.find((item) => item.id === downloadId);
-    if (!download) return;
-
-    if (download.status === "downloading") {
-      void window.electronAPI?.cancelDownload?.(downloadId);
-    }
-    queue = queue.filter((item) => item.id !== downloadId);
-    if (download.filePath) {
-      void window.electronAPI?.deleteFile?.(download.filePath);
-    }
-    setDownloads((current) => current.filter((item) => item.id !== downloadId));
-    updateQueuePositions();
-  }, []);
-
-  const clearAll = useCallback(() => {
-    downloadsState.forEach((download) => {
-      if (download.status === "downloading") {
-        void window.electronAPI?.cancelDownload?.(download.id);
-      }
-      if (download.filePath) {
-        void window.electronAPI?.deleteFile?.(download.filePath);
-      }
-    });
-    queue = [];
-    setDownloads(() => []);
-  }, []);
-
-  // Opens a completed download in the OS's default player. Prefer playing
-  // through the app's own player (see DownloadsView) when possible; this
-  // remains as a fallback/explicit "open externally" action.
-  const playDownload = useCallback((downloadId: string) => {
-    const download = downloadsState.find((item) => item.id === downloadId);
-    if (download?.filePath) {
-      void window.electronAPI?.playFile?.(download.filePath);
-    }
-  }, []);
-
-  const prioritizeDownload = useCallback((downloadId: string) => {
-    const index = queue.findIndex((item) => item.id === downloadId);
-    if (index === -1) return;
-
-    const [item] = queue.splice(index, 1);
-    queue.unshift(item);
-
-    if (activeDownloadId && activeDownloadId !== downloadId) {
-      const active = downloadsState.find((d) => d.id === activeDownloadId);
-      if (active) {
-        void window.electronAPI?.cancelDownload?.(activeDownloadId);
-        queue.splice(1, 0, {
-          id: active.id,
-          url: active.streamUrl,
-          type: active.type,
-          name: active.name,
-        });
-        setDownloads((current) =>
-          current.map((d) =>
-            d.id === activeDownloadId
-              ? { ...d, status: "pending", speed: "", timeLeft: "" }
-              : d,
-          ),
-        );
-      }
-    }
-
-    updateQueuePositions();
-    void startNextDownload();
-  }, []);
+  const addDownload = useCallback(
+    (item: Parameters<typeof addDownloadItem>[0]) =>
+      addDownloadItem(item, {
+        getDownloads: () => downloadsState,
+        removeQueued: (downloadId) => {
+          queue = queue.filter((queued) => queued.id !== downloadId);
+        },
+        enqueue: (queued) => queue.push(queued),
+        setDownloads,
+        updateQueuePositions,
+        startNextDownload: () => void startNextDownload(),
+      }),
+    [],
+  );
 
   const pauseAll = useCallback(() => pauseAllDownloads(), []);
-
-  const resumeAll = useCallback(() => {
-    const toResume = downloadsState.filter(
-      (d) => d.status === "paused" || d.status === "failed",
-    );
-    toResume.forEach((d) => {
-      if (!queue.some((q) => q.id === d.id)) {
-        queue.push({ id: d.id, url: d.streamUrl, type: d.type, name: d.name });
-      }
-    });
-    setDownloads((current) =>
-      current.map((d) =>
-        d.status === "paused" || d.status === "failed"
-          ? {
-              ...d,
-              status: "pending",
-              speed: "",
-              timeLeft: "",
-              error: undefined,
-            }
-          : d,
-      ),
-    );
-    updateQueuePositions();
-    void startNextDownload();
-  }, []);
 
   const isDownloading = useCallback((streamUrl: string) => {
     return downloadsState.some(
@@ -934,15 +457,9 @@ export function useDownloads() {
   return {
     downloads,
     addDownload,
-    cancelDownload,
-    retryDownload,
-    deleteDownload,
-    clearAll,
-    playDownload,
+    ...queueActions,
     isDownloading,
     getDownloadByStreamUrl,
-    prioritizeDownload,
     pauseAll,
-    resumeAll,
   };
 }

@@ -74,7 +74,7 @@ export function AppGate({ app }: AppGateProps) {
   }
 
   // Performance bench mode must reach the main shell (navbar) without a live
-  // profile/playlist so scripts/test-performance.ps1 can measure real nav cost.
+  // profile/playlist so scripts/test-performance.js can measure real nav cost.
   if (!isPerfBench && activeProfileId === null) {
     return (
       <SettingsProvider value={settingsContextValue}>

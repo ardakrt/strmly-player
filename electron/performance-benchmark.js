@@ -21,7 +21,18 @@ async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } 
     const iterations = ${iterations};
     const warmups = ${warmups};
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-    const nextPaint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const maxFrameWaitMs = 250;
+    const nextPaint = () => new Promise((resolve, reject) => {
+      const started = performance.now();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const elapsed = performance.now() - started;
+        if (elapsed > maxFrameWaitMs) {
+          reject(new Error('Frame timer throttled while waiting for paint (' + elapsed.toFixed(1) + 'ms)'));
+          return;
+        }
+        resolve();
+      }));
+    });
     const deadline = performance.now() + 30000;
 
     const navReady = async () => {
@@ -67,36 +78,62 @@ async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } 
     const scrollResults = {};
     for (const page of pages) {
       await navigate(page);
-      const candidates = [document.scrollingElement, ...document.querySelectorAll('*')]
-        .filter(Boolean)
-        .filter(element => {
-          const style = getComputedStyle(element);
-          const rect = element.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0 &&
-            (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
-            element.scrollHeight - element.clientHeight > 32;
-        });
-      const target = candidates.sort((a, b) =>
-        (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight)
-      )[0];
+      const findScrollCandidates = () =>
+        [document.scrollingElement, ...document.querySelectorAll('*')]
+          .filter(Boolean)
+          .map(element => {
+            const style = getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            const verticalRange = element.scrollHeight - element.clientHeight;
+            const horizontalRange = element.scrollWidth - element.clientWidth;
+            const canScrollY = style.overflowY === 'auto' || style.overflowY === 'scroll';
+            const canScrollX = style.overflowX === 'auto' || style.overflowX === 'scroll';
+            const axis = canScrollX && horizontalRange > verticalRange ? 'x' : 'y';
+            const range = axis === 'x' && canScrollX ? horizontalRange : canScrollY ? verticalRange : 0;
+            return { element, rect, axis, range };
+          })
+          .filter(candidate => candidate.rect.width > 0 && candidate.rect.height > 0 && candidate.range > 32)
+          .sort((a, b) => b.range - a.range);
+      const scrollReadyDeadline = performance.now() + 5000;
+      let candidates = findScrollCandidates();
+      while ((candidates[0]?.range || 0) < 1000 && performance.now() < scrollReadyDeadline) {
+        await sleep(100);
+        candidates = findScrollCandidates();
+      }
+      const target = candidates[0];
+      let renderedItemCount = document.querySelectorAll(
+        '.live-channel-tile, .premium-card, .home-poster-card'
+      ).length;
       if (!target) {
-        scrollResults[page.name] = { scrollRange: 0, frames: [] };
+        scrollResults[page.name] = { axis: null, scrollRange: 0, renderedItemCount, frames: [] };
         continue;
       }
 
-      const scrollRange = Math.min(2400, target.scrollHeight - target.clientHeight);
+      const scrollRange = Math.min(2400, target.range);
       const frames = [];
       let previous = performance.now();
-      target.scrollTop = 0;
+      const originalScrollBehavior = target.element.style.scrollBehavior;
+      target.element.style.scrollBehavior = 'auto';
+      if (target.axis === 'x') target.element.scrollLeft = 0;
+      else target.element.scrollTop = 0;
       for (let frame = 1; frame <= 120; frame += 1) {
         await new Promise(resolve => requestAnimationFrame(resolve));
         const now = performance.now();
-        frames.push(now - previous);
+        const frameDuration = now - previous;
+        if (frameDuration > maxFrameWaitMs) {
+          throw new Error('Frame timer throttled while scrolling ' + page.name + ' (' + frameDuration.toFixed(1) + 'ms)');
+        }
+        frames.push(frameDuration);
         previous = now;
         const progress = frame <= 60 ? frame / 60 : (120 - frame) / 60;
-        target.scrollTop = scrollRange * progress;
+        if (target.axis === 'x') target.element.scrollLeft = scrollRange * progress;
+        else target.element.scrollTop = scrollRange * progress;
       }
-      scrollResults[page.name] = { scrollRange, frames };
+      target.element.style.scrollBehavior = originalScrollBehavior;
+      renderedItemCount = document.querySelectorAll(
+        '.live-channel-tile, .premium-card, .home-poster-card'
+      ).length;
+      scrollResults[page.name] = { axis: target.axis, scrollRange, renderedItemCount, frames };
     }
     return { navigation: results, scroll: scrollResults };
   })()`);
@@ -110,13 +147,17 @@ async function runPerformanceBenchmark(window, { iterations = 30, warmups = 2 } 
   const scroll = Object.fromEntries(Object.entries(benchmark.scroll).map(([page, result]) => {
     const values = result.frames;
     return [page, values.length === 0 ? {
+      axis: result.axis,
       scrollRange: 0,
+      renderedItemCount: result.renderedItemCount,
       medianFrameMs: 0,
       p95FrameMs: 0,
       maxFrameMs: 0,
       missedFramePercent: 0,
     } : {
+      axis: result.axis,
       scrollRange: Math.round(result.scrollRange),
+      renderedItemCount: result.renderedItemCount,
       medianFrameMs: Number(percentile(values, 0.5).toFixed(2)),
       p95FrameMs: Number(percentile(values, 0.95).toFixed(2)),
       maxFrameMs: Number(Math.max(...values).toFixed(2)),

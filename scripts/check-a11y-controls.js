@@ -12,10 +12,16 @@ const ROOT = path.join(__dirname, '..');
 
 const HIGH_RISK_FILES = [
   'src/components/CinematicPlayer.tsx',
+  'src/components/player/PlayerSettingsMenu.tsx',
+  'src/components/player/PlayerControlBar.tsx',
+  'src/components/player/PlayerOverlayControls.tsx',
   'src/components/DownloadsView.tsx',
+  'src/components/DownloadsViewParts.tsx',
   'src/components/SeriesModal.tsx',
   'src/components/ChannelModal.tsx',
   'src/components/SpotlightSearch.tsx',
+  'src/components/spotlight/SpotlightResults.tsx',
+  'src/components/spotlight/SpotlightHistoryView.tsx',
   'src/components/FavoritesEmptyState.tsx',
   'src/components/CreateProfileWizard.tsx',
   'src/components/Navbar.tsx',
@@ -25,12 +31,12 @@ const REQUIRED_PATTERNS = [
   {
     id: 'player-mute',
     re: /aria-label=\{[^}]*(Mute|Sessiz)/i,
-    files: ['src/components/CinematicPlayer.tsx'],
+    files: ['src/components/CinematicPlayer.tsx', 'src/components/player/PlayerControlBar.tsx'],
   },
   {
     id: 'player-fullscreen',
     re: /aria-label=\{[^}]*(Fullscreen|Tam Ekran)/i,
-    files: ['src/components/CinematicPlayer.tsx'],
+    files: ['src/components/CinematicPlayer.tsx', 'src/components/player/PlayerControlBar.tsx'],
   },
   {
     id: 'modal-close',
@@ -40,7 +46,10 @@ const REQUIRED_PATTERNS = [
   {
     id: 'download-pause-or-cancel',
     re: /aria-label=\{[^}]*(Pause|Duraklat|Cancel|İptal|Iptal)/i,
-    files: ['src/components/DownloadsView.tsx'],
+    files: [
+      'src/components/DownloadsView.tsx',
+      'src/components/DownloadsViewParts.tsx',
+    ],
   },
 ];
 

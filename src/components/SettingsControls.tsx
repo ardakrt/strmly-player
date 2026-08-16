@@ -1,29 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
-export const ACCENT_COLORS = [
-  { color: '#FFFFFF', name: 'Beyaz' },
-  { color: '#3b82f6', name: 'Mavi' },
-  { color: '#10b981', name: 'Yeşil' },
-  { color: '#f59e0b', name: 'Sarı' },
-  { color: '#8b5cf6', name: 'Mor' },
-  { color: '#f43f5e', name: 'Kırmızı' },
-  { color: '#06b6d4', name: 'Cyan' },
-  { color: '#ec4899', name: 'Pembe' }
-];
-
-export const THEMES = [
-  { id: 'space-black', label: 'OLED Siyah' },
-  { id: 'emerald-aurora', label: 'Emerald Aurora' },
-  { id: 'deep-space', label: 'Gece Mavisi' },
-  { id: 'slate-dark', label: 'Koyu Slate' },
-  { id: 'forest-mint', label: 'Orman Yeşili' },
-  { id: 'sunset-orange', label: 'Günbatımı Kızılı' },
-  { id: 'midnight-purple', label: 'Gece Yarısı Moru' },
-  { id: 'nordic-frost', label: 'Kutup Esintisi' },
-  { id: 'rose-gold', label: 'Sakura Pembesi' },
-  { id: 'crimson-tide', label: 'Kozmik Kızıl' },
-  { id: 'ocean-abyss', label: 'Okyanus Derinliği' }
-];
 
 export const UPDATE_OPTIONS = [
   { value: 6, label: '6 Saat' },
